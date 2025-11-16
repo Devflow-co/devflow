@@ -23,6 +23,7 @@ FROM base AS deps
 # Copy package.json files for all packages
 COPY packages/common/package.json ./packages/common/
 COPY packages/sdk/package.json ./packages/sdk/
+COPY packages/api/package.json ./packages/api/
 COPY packages/worker/package.json ./packages/worker/
 
 # Install dependencies
@@ -53,7 +54,7 @@ RUN pnpm build
 # Generate Prisma Client in builder stage (it has all dependencies)
 WORKDIR /app/packages/api
 COPY packages/api/prisma ./prisma
-RUN npx prisma generate
+RUN pnpm prisma:generate
 
 # Build Worker
 WORKDIR /app/packages/worker
@@ -79,8 +80,8 @@ COPY packages/sdk/package.json ./packages/sdk/
 COPY packages/api/package.json ./packages/api/
 COPY packages/worker/package.json ./packages/worker/
 
-# Install production dependencies only
-RUN pnpm install --frozen-lockfile --prod
+# Install all dependencies (needed for prisma generate)
+RUN pnpm install --frozen-lockfile
 
 # Copy built artifacts from builder
 COPY --from=builder /app/packages/common/dist ./packages/common/dist
@@ -88,10 +89,11 @@ COPY --from=builder /app/packages/common/package.json ./packages/common/
 COPY --from=builder /app/packages/sdk/dist ./packages/sdk/dist
 COPY --from=builder /app/packages/sdk/package.json ./packages/sdk/
 COPY --from=builder /app/packages/worker/dist ./packages/worker/dist
+COPY --from=builder /app/packages/api/prisma ./packages/api/prisma
 
-# Copy generated Prisma Client from builder
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/.pnpm/@prisma+client@5.22.0_prisma@5.22.0/node_modules/@prisma/client ./node_modules/.pnpm/@prisma+client@5.22.0_prisma@5.22.0/node_modules/@prisma/client
+# Set working directory to API and generate Prisma client
+WORKDIR /app/packages/api
+RUN pnpm prisma:generate
 
 # Set working directory to Worker
 WORKDIR /app/packages/worker
