@@ -152,6 +152,14 @@ export async function queryLinearTasksByStatus(status: string): Promise<SyncLine
 export async function appendSpecToLinearIssue(input: {
   linearId: string;
   spec: any;
+  codebaseContext?: {
+    language: string;
+    framework?: string;
+    dependencies: number;
+    conventions: number;
+    similarCode: number;
+    filesAnalyzed?: string[];
+  };
 }): Promise<void> {
   logger.info('Appending spec to Linear issue', { linearId: input.linearId });
 
@@ -165,7 +173,31 @@ export async function appendSpecToLinearIssue(input: {
     const client = createLinearClient();
 
     // Format spec as markdown
-    const markdown = formatSpecAsMarkdown(input.spec);
+    let markdown = formatSpecAsMarkdown(input.spec);
+
+    // Add codebase context section if provided
+    if (input.codebaseContext) {
+      markdown += '\n\n---\n\n';
+      markdown += '## 🔍 Contexte de la codebase analysé\n\n';
+      markdown += `**Langage:** ${input.codebaseContext.language}\n`;
+
+      if (input.codebaseContext.framework) {
+        markdown += `**Framework:** ${input.codebaseContext.framework}\n`;
+      }
+
+      markdown += `**Dépendances analysées:** ${input.codebaseContext.dependencies}\n`;
+      markdown += `**Conventions trouvées:** ${input.codebaseContext.conventions}\n`;
+      markdown += `**Fichiers d'exemple analysés:** ${input.codebaseContext.similarCode}\n`;
+
+      if (input.codebaseContext.filesAnalyzed && input.codebaseContext.filesAnalyzed.length > 0) {
+        markdown += '\n**Fichiers référencés:**\n';
+        input.codebaseContext.filesAnalyzed.forEach((file) => {
+          markdown += `- \`${file}\`\n`;
+        });
+      }
+
+      markdown += '\n> Cette spécification a été générée en analysant le contexte ci-dessus pour suivre les patterns existants du projet.\n';
+    }
 
     // Append to issue description
     await client.appendToDescription(input.linearId, markdown);

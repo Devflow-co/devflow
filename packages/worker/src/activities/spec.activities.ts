@@ -18,6 +18,15 @@ export interface GenerateSpecificationOutput {
   implementationSteps: string[];
   testingStrategy: string;
   risks: string[];
+  // Context used for generation (for transparency)
+  contextUsed?: {
+    language: string;
+    framework?: string;
+    dependencies: number;
+    conventions: number;
+    similarCode: number;
+    filesAnalyzed: string[];
+  };
 }
 
 /**
@@ -71,7 +80,18 @@ export async function generateSpecification(
       codebaseContext: formatContextForAI(codebaseContext),
     });
 
-    return spec;
+    // Add context information to the result for transparency
+    return {
+      ...spec,
+      contextUsed: {
+        language: codebaseContext.structure.language,
+        framework: codebaseContext.structure.framework,
+        dependencies: codebaseContext.dependencies.mainLibraries.length,
+        conventions: codebaseContext.documentation.conventions.length,
+        similarCode: codebaseContext.similarCode.length,
+        filesAnalyzed: codebaseContext.similarCode.map((code) => code.path),
+      },
+    };
   } catch (error) {
     logger.error('Failed to generate specification', error as Error);
     throw error;

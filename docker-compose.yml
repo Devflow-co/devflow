@@ -136,6 +136,23 @@ services:
       - /app/node_modules
       - /app/packages/worker/node_modules
 
+  # Ngrok tunnel for webhooks (development only)
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: devflow-ngrok
+    restart: unless-stopped
+    command:
+      - "start"
+      - "--all"
+      - "--config"
+      - "/etc/ngrok.yml"
+    volumes:
+      - ./ngrok.yml:/etc/ngrok.yml
+    ports:
+      - 4040:4040
+    depends_on:
+      - api
+
 volumes:
   postgres-data:
   redis-data:

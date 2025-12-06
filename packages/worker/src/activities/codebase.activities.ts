@@ -65,6 +65,37 @@ export async function analyzeRepositoryContext(
     logger.info('Starting repository analysis', { owner, repo });
     const context = await analyzeRepository(github, owner, repo, input.taskDescription);
 
+    // If no similar code found (likely due to empty description), get example files
+    if (context.similarCode.length === 0) {
+      logger.info('No similar code found, fetching example files');
+
+      try {
+        const { findFilesByExtension } = await import('@devflow/sdk');
+        const language = context.structure.language.toLowerCase();
+
+        // Map language to file extensions
+        const extensionMap: Record<string, string> = {
+          'javascript': 'js',
+          'typescript': 'ts',
+          'python': 'py',
+          'php': 'php',
+          'java': 'java',
+          'go': 'go',
+          'ruby': 'rb',
+        };
+
+        const extension = extensionMap[language] || language.toLowerCase();
+        const exampleFiles = await findFilesByExtension(github, owner, repo, extension, 5);
+
+        // Add example files to context
+        context.similarCode = exampleFiles;
+
+        logger.info('Added example files', { count: exampleFiles.length });
+      } catch (error) {
+        logger.warn('Failed to fetch example files', error as Error);
+      }
+    }
+
     logger.info('Repository analysis completed', {
       owner,
       repo,

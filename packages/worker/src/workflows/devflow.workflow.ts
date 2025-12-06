@@ -63,10 +63,10 @@ export async function devflowWorkflow(input: WorkflowInput): Promise<WorkflowRes
       data: { taskId: task.id, title: task.title },
     });
 
-    // Update Linear status to "Specification"
+    // Update Linear status to "Spec In Progress"
     await updateLinearTask({
       linearId: task.linearId,
-      updates: { status: 'Specification' },
+      updates: { status: 'Spec In Progress' },
     });
 
     // ============================================
@@ -75,18 +75,19 @@ export async function devflowWorkflow(input: WorkflowInput): Promise<WorkflowRes
     currentStage = 'spec_generation' as WorkflowStage;
     const spec = await generateSpecification({ task, projectId: input.projectId });
 
-    // Update Linear status to "In Progress"
+    // Update Linear status to "Spec Ready"
     await updateLinearTask({
       linearId: task.linearId,
       updates: {
-        status: 'In Progress',
+        status: 'Spec Ready',
       },
     });
 
-    // Append spec to Linear issue description as markdown
+    // Append spec to Linear issue description as markdown with codebase context
     await appendSpecToLinearIssue({
       linearId: task.linearId,
       spec: spec,
+      codebaseContext: spec.contextUsed,
     });
 
     // Append warning comment about auto-generated specs
@@ -378,12 +379,12 @@ export async function devflowWorkflow(input: WorkflowInput): Promise<WorkflowRes
       },
     });
 
-    // Update Linear to "Blocked"
+    // Update Linear to "Spec Failed"
     if (input.taskId) {
       try {
         await updateLinearTask({
           linearId: input.taskId,
-          updates: { status: 'Blocked' },
+          updates: { status: 'Spec Failed' },
         });
       } catch {
         // Ignore errors updating Linear on failure

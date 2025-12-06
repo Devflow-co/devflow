@@ -81,8 +81,36 @@ export class OpenRouterProvider implements CodeAgentDriver {
   async generateSpec(input: SpecGenerationInput): Promise<SpecGenerationOutput> {
     this.logger.info('Generating spec', { task: input.task.title });
 
+    // Build dependencies context
+    const depsContext = input.project.dependencies?.length
+      ? `\nMain Dependencies:\n${input.project.dependencies.slice(0, 10).map((d) => `- ${d}`).join('\n')}`
+      : '';
+
+    // Build conventions context
+    const conventionsContext = input.project.conventions?.length
+      ? `\nCoding Conventions:\n${input.project.conventions.map((c) => `- ${c}`).join('\n')}`
+      : '';
+
+    // Build patterns context
+    const patternsContext = input.project.patterns?.length
+      ? `\nExisting Patterns:\n${input.project.patterns.map((p) => `- ${p}`).join('\n')}`
+      : '';
+
+    // Build codebase context (if provided)
+    const codebaseContext = (input as any).codebaseContext
+      ? `\n\n## Codebase Context\n\n${(input as any).codebaseContext}`
+      : '';
+
     const prompt: AgentPrompt = {
       system: `You are a senior software architect. Generate detailed technical specifications for development tasks.
+
+IMPORTANT: Your specification MUST follow the existing codebase patterns, conventions, and architecture.
+- Analyze the provided codebase context carefully
+- Match the existing code style and patterns
+- Use the same dependencies and libraries already in the project
+- Follow the established naming conventions
+- Respect the existing file structure
+
 Return your response as valid JSON with the following structure:
 {
   "architecture": ["decision 1", "decision 2"],
@@ -96,15 +124,28 @@ Return your response as valid JSON with the following structure:
       user: `Generate a technical specification for this task:
 
 Title: ${input.task.title}
-Description: ${input.task.description}
+Description: ${input.task.description || 'No description provided'}
 Priority: ${input.task.priority}
 
-Project Context:
-- Language: ${input.project.language}
-- Framework: ${input.project.framework || 'N/A'}
-- Existing files: ${input.existingFiles?.join(', ') || 'N/A'}
+## Project Context
 
-Provide detailed architecture decisions, implementation steps, testing strategy, and potential risks.`,
+**Language:** ${input.project.language}
+**Framework:** ${input.project.framework || 'Not specified'}
+${depsContext}
+${conventionsContext}
+${patternsContext}
+${codebaseContext}
+
+## Requirements
+
+Based on the existing codebase context above:
+1. Provide detailed architecture decisions that MATCH the existing patterns
+2. Create implementation steps that follow the project's conventions
+3. Suggest a testing strategy aligned with the project's test structure
+4. Identify potential risks specific to this codebase
+5. Reference existing files and patterns when relevant
+
+Generate a specification that will seamlessly integrate with the existing codebase.`,
     };
 
     const response = await this.generate(prompt);
