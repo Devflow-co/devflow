@@ -2,14 +2,14 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "soma-squad-ai.fullname" . }}-api
+  name: {{ include "devflow.fullname" . }}-api
   labels:
-    {{- include "soma-squad-ai.api.labels" . | nindent 4 }}
+    {{- include "devflow.api.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "soma-squad-ai.fullname" . }}-api
+    name: {{ include "devflow.fullname" . }}-api
   minReplicas: {{ .Values.api.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.api.autoscaling.maxReplicas }}
   metrics:

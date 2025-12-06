@@ -1,7 +1,7 @@
 {
-  "name": "@soma-squad-ai/common",
+  "name": "@devflow/common",
   "version": "1.0.0",
-  "description": "Shared types, utilities, and constants for Soma Squad AI",
+  "description": "Shared types, utilities, and constants for DevFlow",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -15,8 +15,8 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },
-  "keywords": ["soma-squad-ai", "types", "utils", "ai"],
-  "author": "Soma Squad AI Team",
+  "keywords": ["devflow", "types", "utils", "ai"],
+  "author": "DevFlow Team",
   "license": "MIT",
   "dependencies": {
     "zod": "^3.22.4"
@@ -29,4 +29,3 @@
     "typescript": "^5.3.3"
   }
 }
-

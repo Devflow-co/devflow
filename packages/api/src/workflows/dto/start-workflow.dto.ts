@@ -18,9 +18,9 @@ export class StartWorkflowDto {
   userId?: string;
 
   @ApiProperty({
-    example: 'somaSquadAIWorkflow',
+    example: 'devflowWorkflow',
     required: false,
-    description: 'Type of workflow to run (somaSquadAIWorkflow or specGenerationWorkflow)',
+    description: 'Type of workflow to run (devflowWorkflow or specGenerationWorkflow)',
   })
   @IsString()
   @IsOptional()

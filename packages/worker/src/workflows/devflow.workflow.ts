@@ -3,7 +3,7 @@
  */
 
 import { proxyActivities, sleep, ActivityFailure, ApplicationFailure } from '@temporalio/workflow';
-import type { WorkflowInput, WorkflowResult, WorkflowStage } from '@soma-squad-ai/common';
+import type { WorkflowInput, WorkflowResult, WorkflowStage } from '@devflow/common';
 
 // Import activity types
 import type * as activities from '../activities';
@@ -42,7 +42,7 @@ const {
 /**
  * Main DevFlow workflow with full Testing ↔ Fix loop (Phase 3)
  */
-export async function somaSquadAIWorkflow(input: WorkflowInput): Promise<WorkflowResult> {
+export async function devflowWorkflow(input: WorkflowInput): Promise<WorkflowResult> {
   let currentStage: WorkflowStage = 'linear_sync' as WorkflowStage;
   let prNumber: number | undefined;
   let branchName: string | undefined;

@@ -2,8 +2,8 @@
  * QA Testing Activities - Phase 3 Enhanced
  */
 
-import { createLogger } from '@soma-squad-ai/common';
-import { ProjectAdapter, createCodeAgentDriver } from '@soma-squad-ai/sdk';
+import { createLogger } from '@devflow/common';
+import { ProjectAdapter, createCodeAgentDriver } from '@devflow/sdk';
 
 const logger = createLogger('QAActivities');
 

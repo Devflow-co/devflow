@@ -11,7 +11,7 @@ import {
   CreatePROptions,
   CreateBranchOptions,
   CommitOptions,
-} from '@soma-squad-ai/common';
+} from '@devflow/common';
 
 export interface VCSDriver {
   /**

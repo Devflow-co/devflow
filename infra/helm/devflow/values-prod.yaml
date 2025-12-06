@@ -1,9 +1,9 @@
-# Soma Squad AI Helm Chart - Production Values
+# DevFlow Helm Chart - Production Values
 # Phase 6: Kubernetes Deployment - Production
 
 global:
   environment: production
-  domain: soma-squad-ai.io  # Your production domain
+  domain: devflow.io  # Your production domain
   
   imageRegistry: ghcr.io  # Or your registry
   imagePullSecrets:
@@ -15,23 +15,23 @@ global:
   
   # Production database (managed)
   database:
-    host: soma-squad-ai-db.cxxxxx.us-east-1.rds.amazonaws.com
+    host: devflow-db.cxxxxx.us-east-1.rds.amazonaws.com
     port: 5432
-    database: soma-squad-ai_production
-    existingSecret: soma-squad-ai-database-prod
+    database: devflow_production
+    existingSecret: devflow-database-prod
   
   # Production Redis (managed)
   redis:
-    host: soma-squad-ai-redis.xxxxx.cache.amazonaws.com
+    host: devflow-redis.xxxxx.cache.amazonaws.com
     port: 6379
-    existingSecret: soma-squad-ai-redis-prod
+    existingSecret: devflow-redis-prod
   
   # Temporal Cloud
   temporal:
     host: "prod.a2dd6.tmprl.cloud"
     port: 7233
-    namespace: soma-squad-ai-prod
-    existingSecret: soma-squad-ai-temporal-prod
+    namespace: devflow-prod
+    existingSecret: devflow-temporal-prod
 
 # ============================================
 # API - Production
@@ -40,7 +40,7 @@ api:
   replicaCount: 5  # Higher for production
   
   image:
-    repository: ghcr.io/your-org/soma-squad-ai-api
+    repository: ghcr.io/your-org/devflow-api
     pullPolicy: Always
     tag: "1.6.0"  # Override with CI/CD
   
@@ -58,16 +58,16 @@ api:
       nginx.ingress.kubernetes.io/ssl-redirect: "true"
       nginx.ingress.kubernetes.io/rate-limit: "1000"
       nginx.ingress.kubernetes.io/proxy-body-size: "10m"
-      nginx.ingress.kubernetes.io/cors-allow-origin: "https://app.soma-squad-ai.io"
+      nginx.ingress.kubernetes.io/cors-allow-origin: "https://app.devflow.io"
     hosts:
-      - host: api.soma-squad-ai.io
+      - host: api.devflow.io
         paths:
           - path: /
             pathType: Prefix
     tls:
-      - secretName: soma-squad-ai-api-tls-prod
+      - secretName: devflow-api-tls-prod
         hosts:
-          - api.soma-squad-ai.io
+          - api.devflow.io
   
   env:
     NODE_ENV: production
@@ -78,7 +78,7 @@ api:
     ENABLE_TRACING: "true"
     
     # Production-specific
-    CORS_ORIGIN: "https://app.soma-squad-ai.io"
+    CORS_ORIGIN: "https://app.devflow.io"
     RATE_LIMIT_MAX: "100"
     RATE_LIMIT_WINDOW: "60000"
   
@@ -136,7 +136,7 @@ api:
               - key: app.kubernetes.io/name
                 operator: In
                 values:
-                  - soma-squad-ai-api
+                  - devflow-api
           topologyKey: kubernetes.io/hostname
 
 # ============================================
@@ -146,7 +146,7 @@ worker:
   replicaCount: 10  # Higher for production workload
   
   image:
-    repository: ghcr.io/your-org/soma-squad-ai-worker
+    repository: ghcr.io/your-org/devflow-worker
     pullPolicy: Always
     tag: "1.6.0"
   
@@ -154,7 +154,7 @@ worker:
     NODE_ENV: production
     LOG_LEVEL: info
     
-    TEMPORAL_TASK_QUEUE: soma-squad-ai-tasks
+    TEMPORAL_TASK_QUEUE: devflow-tasks
     TEMPORAL_MAX_CONCURRENT_ACTIVITIES: "20"
     TEMPORAL_MAX_CONCURRENT_WORKFLOWS: "10"
     
@@ -212,7 +212,7 @@ worker:
                 - key: app.kubernetes.io/name
                   operator: In
                   values:
-                    - soma-squad-ai-worker
+                    - devflow-worker
             topologyKey: kubernetes.io/hostname
 
 # ============================================
@@ -251,11 +251,11 @@ observability:
           nginx.ingress.kubernetes.io/auth-type: basic
           nginx.ingress.kubernetes.io/auth-secret: prometheus-auth
         hosts:
-          - prometheus.soma-squad-ai.io
+          - prometheus.devflow.io
         tls:
           - secretName: prometheus-tls-prod
             hosts:
-              - prometheus.soma-squad-ai.io
+              - prometheus.devflow.io
   
   grafana:
     enabled: true
@@ -278,11 +278,11 @@ observability:
       annotations:
         cert-manager.io/cluster-issuer: letsencrypt-prod
       hosts:
-        - grafana.soma-squad-ai.io
+        - grafana.devflow.io
       tls:
         - secretName: grafana-tls-prod
           hosts:
-            - grafana.soma-squad-ai.io
+            - grafana.devflow.io
   
   otelCollector:
     enabled: true
@@ -352,7 +352,7 @@ secrets:
     backend: "doppler"
     
     doppler:
-      project: soma-squad-ai
+      project: devflow
       config: prd
       secretName: doppler-token
   

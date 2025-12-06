@@ -2,7 +2,7 @@
  * Code Similarity Service - Finds similar code in repository using GitHub Search API
  */
 
-import { createLogger } from '@soma-squad-ai/common';
+import { createLogger } from '@devflow/common';
 import { GitHubProvider } from '../vcs/github.provider';
 
 export interface SimilarCode {

@@ -14,7 +14,7 @@ import {
   CommitOptions,
   PRStatus,
   createLogger,
-} from '@soma-squad-ai/common';
+} from '@devflow/common';
 
 import { VCSDriver } from './vcs.interface';
 

@@ -1,4 +1,4 @@
-# CHANGELOG - Soma Squad AI
+# CHANGELOG - DevFlow
 
 ## [1.12.1] - 2025-12-06
 - Ajout de la règle explicite pour agents Claude/Cursor : terminer chaque tâche par une mise à jour documentation et tracer l’état dans les PR.

@@ -18,4 +18,4 @@ export * from './types';
 export * from './utils';
 
 // Constants
-export const DEVFLOW_CONFIG_FILE = '.soma-squad-ai.yml';
+export const DEVFLOW_CONFIG_FILE = '.devflow.yml';

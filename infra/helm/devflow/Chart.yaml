@@ -1,24 +1,24 @@
 apiVersion: v2
-name: soma-squad-ai
-description: Soma Squad AI - Universal Development Orchestrator
+name: devflow
+description: DevFlow - Universal Development Orchestrator
 type: application
 version: 1.6.0
 appVersion: "1.6.0"
 
 keywords:
-  - soma-squad-ai
+  - devflow
   - orchestrator
   - automation
   - temporal
   - ai-agents
 
-home: https://github.com/your-org/soma-squad-ai
+home: https://github.com/your-org/devflow
 sources:
-  - https://github.com/your-org/soma-squad-ai
+  - https://github.com/your-org/devflow
 
 maintainers:
-  - name: Soma Squad AI Team
-    email: soma-squad-ai@example.com
+  - name: DevFlow Team
+    email: devflow@example.com
 
 dependencies:
   # Optional: Temporal Server (if self-hosted)
@@ -37,7 +37,7 @@ dependencies:
     tags:
       - observability
 
-icon: https://raw.githubusercontent.com/your-org/soma-squad-ai/main/docs/logo.png
+icon: https://raw.githubusercontent.com/your-org/devflow/main/docs/logo.png
 
 
 

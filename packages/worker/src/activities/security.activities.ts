@@ -2,15 +2,15 @@
  * Security Activities - Phase 4: Security Checks & Policy Validation
  */
 
-import { createLogger } from '@soma-squad-ai/common';
+import { createLogger } from '@devflow/common';
 import {
   PolicyGuard,
   SecurityScanner,
   MergePolicyManager,
   MergePolicy,
   auditLogger,
-} from '@soma-squad-ai/sdk';
-import { ProjectAdapter } from '@soma-squad-ai/sdk';
+} from '@devflow/sdk';
+import { ProjectAdapter } from '@devflow/sdk';
 
 const logger = createLogger('SecurityActivities');
 

@@ -47,8 +47,8 @@ export async function callLLM(
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://soma-squad-ai.dev',
-          'X-Title': 'Soma Spec Engine',
+          'HTTP-Referer': 'https://devflow.dev',
+          'X-Title': 'DevFlow Spec Engine',
         },
       }
     );

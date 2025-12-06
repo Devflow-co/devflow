@@ -1,4 +1,4 @@
-# Soma Squad AI Helm Chart - Default Values
+# DevFlow Helm Chart - Default Values
 # Phase 6: Kubernetes Deployment
 
 # ============================================
@@ -6,7 +6,7 @@
 # ============================================
 global:
   environment: development
-  domain: soma-squad-ai.local
+  domain: devflow.local
   
   # Image registry
   imageRegistry: docker.io
@@ -21,9 +21,9 @@ global:
   database:
     host: postgres.database.svc.cluster.local
     port: 5432
-    database: soma-squad-ai
+    database: devflow
     # Credentials in secret
-    existingSecret: soma-squad-ai-database
+    existingSecret: devflow-database
     secretKeys:
       username: POSTGRES_USER
       password: POSTGRES_PASSWORD
@@ -32,7 +32,7 @@ global:
   redis:
     host: redis.cache.svc.cluster.local
     port: 6379
-    existingSecret: soma-squad-ai-redis
+    existingSecret: devflow-redis
     secretKeys:
       password: REDIS_PASSWORD
   
@@ -43,14 +43,14 @@ global:
     # Option B: Temporal Cloud
     host: "namespace.tmprl.cloud"
     port: 7233
-    namespace: soma-squad-ai
-    existingSecret: soma-squad-ai-temporal
+    namespace: devflow
+    existingSecret: devflow-temporal
     secretKeys:
       tls_cert: TEMPORAL_TLS_CERT
       tls_key: TEMPORAL_TLS_KEY
 
 # ============================================
-# Soma Squad AI API
+# DevFlow API
 # ============================================
 api:
   enabled: true
@@ -58,7 +58,7 @@ api:
   replicaCount: 2
   
   image:
-    repository: soma-squad-ai/api
+    repository: devflow/api
     pullPolicy: IfNotPresent
     tag: "1.6.0"
   
@@ -75,14 +75,14 @@ api:
       nginx.ingress.kubernetes.io/ssl-redirect: "true"
       nginx.ingress.kubernetes.io/rate-limit: "100"
     hosts:
-      - host: api.soma-squad-ai.local
+      - host: api.devflow.local
         paths:
           - path: /
             pathType: Prefix
     tls:
-      - secretName: soma-squad-ai-api-tls
+      - secretName: devflow-api-tls
         hosts:
-          - api.soma-squad-ai.local
+          - api.devflow.local
   
   # Environment variables
   env:
@@ -99,21 +99,21 @@ api:
   secrets:
     # API Keys
     - name: ANTHROPIC_API_KEY
-      secretName: soma-squad-ai-secrets
+      secretName: devflow-secrets
       secretKey: anthropic-api-key
     - name: OPENAI_API_KEY
-      secretName: soma-squad-ai-secrets
+      secretName: devflow-secrets
       secretKey: openai-api-key
     - name: GITHUB_TOKEN
-      secretName: soma-squad-ai-secrets
+      secretName: devflow-secrets
       secretKey: github-token
     - name: LINEAR_API_KEY
-      secretName: soma-squad-ai-secrets
+      secretName: devflow-secrets
       secretKey: linear-api-key
 
     # JWT Secret
     - name: JWT_SECRET
-      secretName: soma-squad-ai-secrets
+      secretName: devflow-secrets
       secretKey: jwt-secret
   
   # Health checks
@@ -188,11 +188,11 @@ api:
                 - key: app.kubernetes.io/name
                   operator: In
                   values:
-                    - soma-squad-ai-api
+                    - devflow-api
             topologyKey: kubernetes.io/hostname
 
 # ============================================
-# Soma Squad AI Worker (Temporal)
+# DevFlow Worker (Temporal)
 # ============================================
 worker:
   enabled: true
@@ -200,7 +200,7 @@ worker:
   replicaCount: 3
   
   image:
-    repository: soma-squad-ai/worker
+    repository: devflow/worker
     pullPolicy: IfNotPresent
     tag: "1.6.0"
   
@@ -214,7 +214,7 @@ worker:
     LOG_LEVEL: info
     
     # Temporal Worker config
-    TEMPORAL_TASK_QUEUE: soma-squad-ai-tasks
+    TEMPORAL_TASK_QUEUE: devflow-tasks
     TEMPORAL_MAX_CONCURRENT_ACTIVITIES: "10"
     TEMPORAL_MAX_CONCURRENT_WORKFLOWS: "5"
     
@@ -224,16 +224,16 @@ worker:
   # Same secrets as API
   secrets:
     - name: ANTHROPIC_API_KEY
-      secretName: soma-squad-ai-secrets
+      secretName: devflow-secrets
       secretKey: anthropic-api-key
     - name: OPENAI_API_KEY
-      secretName: soma-squad-ai-secrets
+      secretName: devflow-secrets
       secretKey: openai-api-key
     - name: GITHUB_TOKEN
-      secretName: soma-squad-ai-secrets
+      secretName: devflow-secrets
       secretKey: github-token
     - name: LINEAR_API_KEY
-      secretName: soma-squad-ai-secrets
+      secretName: devflow-secrets
       secretKey: linear-api-key
 
   # Health checks (metrics endpoint)
@@ -303,7 +303,7 @@ worker:
                 - key: app.kubernetes.io/name
                   operator: In
                   values:
-                    - soma-squad-ai-worker
+                    - devflow-worker
             topologyKey: kubernetes.io/hostname
 
 # ============================================
@@ -345,7 +345,7 @@ temporal:
     ingress:
       enabled: true
       hosts:
-        - temporal-ui.soma-squad-ai.local
+        - temporal-ui.devflow.local
 
 # ============================================
 # Observability (Optional)
@@ -365,7 +365,7 @@ observability:
       ingress:
         enabled: true
         hosts:
-          - prometheus.soma-squad-ai.local
+          - prometheus.devflow.local
   
   # Grafana
   grafana:
@@ -380,7 +380,7 @@ observability:
     ingress:
       enabled: true
       hosts:
-        - grafana.soma-squad-ai.local
+        - grafana.devflow.local
   
   # OTEL Collector
   otelCollector:
@@ -417,7 +417,7 @@ observability:
 serviceAccount:
   create: true
   annotations: {}
-  name: "soma-squad-ai"
+  name: "devflow"
 
 # ============================================
 # RBAC
@@ -457,7 +457,7 @@ secrets:
     
     # Doppler config
     doppler:
-      project: soma-squad-ai
+      project: devflow
       config: prd
   
   # Use sealed secrets

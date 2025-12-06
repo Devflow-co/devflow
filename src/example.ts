@@ -1,5 +1,5 @@
 /**
- * Soma Spec Engine - Example Usage
+ * DevFlow Spec Engine - Example Usage
  *
  * This file demonstrates how to use the Spec Engine to transform
  * a raw user story into a comprehensive Master Plan.
@@ -15,7 +15,7 @@ import { generateSpecification, Phase1Output } from './specEngine';
 
 // Example user story
 const userStory = `
-As a developer using the Soma Squad AI platform,
+As a developer using the DevFlow platform,
 I want to be able to upload code repositories from GitHub
 so that the AI can analyze my codebase and provide intelligent suggestions.
 
@@ -39,7 +39,7 @@ Performance requirements:
 
 async function main() {
   console.log('='.repeat(60));
-  console.log('Soma Spec Engine - Example');
+  console.log('DevFlow Spec Engine - Example');
   console.log('='.repeat(60));
   console.log();
 

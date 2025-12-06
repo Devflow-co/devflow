@@ -1,5 +1,5 @@
 /**
- * Soma Squad AI SDK - Main exports
+ * DevFlow SDK - Main exports
  */
 
 // VCS Drivers

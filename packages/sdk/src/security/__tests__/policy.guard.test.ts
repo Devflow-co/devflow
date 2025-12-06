@@ -3,10 +3,10 @@
  */
 
 import { PolicyGuard } from '../policy.guard';
-import { SomaSquadAIProfile } from '../../project-adapter/soma-squad-ai-profile.types';
+import { DevFlowProfile } from '../../project-adapter/devflow-profile.types';
 
 describe('PolicyGuard', () => {
-  const mockProfile: SomaSquadAIProfile = {
+  const mockProfile: DevFlowProfile = {
     version: '1.0',
     project: {
       name: 'test-project',

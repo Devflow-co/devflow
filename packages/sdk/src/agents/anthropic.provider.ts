@@ -13,7 +13,7 @@ import {
   FixGenerationInput,
   FixGenerationOutput,
   createLogger,
-} from '@soma-squad-ai/common';
+} from '@devflow/common';
 
 import {
   CodeAgentDriver,

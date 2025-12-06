@@ -1,7 +1,7 @@
 {
   "refined_user_story": {
-    "summary": "Enhance the Soma Squad AI platform to support uploading, parsing, and analyzing code repositories from GitHub, providing intelligent suggestions to developers.",
-    "context": "The Soma Squad AI platform aims to assist developers by analyzing their codebases and offering intelligent suggestions for improvement. Developers use a variety of file types and store their code in repositories, often on GitHub, which can be either public or private. Ensuring a seamless integration with GitHub will enable the platform to access a broader range of codebases for analysis.",
+    "summary": "Enhance the DevFlow platform to support uploading, parsing, and analyzing code repositories from GitHub, providing intelligent suggestions to developers.",
+    "context": "The DevFlow platform aims to assist developers by analyzing their codebases and offering intelligent suggestions for improvement. Developers use a variety of file types and store their code in repositories, often on GitHub, which can be either public or private. Ensuring a seamless integration with GitHub will enable the platform to access a broader range of codebases for analysis.",
     "objectives": [
       "Enable developers to upload code repositories from GitHub, supporting both public and private repositories.",
       "Authenticate users via GitHub OAuth or personal access tokens for secure access to their repositories."
@@ -67,7 +67,7 @@
     },
     {
       "model": "openai/gpt-4-turbo",
-      "architecture_overview": "The Soma Squad AI platform will be enhanced to integrate with GitHub using GitHub's API for both cloning repositories and authenticating users. The system will use OAuth for authentication, and a backend service will handle the interactions with GitHub's API to download and analyze repositories. The architecture will include a queue system to manage load and prevent hitting API rate limits. Data will be stored in a scalable cloud database, and the analysis engine will process the code asynchronously to provide suggestions.",
+      "architecture_overview": "The DevFlow platform will be enhanced to integrate with GitHub using GitHub's API for both cloning repositories and authenticating users. The system will use OAuth for authentication, and a backend service will handle the interactions with GitHub's API to download and analyze repositories. The architecture will include a queue system to manage load and prevent hitting API rate limits. Data will be stored in a scalable cloud database, and the analysis engine will process the code asynchronously to provide suggestions.",
       "technical_steps": [
         "Step 1: Implement authentication with GitHub using OAuth2.0. This will involve setting up a GitHub OAuth app to secure credentials and manage permissions.",
         "Step 2: Develop a new API endpoint in the platform to handle repository uploads. This endpoint will accept repository URLs and authentication tokens.",
@@ -136,7 +136,7 @@
       "Classify **file types and languages** early (e.g., based on extension and lightweight content sniffing) to select appropriate analyzers, skip irrelevant assets, and reduce CPU and memory usage."
     ],
     "patterns": [
-      "Adopt the **Microservices + API Gateway pattern**, where the Soma Squad AI UI talks to a gateway that routes to GitHub Integration, Repository Service, and Analysis Orchestrator; the gateway handles auth, rate limiting, TLS termination, and request aggregation.[4][5][10]",
+      "Adopt the **Microservices + API Gateway pattern**, where the DevFlow UI talks to a gateway that routes to GitHub Integration, Repository Service, and Analysis Orchestrator; the gateway handles auth, rate limiting, TLS termination, and request aggregation.[4][5][10]",
       "Use an **Event-Driven Architecture pattern** with a message broker (e.g., Redis streams, Cloud Pub/Sub, or Kafka) so that events like `RepoRegistered`, `CloneCompleted`, `AnalysisRequested`, and `AnalysisCompleted` drive downstream processing and notifications.[1][3]",
       "Apply the **Saga pattern** for cross-service workflows (e.g., registering a repository involves creating metadata, scheduling a clone, and starting an analysis); compensate if any step fails (e.g., mark repo as failed, cancel queued analyses).[5]",
       "Use the **Strangler Fig pattern** if integrating into an existing monolith: introduce new GitHub ingestion and analysis orchestration as separate services and gradually route functionality away from legacy flows without creating a distributed monolith.[1]",
@@ -189,7 +189,7 @@
     ]
   },
   "master_plan": {
-    "summary": "Enhance the Soma Squad AI platform to support uploading, parsing, and analyzing code repositories from GitHub, providing intelligent suggestions to developers. Implement a microservices architecture with GitHub integration, repository management, and analysis orchestration services. Use event-driven, asynchronous processing with a job queue to handle repository cloning and analysis. Authenticate users via GitHub OAuth/Apps and store repository metadata securely.",
+    "summary": "Enhance the DevFlow platform to support uploading, parsing, and analyzing code repositories from GitHub, providing intelligent suggestions to developers. Implement a microservices architecture with GitHub integration, repository management, and analysis orchestration services. Use event-driven, asynchronous processing with a job queue to handle repository cloning and analysis. Authenticate users via GitHub OAuth/Apps and store repository metadata securely.",
     "recommended_architecture": "Microservices architecture with bounded contexts and an API gateway for composition. Three core services: (1) GitHub Integration Service for OAuth, webhooks, and repo registration; (2) Repository Service for clone/update operations, raw storage, and metadata; (3) Analysis Orchestrator for scheduling analysis jobs and integrating with the existing analysis engine. Use a Redis-based job queue to decouple the services and handle asynchronous processing. Store repository metadata in Firestore and raw code in cloud storage. Implement observability with Prometheus and Grafana. This architecture allows independent scaling, promotes loose coupling, and simplifies integration with GitHub and the analysis platform.",
     "detailed_steps": [
       "Step 1: Implement GitHub App and OAuth2 authentication flow in the GitHub Integration Service, securely storing tokens and installation IDs. Use short-lived tokens with granular scopes.",

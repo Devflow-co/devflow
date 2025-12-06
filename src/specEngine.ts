@@ -1,5 +1,5 @@
 /**
- * Soma Spec Engine - Main Orchestrator
+ * DevFlow Spec Engine - Main Orchestrator
  *
  * Transforms raw user stories into comprehensive Master Plans
  * using a multi-LLM pipeline via OpenRouter.

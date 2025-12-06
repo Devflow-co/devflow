@@ -2,9 +2,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "soma-squad-ai.fullname" . }}-api
+  name: {{ include "devflow.fullname" . }}-api
   labels:
-    {{- include "soma-squad-ai.api.labels" . | nindent 4 }}
+    {{- include "devflow.api.labels" . | nindent 4 }}
   {{- with .Values.api.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -33,7 +33,7 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "soma-squad-ai.fullname" $ }}-api
+                name: {{ include "devflow.fullname" $ }}-api
                 port:
                   number: {{ $.Values.api.service.port }}
           {{- end }}

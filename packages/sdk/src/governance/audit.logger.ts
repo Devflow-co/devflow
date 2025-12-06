@@ -3,7 +3,7 @@
  * Complete audit trail for all DevFlow operations
  */
 
-import { createLogger } from '@soma-squad-ai/common';
+import { createLogger } from '@devflow/common';
 
 const logger = createLogger('AuditLogger');
 

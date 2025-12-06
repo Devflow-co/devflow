@@ -3,9 +3,9 @@
  */
 
 import { Injectable, NotFoundException, forwardRef, Inject } from '@nestjs/common';
-import { createLogger } from '@soma-squad-ai/common';
+import { createLogger } from '@devflow/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { LinearClient } from '@soma-squad-ai/sdk';
+import { LinearClient } from '@devflow/sdk';
 import { ConfigService } from '@nestjs/config';
 import { CreateTaskDto, UpdateTaskDto } from './dto';
 import { WorkflowsService } from '../workflows/workflows.service';

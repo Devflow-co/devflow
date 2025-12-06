@@ -4,7 +4,7 @@
 
 import { Injectable } from '@nestjs/common';
 import { Connection, Client } from '@temporalio/client';
-import { createLogger } from '@soma-squad-ai/common';
+import { createLogger } from '@devflow/common';
 import { StartWorkflowDto } from './dto';
 
 @Injectable()
@@ -37,7 +37,7 @@ export class WorkflowsService {
     }
 
     // Determine workflow type (default to full devflow workflow)
-    const workflowType = dto.workflowType || 'somaSquadAIWorkflow';
+    const workflowType = dto.workflowType || 'devflowWorkflow';
     const workflowId = `${workflowType}-${dto.taskId}-${Date.now()}`;
 
     const handle = await this.client.workflow.start(workflowType, {

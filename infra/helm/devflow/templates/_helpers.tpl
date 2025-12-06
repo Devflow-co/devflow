@@ -1,14 +1,14 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "soma-squad-ai.name" -}}
+{{- define "devflow.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Create a default fully qualified app name.
 */}}
-{{- define "soma-squad-ai.fullname" -}}
+{{- define "devflow.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -24,70 +24,70 @@ Create a default fully qualified app name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "soma-squad-ai.chart" -}}
+{{- define "devflow.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "soma-squad-ai.labels" -}}
-helm.sh/chart: {{ include "soma-squad-ai.chart" . }}
-{{ include "soma-squad-ai.selectorLabels" . }}
+{{- define "devflow.labels" -}}
+helm.sh/chart: {{ include "devflow.chart" . }}
+{{ include "devflow.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
-app.kubernetes.io/part-of: soma-squad-ai
+app.kubernetes.io/part-of: devflow
 environment: {{ .Values.global.environment }}
 {{- end }}
 
 {{/*
 Selector labels
 */}}
-{{- define "soma-squad-ai.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "soma-squad-ai.name" . }}
+{{- define "devflow.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "devflow.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 API labels
 */}}
-{{- define "soma-squad-ai.api.labels" -}}
-{{ include "soma-squad-ai.labels" . }}
+{{- define "devflow.api.labels" -}}
+{{ include "devflow.labels" . }}
 app.kubernetes.io/component: api
 {{- end }}
 
 {{/*
 API selector labels
 */}}
-{{- define "soma-squad-ai.api.selectorLabels" -}}
-{{ include "soma-squad-ai.selectorLabels" . }}
+{{- define "devflow.api.selectorLabels" -}}
+{{ include "devflow.selectorLabels" . }}
 app.kubernetes.io/component: api
 {{- end }}
 
 {{/*
 Worker labels
 */}}
-{{- define "soma-squad-ai.worker.labels" -}}
-{{ include "soma-squad-ai.labels" . }}
+{{- define "devflow.worker.labels" -}}
+{{ include "devflow.labels" . }}
 app.kubernetes.io/component: worker
 {{- end }}
 
 {{/*
 Worker selector labels
 */}}
-{{- define "soma-squad-ai.worker.selectorLabels" -}}
-{{ include "soma-squad-ai.selectorLabels" . }}
+{{- define "devflow.worker.selectorLabels" -}}
+{{ include "devflow.selectorLabels" . }}
 app.kubernetes.io/component: worker
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "soma-squad-ai.serviceAccountName" -}}
+{{- define "devflow.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "soma-squad-ai.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "devflow.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
@@ -96,7 +96,7 @@ Create the name of the service account to use
 {{/*
 Image pull secrets
 */}}
-{{- define "soma-squad-ai.imagePullSecrets" -}}
+{{- define "devflow.imagePullSecrets" -}}
 {{- if .Values.global.imagePullSecrets }}
 imagePullSecrets:
 {{- range .Values.global.imagePullSecrets }}
@@ -108,7 +108,7 @@ imagePullSecrets:
 {{/*
 API image
 */}}
-{{- define "soma-squad-ai.api.image" -}}
+{{- define "devflow.api.image" -}}
 {{- $registry := .Values.global.imageRegistry | default "docker.io" -}}
 {{- $repository := .Values.api.image.repository -}}
 {{- $tag := .Values.api.image.tag | default .Chart.AppVersion -}}
@@ -118,7 +118,7 @@ API image
 {{/*
 Worker image
 */}}
-{{- define "soma-squad-ai.worker.image" -}}
+{{- define "devflow.worker.image" -}}
 {{- $registry := .Values.global.imageRegistry | default "docker.io" -}}
 {{- $repository := .Values.worker.image.repository -}}
 {{- $tag := .Values.worker.image.tag | default .Chart.AppVersion -}}
@@ -128,7 +128,7 @@ Worker image
 {{/*
 Database URL
 */}}
-{{- define "soma-squad-ai.database.url" -}}
+{{- define "devflow.database.url" -}}
 {{- $host := .Values.global.database.host -}}
 {{- $port := .Values.global.database.port -}}
 {{- $database := .Values.global.database.database -}}
@@ -138,7 +138,7 @@ Database URL
 {{/*
 Redis URL
 */}}
-{{- define "soma-squad-ai.redis.url" -}}
+{{- define "devflow.redis.url" -}}
 {{- $host := .Values.global.redis.host -}}
 {{- $port := .Values.global.redis.port -}}
 {{- if .Values.global.redis.existingSecret -}}
@@ -151,7 +151,7 @@ Redis URL
 {{/*
 Temporal address
 */}}
-{{- define "soma-squad-ai.temporal.address" -}}
+{{- define "devflow.temporal.address" -}}
 {{- $host := .Values.global.temporal.host -}}
 {{- $port := .Values.global.temporal.port -}}
 {{- printf "%s:%d" $host (int $port) -}}

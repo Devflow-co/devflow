@@ -3,8 +3,8 @@
  */
 
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { createLogger } from '@soma-squad-ai/common';
-import { parseRepositoryUrl, GitHubProvider, createVCSDriver } from '@soma-squad-ai/sdk';
+import { createLogger } from '@devflow/common';
+import { parseRepositoryUrl, GitHubProvider, createVCSDriver } from '@devflow/sdk';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectDto, UpdateProjectDto } from './dto';
 

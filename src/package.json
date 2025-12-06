@@ -1,5 +1,5 @@
 {
-  "name": "@soma-squad-ai/spec-engine",
+  "name": "@devflow/spec-engine",
   "version": "1.0.0",
   "description": "Automatic specification pipeline using multi-LLM orchestration via OpenRouter",
   "main": "dist/specEngine.js",

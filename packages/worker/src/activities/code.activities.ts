@@ -2,8 +2,8 @@
  * Code Generation Activities
  */
 
-import { createLogger, generateBranchName } from '@soma-squad-ai/common';
-import { createCodeAgentDriver, extractCodeGenerationContext, formatContextForAI } from '@soma-squad-ai/sdk';
+import { createLogger, generateBranchName } from '@devflow/common';
+import { createCodeAgentDriver, extractCodeGenerationContext, formatContextForAI } from '@devflow/sdk';
 import { analyzeRepositoryContext } from './codebase.activities';
 
 const logger = createLogger('CodeActivities');

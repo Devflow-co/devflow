@@ -2,7 +2,7 @@
  * Linear Mapper - Maps between Linear issues and internal Task format
  */
 
-import { TaskStatus, TaskPriority } from '@soma-squad-ai/common';
+import { TaskStatus, TaskPriority } from '@devflow/common';
 import { LinearIssue, LinearTask } from './linear.types';
 
 export class LinearMapper {

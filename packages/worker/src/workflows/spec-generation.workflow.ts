@@ -3,7 +3,7 @@
  */
 
 import { proxyActivities } from '@temporalio/workflow';
-import type { WorkflowInput, WorkflowResult, WorkflowStage } from '@soma-squad-ai/common';
+import type { WorkflowInput, WorkflowResult, WorkflowStage } from '@devflow/common';
 
 // Import activity types
 import type * as activities from '../activities';

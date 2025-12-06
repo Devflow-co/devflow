@@ -3,9 +3,9 @@
  * Enforces write policies, CODEOWNERS, branch protection, and security rules
  */
 
-import { createLogger } from '@soma-squad-ai/common';
+import { createLogger } from '@devflow/common';
 import * as path from 'path';
-import { GuardrailsConfig } from '../project-adapter/soma-squad-ai-profile.types';
+import { GuardrailsConfig } from '../project-adapter/devflow-profile.types';
 
 const logger = createLogger('PolicyGuard');
 

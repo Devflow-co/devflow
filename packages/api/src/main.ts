@@ -7,7 +7,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
-import { createLogger } from '@soma-squad-ai/common';
+import { createLogger } from '@devflow/common';
 
 const logger = createLogger('Bootstrap');
 

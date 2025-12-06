@@ -1,4 +1,4 @@
-// Soma Squad AI Prisma Schema
+// DevFlow Prisma Schema
 // Database: PostgreSQL
 
 generator client {

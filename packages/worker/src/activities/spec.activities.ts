@@ -2,8 +2,8 @@
  * Specification Generation Activities
  */
 
-import { createLogger } from '@soma-squad-ai/common';
-import { createCodeAgentDriver, extractSpecGenerationContext, formatContextForAI } from '@soma-squad-ai/sdk';
+import { createLogger } from '@devflow/common';
+import { createCodeAgentDriver, extractSpecGenerationContext, formatContextForAI } from '@devflow/sdk';
 import { analyzeRepositoryContext } from './codebase.activities';
 
 const logger = createLogger('SpecActivities');

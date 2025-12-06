@@ -1,4 +1,4 @@
-# 📚 Soma Squad AI - Documentation Complète
+# 📚 DevFlow - Documentation Complète
 
 **Version:** 1.12.1  
 **Dernière mise à jour:** 6 décembre 2025  
@@ -23,13 +23,13 @@
 
 ## 🎯 Vue d'ensemble
 
-### Qu'est-ce que Soma Squad AI ?
+### Qu'est-ce que DevFlow ?
 
-Soma Squad AI transforme vos tâches Linear en code déployé, automatiquement.
+DevFlow transforme vos tâches Linear en code déployé, automatiquement.
 
 **Workflow complet :**
 1. Vous créez une tâche dans Linear avec une description
-2. Soma Squad AI analyse votre codebase via l'API GitHub
+2. DevFlow analyse votre codebase via l'API GitHub
 3. Génère une spécification technique alignée avec vos conventions
 4. Écrit le code (frontend + backend si nécessaire)
 5. Crée les tests (unitaires + E2E)
@@ -79,12 +79,12 @@ Soma Squad AI transforme vos tâches Linear en code déployé, automatiquement.
 ### Packages
 
 ```
-soma-squad-ai/
+devflow/
 ├── packages/
 │   ├── api/              # API REST NestJS
 │   ├── worker/           # Temporal workers
 │   ├── sdk/              # SDK principal (VCS, AI, etc.)
-│   ├── cli/              # CLI Soma Squad AI
+│   ├── cli/              # CLI DevFlow
 │   ├── common/           # Types et utils partagés
 │   └── observability/    # Métriques, logs, traces
 ├── infra/
@@ -269,8 +269,8 @@ Auto-merge (si configuré)
 
 ```bash
 # 1. Cloner le repository
-git clone https://github.com/your-org/soma-squad-ai.git
-cd soma-squad-ai
+git clone https://github.com/your-org/devflow.git
+cd devflow
 
 # 2. Installer les dépendances
 pnpm install
@@ -298,15 +298,15 @@ pnpm start:dev
 
 ```bash
 # Installer la CLI globalement
-npm install -g @soma-squad-ai/cli
+npm install -g @devflow/cli
 
 # Initialiser dans votre projet
 cd mon-projet
-soma-squad-ai init
+devflow init
 
 # Connecter vos outils
-soma-squad-ai connect linear
-soma-squad-ai connect github
+devflow connect linear
+devflow connect github
 ```
 
 ---
@@ -345,17 +345,17 @@ LINEAR_NEXT_STATUS=In Progress
 # ===================================
 # Database
 # ===================================
-DATABASE_URL=postgresql://soma_squad_ai:changeme@localhost:5432/soma_squad_ai?schema=public
+DATABASE_URL=postgresql://devflow:changeme@localhost:5432/devflow?schema=public
 
 # ===================================
 # Temporal
 # ===================================
 TEMPORAL_ADDRESS=localhost:7233
 TEMPORAL_NAMESPACE=default
-TEMPORAL_TASK_QUEUE=soma-squad-ai
+TEMPORAL_TASK_QUEUE=devflow
 ```
 
-### Fichier .soma-squad-ai.yml
+### Fichier .devflow.yml
 
 À la racine de votre projet :
 
@@ -415,7 +415,7 @@ Acceptance Criteria:
 
 **2. Déplacer en status "Specification" dans Linear**
 
-**3. Soma Squad AI démarre automatiquement :**
+**3. DevFlow démarre automatiquement :**
 - Analyse votre codebase
 - Génère la spec technique
 - Ajoute un commentaire warning sur l'issue Linear
@@ -430,16 +430,16 @@ Acceptance Criteria:
 
 ```bash
 # Voir le statut d'un ticket
-soma-squad-ai status TASK-123
+devflow status TASK-123
 
 # Relancer une étape
-soma-squad-ai run TASK-123 --step dev
+devflow run TASK-123 --step dev
 
 # Vérifier la santé du système
-soma-squad-ai doctor
+devflow doctor
 
 # Générer template CI
-soma-squad-ai templates ci --provider github
+devflow templates ci --provider github
 ```
 
 ### Utilisation via API
@@ -531,7 +531,7 @@ Checklist fin de tâche :
 pnpm test
 
 # Package spécifique
-pnpm --filter @soma-squad-ai/sdk test
+pnpm --filter @devflow/sdk test
 
 # Avec coverage
 pnpm test:coverage
@@ -561,11 +561,11 @@ OPENAI_API_KEY="sk-proj-xxx" npx ts-node src/__manual_tests__/test-openai-simple
 
 | Package | TypeScript | Build | Tests |
 |---------|-----------|-------|-------|
-| @soma-squad-ai/common | ✅ 0 errors | ✅ | ✅ |
-| @soma-squad-ai/sdk | ✅ 0 errors | ✅ | ✅ 12/12 |
-| @soma-squad-ai/api | ✅ 0 errors | ✅ | ⚠️ |
-| @soma-squad-ai/worker | ✅ 0 errors | ✅ | ⚠️ |
-| @soma-squad-ai/cli | ✅ 0 errors | ✅ | ⚠️ |
+| @devflow/common | ✅ 0 errors | ✅ | ✅ |
+| @devflow/sdk | ✅ 0 errors | ✅ | ✅ 12/12 |
+| @devflow/api | ✅ 0 errors | ✅ | ⚠️ |
+| @devflow/worker | ✅ 0 errors | ✅ | ⚠️ |
+| @devflow/cli | ✅ 0 errors | ✅ | ⚠️ |
 
 ---
 
@@ -591,18 +591,18 @@ docker-compose down
 
 ```bash
 # Installer via Helm
-cd infra/helm/soma-squad-ai
+cd infra/helm/devflow
 
 # Development
-helm install soma-squad-ai . -f values.yaml
+helm install devflow . -f values.yaml
 
 # Production
-helm install soma-squad-ai . -f values-prod.yaml \
-  --namespace soma-squad-ai \
+helm install devflow . -f values-prod.yaml \
+  --namespace devflow \
   --create-namespace
 
 # Vérifier le déploiement
-kubectl get pods -n soma-squad-ai
+kubectl get pods -n devflow
 ```
 
 ### Services Déployés
@@ -619,8 +619,8 @@ Worker:
 
 PostgreSQL:
   - Port: 5432
-  - Database: soma_squad_ai
-  - User: soma_squad_ai
+  - Database: devflow
+  - User: devflow
 
 Redis:
   - Port: 6379
@@ -750,17 +750,17 @@ Disponibles sur `/metrics` :
 
 ```
 # Workflow metrics
-soma_squad_ai_workflow_duration_seconds
-soma_squad_ai_workflow_errors_total
-soma_squad_ai_workflow_success_total
+devflow_workflow_duration_seconds
+devflow_workflow_errors_total
+devflow_workflow_success_total
 
 # API metrics
-soma_squad_ai_api_requests_total
-soma_squad_ai_api_response_time_seconds
+devflow_api_requests_total
+devflow_api_response_time_seconds
 
 # Billing metrics
-soma_squad_ai_tokens_consumed_total
-soma_squad_ai_cost_usd_total
+devflow_tokens_consumed_total
+devflow_cost_usd_total
 ```
 
 ### Grafana Dashboards
@@ -866,16 +866,16 @@ sla:
 - Types TypeScript
 
 **Resources :**
-- GitHub : https://github.com/your-org/soma-squad-ai
-- Email : support@soma-squad-ai.io
+- GitHub : https://github.com/your-org/devflow
+- Email : support@devflow.io
 
 **Tools :**
 ```bash
 # Health check
-soma-squad-ai doctor
+devflow doctor
 
 # Status d'un ticket
-soma-squad-ai status TASK-123
+devflow status TASK-123
 
 # Logs
 docker-compose logs -f
@@ -951,11 +951,11 @@ Le changelog est désormais maintenu dans `CHANGELOG.md`.
 ## 📚 Fichiers Importants
 
 ```
-soma-squad-ai/
+devflow/
 ├── DOCUMENTATION.md          # ← Ce fichier (consolidé)
 ├── .env.example              # Template configuration
 ├── docker-compose.yml        # Services Docker
-├── soma-squad-ai.yml.example # Config projet
+├── devflow.yml.example # Config projet
 ├── LICENSE                   # Licence propriétaire
 └── packages/
     ├── api/
@@ -968,7 +968,7 @@ soma-squad-ai/
     │       │   ├── codebase.activities.ts  # Analyse repo
     │       │   └── linear.activities.ts    # Linear integration
     │       └── workflows/
-    │           └── soma-squad-ai.workflow.ts  # Workflow principal
+    │           └── devflow.workflow.ts  # Workflow principal
     └── sdk/
         └── src/
             ├── vcs/
@@ -986,7 +986,7 @@ soma-squad-ai/
 
 ---
 
-**Soma Squad AI v1.12.1** - De Linear à Production, Automatiquement. ✨
+**DevFlow v1.12.1** - De Linear à Production, Automatiquement. ✨
 
 **Dernière mise à jour :** 6 décembre 2025  
 **Status :** ✅ Production Ready  

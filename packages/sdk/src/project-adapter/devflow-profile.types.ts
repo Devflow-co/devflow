@@ -1,8 +1,8 @@
 /**
- * Soma Squad AI Profile Types - Extended for Phase 3 & 4
+ * DevFlow Profile Types - Extended for Phase 3 & 4
  */
 
-export interface SomaSquadAIProfile {
+export interface DevFlowProfile {
   version: string;
   project: ProjectMetadata;
   linear?: LinearConfig;
@@ -291,7 +291,7 @@ export interface CommandResult {
 
 export interface CommandExecutionContext {
   workspacePath: string;
-  profile: SomaSquadAIProfile;
+  profile: DevFlowProfile;
   environment?: Record<string, string>;
   timeout?: number;
 }

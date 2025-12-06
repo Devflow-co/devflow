@@ -13,7 +13,7 @@ import {
   FixGenerationInput,
   FixGenerationOutput,
   createLogger,
-} from '@soma-squad-ai/common';
+} from '@devflow/common';
 
 import {
   CodeAgentDriver,
@@ -58,8 +58,8 @@ export class OpenRouterProvider implements CodeAgentDriver {
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://soma-squad-ai.dev',
-          'X-Title': 'Soma Squad AI',
+          'HTTP-Referer': 'https://devflow.dev',
+          'X-Title': 'DevFlow',
         },
       },
     );

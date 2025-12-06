@@ -2,7 +2,7 @@
  * Documentation Scanner - Scans documentation files via GitHub API
  */
 
-import { createLogger } from '@soma-squad-ai/common';
+import { createLogger } from '@devflow/common';
 import { GitHubProvider } from '../vcs/github.provider';
 
 export interface DocumentationInfo {

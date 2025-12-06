@@ -1,4 +1,4 @@
-# CLAUDE.md - Soma Squad AI
+# CLAUDE.md - DevFlow
 
 **Version:** 1.13.0
 **Mise à jour:** 6 décembre 2025
@@ -12,7 +12,7 @@
 - Si aucune doc n'est requise, l'indiquer explicitement avec justification dans la PR/Linear.
 
 ## Vue d'ensemble
-Soma Squad AI est un orchestrateur DevOps universel qui transforme automatiquement les tâches Linear en code déployé.
+DevFlow est un orchestrateur DevOps universel qui transforme automatiquement les tâches Linear en code déployé.
 
 ### Workflow principal
 1. Créer une tâche dans Linear avec description
@@ -33,7 +33,7 @@ Soma Squad AI est un orchestrateur DevOps universel qui transforme automatiqueme
 - Node.js >= 20, pnpm workspace
 
 ```
-soma-squad-ai/
+devflow/
 ├── packages/
 │   ├── api/              # API REST NestJS (port 3000)
 │   ├── worker/           # Temporal workers
@@ -48,15 +48,15 @@ soma-squad-ai/
 
 ## Packages clés
 
-### @soma-squad-ai/api
+### @devflow/api
 - Endpoints : `/health`, `/projects`, `/tasks`, `/tasks/sync/linear`, `/webhooks/linear`, `/webhooks/github`, `/workflows/:id/start`.
 - Dépendances : `@nestjs/*`, `@prisma/client`, `@temporalio/client`.
 
-### @soma-squad-ai/worker
-- Workflow principal : `packages/worker/src/workflows/soma-squad-ai.workflow.ts`.
+### @devflow/worker
+- Workflow principal : `packages/worker/src/workflows/devflow.workflow.ts`.
 - Activities clés : `syncLinearTask`, `updateLinearTask`, `appendSpecToLinearIssue`, `appendWarningToLinearIssue`, `generateSpecification`, `generateCode`, `generateTests`, `createBranch`, `commitFiles`, `createPullRequest`, `waitForCI`, `runTests`, `analyzeTestFailures`, `mergePullRequest`, `sendNotification`.
 
-### @soma-squad-ai/sdk
+### @devflow/sdk
 - **VCS** : GitHubProvider (13/13).
 - **CI/CD** : GitHubActionsProvider (10/10).
 - **Linear** : `LinearClient` - getTask, queryIssues, queryIssuesByStatus, updateStatus, updateDescription, appendToDescription, addComment.
@@ -64,11 +64,11 @@ soma-squad-ai/
 - **Codebase analysis** : `structure-analyzer.ts`, `dependency-analyzer.ts`, `code-similarity.service.ts`, `documentation-scanner.ts`.
 - **Gouvernance/Sécurité** : `policy.guard.ts`, `auto-merge.engine.ts`, `audit.logger.ts`, `security.scanner.ts`.
 
-### @soma-squad-ai/cli
+### @devflow/cli
 - Commandes : `init`, `connect linear`, `connect github`, `status <task>`, `run <task> --step dev`, `doctor`.
 
 ## Workflows Temporal
-`somaSquadAIWorkflow` orchestre Linear → Spec → Code → PR → CI → Merge avec auto-fix.
+`devflowWorkflow` orchestre Linear → Spec → Code → PR → CI → Merge avec auto-fix.
 
 ### Data Flow
 ```
@@ -111,12 +111,12 @@ OPENROUTER_API_KEY=sk-or-xxx
 OPENROUTER_MODEL=anthropic/claude-sonnet-4
 
 # Database
-DATABASE_URL=postgresql://soma_squad_ai:changeme@localhost:5432/soma_squad_ai
+DATABASE_URL=postgresql://devflow:changeme@localhost:5432/devflow
 
 # Temporal
 TEMPORAL_ADDRESS=localhost:7233
 TEMPORAL_NAMESPACE=default
-TEMPORAL_TASK_QUEUE=soma-squad-ai
+TEMPORAL_TASK_QUEUE=devflow
 
 # Redis
 REDIS_HOST=localhost
@@ -140,7 +140,7 @@ REDIS_PORT=6379
 - Logs : `docker-compose logs -f api worker`
 
 ## Fichiers clés à consulter
-- `packages/worker/src/workflows/soma-squad-ai.workflow.ts` (workflow principal)
+- `packages/worker/src/workflows/devflow.workflow.ts` (workflow principal)
 - `packages/sdk/src/linear/linear.client.ts` (Linear client)
 - `packages/sdk/src/agents/agent.interface.ts` (interface AI agents)
 - `packages/api/prisma/schema.prisma` (schéma complet)

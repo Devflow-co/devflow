@@ -6,8 +6,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import chalk from 'chalk';
 import ora from 'ora';
-import { ProjectAdapter } from '@soma-squad-ai/sdk';
-import { DEVFLOW_CONFIG_FILE } from '@soma-squad-ai/common';
+import { ProjectAdapter } from '@devflow/sdk';
+import { DEVFLOW_CONFIG_FILE } from '@devflow/common';
 
 export const configCommands = {
   async validate() {

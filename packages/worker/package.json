@@ -1,7 +1,7 @@
 {
-  "name": "@soma-squad-ai/worker",
+  "name": "@devflow/worker",
   "version": "1.0.0",
-  "description": "Temporal workers for Soma Squad AI workflows",
+  "description": "Temporal workers for DevFlow workflows",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -14,17 +14,17 @@
     "typecheck": "tsc --noEmit"
   },
   "keywords": [
-    "soma-squad-ai",
+    "devflow",
     "temporal",
     "worker",
     "workflow",
     "ai"
   ],
-  "author": "Soma Squad AI Team",
+  "author": "DevFlow Team",
   "license": "MIT",
   "dependencies": {
-    "@soma-squad-ai/common": "workspace:*",
-    "@soma-squad-ai/sdk": "workspace:*",
+    "@devflow/common": "workspace:*",
+    "@devflow/sdk": "workspace:*",
     "@prisma/client": "^5.8.1",
     "@temporalio/activity": "^1.9.0",
     "@temporalio/worker": "^1.9.0",

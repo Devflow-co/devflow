@@ -1,12 +1,12 @@
-# Soma Squad AI Project Configuration
-# Place this file at the root of your project as .soma-squad-ai.yml
+# DevFlow Project Configuration
+# Place this file at the root of your project as .devflow.yml
 
 version: '1.0'
 
 # Project metadata
 project:
   name: my-awesome-app
-  description: Example application managed by Soma Squad AI
+  description: Example application managed by DevFlow
   repository: https://github.com/org/my-awesome-app
   language: typescript # typescript, javascript, python, php, go, rust, etc.
   framework: nextjs # nextjs, nestjs, django, laravel, express, etc.
@@ -15,7 +15,7 @@ project:
 linear:
   enabled: true
   team_id: ${LINEAR_TEAM_ID}
-  # Map Linear status to Soma Squad AI workflow
+  # Map Linear status to DevFlow workflow
   status_mapping:
     trigger_status: Specification
     in_progress: In Progress
@@ -65,7 +65,7 @@ commands:
 # CI/CD Integration
 ci:
   provider: github-actions # github-actions
-  # Path to CI config (Soma Squad AI will only read, not modify)
+  # Path to CI config (DevFlow will only read, not modify)
   config_path: .github/workflows/main.yml
   # Artifact paths to check
   artifacts:
@@ -169,5 +169,5 @@ advanced:
   # Workspace isolation
   workspace:
     clean: true
-    path: /tmp/soma-squad-ai-workspaces
+    path: /tmp/devflow-workspaces
 

@@ -2,8 +2,8 @@
  * Linear Integration Activities - Temporal activities for Linear integration
  */
 
-import { createLogger } from '@soma-squad-ai/common';
-import { createLinearClient, formatSpecAsMarkdown, formatWarningMessage } from '@soma-squad-ai/sdk';
+import { createLogger } from '@devflow/common';
+import { createLinearClient, formatSpecAsMarkdown, formatWarningMessage } from '@devflow/sdk';
 
 const logger = createLogger('LinearActivities');
 
@@ -199,7 +199,7 @@ export async function appendWarningToLinearIssue(input: {
     const warningMessage =
       input.message ||
       process.env.LINEAR_SPEC_WARNING_MESSAGE ||
-      '⚠️ This specification was generated automatically by Soma Squad AI.\nManual modifications may not be reflected in the development workflow.';
+      '⚠️ This specification was generated automatically by DevFlow.\nManual modifications may not be reflected in the development workflow.';
 
     // Add as comment
     await client.addComment(input.linearId, formatWarningMessage(warningMessage));

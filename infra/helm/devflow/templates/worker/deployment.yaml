@@ -1,56 +1,50 @@
-{{- if .Values.api.enabled -}}
+{{- if .Values.worker.enabled -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "soma-squad-ai.fullname" . }}-api
+  name: {{ include "devflow.fullname" . }}-worker
   labels:
-    {{- include "soma-squad-ai.api.labels" . | nindent 4 }}
+    {{- include "devflow.worker.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.api.autoscaling.enabled }}
-  replicas: {{ .Values.api.replicaCount }}
+  {{- if not .Values.worker.autoscaling.enabled }}
+  replicas: {{ .Values.worker.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "soma-squad-ai.api.selectorLabels" . | nindent 6 }}
+      {{- include "devflow.worker.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/api/configmap.yaml") . | sha256sum }}
-        checksum/secret: {{ include (print $.Template.BasePath "/api/secret.yaml") . | sha256sum }}
-        {{- with .Values.api.podAnnotations }}
+        checksum/config: {{ include (print $.Template.BasePath "/worker/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/worker/secret.yaml") . | sha256sum }}
+        {{- with .Values.worker.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       labels:
-        {{- include "soma-squad-ai.api.selectorLabels" . | nindent 8 }}
+        {{- include "devflow.worker.selectorLabels" . | nindent 8 }}
     spec:
-      {{- include "soma-squad-ai.imagePullSecrets" . | nindent 6 }}
-      serviceAccountName: {{ include "soma-squad-ai.serviceAccountName" . }}
+      {{- include "devflow.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "devflow.serviceAccountName" . }}
       securityContext:
-        {{- toYaml .Values.api.podSecurityContext | nindent 8 }}
+        {{- toYaml .Values.worker.podSecurityContext | nindent 8 }}
       containers:
-      - name: api
+      - name: worker
         securityContext:
-          {{- toYaml .Values.api.securityContext | nindent 12 }}
-        image: {{ include "soma-squad-ai.api.image" . }}
-        imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          {{- toYaml .Values.worker.securityContext | nindent 12 }}
+        image: {{ include "devflow.worker.image" . }}
+        imagePullPolicy: {{ .Values.worker.image.pullPolicy }}
         ports:
-        - name: http
-          containerPort: {{ .Values.api.env.PORT | default 3000 }}
+        - name: metrics
+          containerPort: {{ .Values.worker.env.METRICS_PORT | default 9464 }}
           protocol: TCP
         env:
-        # Environment variables from ConfigMap
+        # Environment variables
         - name: NODE_ENV
-          value: {{ .Values.api.env.NODE_ENV | quote }}
+          value: {{ .Values.worker.env.NODE_ENV | quote }}
         - name: LOG_LEVEL
-          value: {{ .Values.api.env.LOG_LEVEL | quote }}
-        - name: PORT
-          value: {{ .Values.api.env.PORT | quote }}
-        - name: ENABLE_SWAGGER
-          value: {{ .Values.api.env.ENABLE_SWAGGER | quote }}
-        - name: ENABLE_METRICS
-          value: {{ .Values.api.env.ENABLE_METRICS | quote }}
-        - name: ENABLE_TRACING
-          value: {{ .Values.api.env.ENABLE_TRACING | quote }}
+          value: {{ .Values.worker.env.LOG_LEVEL | quote }}
+        - name: METRICS_PORT
+          value: {{ .Values.worker.env.METRICS_PORT | quote }}
         
         # Database
         - name: POSTGRES_USER
@@ -64,7 +58,7 @@ spec:
               name: {{ .Values.global.database.existingSecret }}
               key: {{ .Values.global.database.secretKeys.password }}
         - name: DATABASE_URL
-          value: {{ include "soma-squad-ai.database.url" . | quote }}
+          value: {{ include "devflow.database.url" . | quote }}
         
         # Redis
         {{- if .Values.global.redis.existingSecret }}
@@ -75,13 +69,19 @@ spec:
               key: {{ .Values.global.redis.secretKeys.password }}
         {{- end }}
         - name: REDIS_URL
-          value: {{ include "soma-squad-ai.redis.url" . | quote }}
+          value: {{ include "devflow.redis.url" . | quote }}
         
         # Temporal
         - name: TEMPORAL_ADDRESS
-          value: {{ include "soma-squad-ai.temporal.address" . | quote }}
+          value: {{ include "devflow.temporal.address" . | quote }}
         - name: TEMPORAL_NAMESPACE
           value: {{ .Values.global.temporal.namespace | quote }}
+        - name: TEMPORAL_TASK_QUEUE
+          value: {{ .Values.worker.env.TEMPORAL_TASK_QUEUE | quote }}
+        - name: TEMPORAL_MAX_CONCURRENT_ACTIVITIES
+          value: {{ .Values.worker.env.TEMPORAL_MAX_CONCURRENT_ACTIVITIES | quote }}
+        - name: TEMPORAL_MAX_CONCURRENT_WORKFLOWS
+          value: {{ .Values.worker.env.TEMPORAL_MAX_CONCURRENT_WORKFLOWS | quote }}
         {{- if .Values.global.temporal.existingSecret }}
         - name: TEMPORAL_TLS_CERT
           valueFrom:
@@ -95,8 +95,8 @@ spec:
               key: {{ .Values.global.temporal.secretKeys.tls_key }}
         {{- end }}
         
-        # Secrets (API keys, etc.)
-        {{- range .Values.api.secrets }}
+        # Secrets
+        {{- range .Values.worker.secrets }}
         - name: {{ .name }}
           valueFrom:
             secretKeyRef:
@@ -104,26 +104,20 @@ spec:
               key: {{ .secretKey }}
         {{- end }}
         
-        # Multi-tenant
-        - name: MULTI_TENANT_ENABLED
-          value: {{ .Values.global.multiTenant.enabled | quote }}
-        - name: DEFAULT_ORGANIZATION
-          value: {{ .Values.global.multiTenant.defaultOrganization | quote }}
-        
         # Observability
         - name: OTEL_COLLECTOR_URL
-          value: "http://{{ include "soma-squad-ai.fullname" . }}-otel-collector:4318"
+          value: "http://{{ include "devflow.fullname" . }}-otel-collector:4318"
         - name: SERVICE_NAME
-          value: "soma-squad-ai-api"
+          value: "devflow-worker"
         - name: SERVICE_VERSION
           value: {{ .Chart.AppVersion | quote }}
         
         livenessProbe:
-          {{- toYaml .Values.api.livenessProbe | nindent 12 }}
+          {{- toYaml .Values.worker.livenessProbe | nindent 12 }}
         readinessProbe:
-          {{- toYaml .Values.api.readinessProbe | nindent 12 }}
+          {{- toYaml .Values.worker.readinessProbe | nindent 12 }}
         resources:
-          {{- toYaml .Values.api.resources | nindent 12 }}
+          {{- toYaml .Values.worker.resources | nindent 12 }}
         volumeMounts:
         - name: tmp
           mountPath: /tmp
@@ -134,15 +128,15 @@ spec:
         emptyDir: {}
       - name: cache
         emptyDir: {}
-      {{- with .Values.api.nodeSelector }}
+      {{- with .Values.worker.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.api.affinity }}
+      {{- with .Values.worker.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.api.tolerations }}
+      {{- with .Values.worker.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}

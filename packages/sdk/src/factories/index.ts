@@ -8,7 +8,7 @@ import { GitHubProvider } from '../vcs/github.provider';
 import { CIDriver } from '../ci/ci.interface';
 import { GitHubActionsProvider } from '../ci/github-actions.provider';
 
-import { ConfigurationError } from '@soma-squad-ai/common';
+import { ConfigurationError } from '@devflow/common';
 
 interface VCSConfig {
   provider: 'github';

@@ -3,7 +3,7 @@
  * Logs all operations for audit trail
  */
 
-import { createLogger } from '@soma-squad-ai/common';
+import { createLogger } from '@devflow/common';
 
 const logger = createLogger('AuditLogger');
 

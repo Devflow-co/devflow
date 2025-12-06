@@ -1,6 +1,6 @@
 /**
  * Project Adapter - Universal project interface (Phase 3 Enhanced)
- * Reads and executes .soma-squad-ai.yml commands with guardrails
+ * Reads and executes .devflow.yml commands with guardrails
  */
 
 import * as fs from 'fs/promises';
@@ -9,17 +9,17 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as yaml from 'yaml';
 import {
-  SomaSquadAIProfile,
+  DevFlowProfile,
   CommandResult,
   GuardrailsValidationResult,
   GuardrailsViolation,
-} from './soma-squad-ai-profile.types';
-import { createLogger, ConfigurationError, DEVFLOW_CONFIG_FILE } from '@soma-squad-ai/common';
+} from './devflow-profile.types';
+import { createLogger, ConfigurationError, DEVFLOW_CONFIG_FILE } from '@devflow/common';
 
 const execAsync = promisify(exec);
 
 export class ProjectAdapter {
-  private profile?: SomaSquadAIProfile;
+  private profile?: DevFlowProfile;
   private workspacePath: string;
   private logger = createLogger('ProjectAdapter');
 
@@ -28,9 +28,9 @@ export class ProjectAdapter {
   }
 
   /**
-   * Load and validate .soma-squad-ai.yml configuration
+   * Load and validate .devflow.yml configuration
    */
-  async loadProfile(): Promise<SomaSquadAIProfile> {
+  async loadProfile(): Promise<DevFlowProfile> {
     this.logger.info('Loading DevFlow profile', { workspacePath: this.workspacePath });
 
     const configPath = path.join(this.workspacePath, DEVFLOW_CONFIG_FILE);
@@ -39,8 +39,8 @@ export class ProjectAdapter {
       const configContent = await fs.readFile(configPath, 'utf-8');
       const rawProfile = yaml.parse(configContent);
 
-      // TODO: Validate with Zod schema (from @soma-squad-ai/common)
-      this.profile = rawProfile as SomaSquadAIProfile;
+      // TODO: Validate with Zod schema (from @devflow/common)
+      this.profile = rawProfile as DevFlowProfile;
 
       this.logger.info('DevFlow profile loaded', { project: this.profile.project.name });
       return this.profile;
@@ -56,7 +56,7 @@ export class ProjectAdapter {
   /**
    * Get loaded profile
    */
-  getProfile(): SomaSquadAIProfile {
+  getProfile(): DevFlowProfile {
     if (!this.profile) {
       throw new ConfigurationError('Profile not loaded. Call loadProfile() first');
     }
@@ -64,10 +64,10 @@ export class ProjectAdapter {
   }
 
   /**
-   * Execute a standard command from .soma-squad-ai.yml
+   * Execute a standard command from .devflow.yml
    */
   async executeCommand(
-    commandName: keyof SomaSquadAIProfile['commands'],
+    commandName: keyof DevFlowProfile['commands'],
     options?: { timeout?: number; env?: Record<string, string> },
   ): Promise<CommandResult> {
     if (!this.profile) {
@@ -87,7 +87,7 @@ export class ProjectAdapter {
   }
 
   /**
-   * Execute a custom command from .soma-squad-ai.yml
+   * Execute a custom command from .devflow.yml
    */
   async executeCustomCommand(
     commandName: string,

@@ -35,6 +35,12 @@ importers:
 
   packages/api:
     dependencies:
+      '@devflow/common':
+        specifier: workspace:*
+        version: link:../common
+      '@devflow/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       '@nestjs/common':
         specifier: ^10.3.0
         version: 10.4.20(class-transformer@0.5.1)(class-validator@0.14.2)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -56,12 +62,6 @@ importers:
       '@prisma/client':
         specifier: ^5.8.1
         version: 5.22.0(prisma@5.22.0)
-      '@soma-squad-ai/common':
-        specifier: workspace:*
-        version: link:../common
-      '@soma-squad-ai/sdk':
-        specifier: workspace:*
-        version: link:../sdk
       '@temporalio/client':
         specifier: ^1.9.0
         version: 1.13.1
@@ -132,6 +132,12 @@ importers:
 
   packages/cli:
     dependencies:
+      '@devflow/common':
+        specifier: workspace:*
+        version: link:../common
+      '@devflow/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       '@oclif/core':
         specifier: ^3.15.1
         version: 3.27.0
@@ -141,12 +147,6 @@ importers:
       '@oclif/plugin-plugins':
         specifier: ^4.1.8
         version: 4.3.10
-      '@soma-squad-ai/common':
-        specifier: workspace:*
-        version: link:../common
-      '@soma-squad-ai/sdk':
-        specifier: workspace:*
-        version: link:../sdk
       axios:
         specifier: ^1.6.5
         version: 1.13.1
@@ -221,6 +221,9 @@ importers:
 
   packages/observability:
     dependencies:
+      '@devflow/common':
+        specifier: workspace:*
+        version: link:../common
       '@opentelemetry/api':
         specifier: ^1.7.0
         version: 1.9.0
@@ -242,9 +245,6 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: ^1.18.1
         version: 1.37.0
-      '@soma-squad-ai/common':
-        specifier: workspace:*
-        version: link:../common
       pino:
         specifier: ^8.17.2
         version: 8.21.0
@@ -273,6 +273,9 @@ importers:
 
   packages/sdk:
     dependencies:
+      '@devflow/common':
+        specifier: workspace:*
+        version: link:../common
       '@linear/sdk':
         specifier: ^29.0.0
         version: 29.0.0
@@ -282,9 +285,6 @@ importers:
       '@prisma/client':
         specifier: ^5.8.1
         version: 5.22.0(prisma@5.22.0)
-      '@soma-squad-ai/common':
-        specifier: workspace:*
-        version: link:../common
       axios:
         specifier: ^1.6.5
         version: 1.13.1
@@ -316,15 +316,15 @@ importers:
 
   packages/worker:
     dependencies:
+      '@devflow/common':
+        specifier: workspace:*
+        version: link:../common
+      '@devflow/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       '@prisma/client':
         specifier: ^5.8.1
         version: 5.22.0(prisma@5.22.0)
-      '@soma-squad-ai/common':
-        specifier: workspace:*
-        version: link:../common
-      '@soma-squad-ai/sdk':
-        specifier: workspace:*
-        version: link:../sdk
       '@temporalio/activity':
         specifier: ^1.9.0
         version: 1.13.1

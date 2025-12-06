@@ -1,5 +1,5 @@
 {
-  "name": "@soma-squad-ai/sdk",
+  "name": "@devflow/sdk",
   "version": "1.0.0",
   "description": "SDK with abstractions for VCS, CI, Code Agents, and Project adapters",
   "main": "dist/index.js",
@@ -16,17 +16,17 @@
     "test:coverage": "jest --coverage"
   },
   "keywords": [
-    "soma-squad-ai",
+    "devflow",
     "sdk",
     "vcs",
     "ci",
     "agent",
     "ai"
   ],
-  "author": "Soma Squad AI Team",
+  "author": "DevFlow Team",
   "license": "MIT",
   "dependencies": {
-    "@soma-squad-ai/common": "workspace:*",
+    "@devflow/common": "workspace:*",
     "@linear/sdk": "^29.0.0",
     "@octokit/rest": "^20.0.2",
     "@prisma/client": "^5.8.1",

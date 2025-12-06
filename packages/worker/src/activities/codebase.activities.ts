@@ -2,8 +2,8 @@
  * Codebase Analysis Activities
  */
 
-import { createLogger } from '@soma-squad-ai/common';
-import { GitHubProvider, analyzeRepository, CodebaseContext } from '@soma-squad-ai/sdk';
+import { createLogger } from '@devflow/common';
+import { GitHubProvider, analyzeRepository, CodebaseContext } from '@devflow/sdk';
 import { PrismaClient } from '@prisma/client';
 
 const logger = createLogger('CodebaseActivities');

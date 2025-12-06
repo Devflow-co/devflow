@@ -2,8 +2,8 @@
  * VCS Activities
  */
 
-import { createLogger } from '@soma-squad-ai/common';
-import { createVCSDriver } from '@soma-squad-ai/sdk';
+import { createLogger } from '@devflow/common';
+import { createVCSDriver } from '@devflow/sdk';
 import { getProjectRepositoryConfig } from './codebase.activities';
 
 const logger = createLogger('VCSActivities');

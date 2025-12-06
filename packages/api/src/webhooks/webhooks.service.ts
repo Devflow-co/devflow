@@ -3,7 +3,7 @@
  */
 
 import { Injectable } from '@nestjs/common';
-import { createLogger } from '@soma-squad-ai/common';
+import { createLogger } from '@devflow/common';
 
 @Injectable()
 export class WebhooksService {

@@ -11,7 +11,7 @@ import {
   CodeGenerationOutput,
   FixGenerationInput,
   FixGenerationOutput,
-} from '@soma-squad-ai/common';
+} from '@devflow/common';
 
 // ============================================
 // Phase 3: New Types for QA Agent

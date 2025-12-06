@@ -3,7 +3,7 @@
  * Manages merge policies and determines when auto-merge is allowed
  */
 
-import { createLogger } from '@soma-squad-ai/common';
+import { createLogger } from '@devflow/common';
 import { PolicyGuard } from './policy.guard';
 import { auditLogger, AuditEventType } from './audit.logger';
 

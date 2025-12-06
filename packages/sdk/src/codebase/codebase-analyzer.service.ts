@@ -2,7 +2,7 @@
  * Codebase Analyzer Service - Orchestrates all analyzers to provide complete codebase context
  */
 
-import { createLogger } from '@soma-squad-ai/common';
+import { createLogger } from '@devflow/common';
 import { GitHubProvider } from '../vcs/github.provider';
 import { analyzeStructure, ProjectStructure } from './structure-analyzer';
 import { analyzeDependencies, DependencyInfo } from './dependency-analyzer';

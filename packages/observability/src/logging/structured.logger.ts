@@ -71,7 +71,7 @@ const baseConfig: pino.LoggerOptions = {
   },
   timestamp: pino.stdTimeFunctions.isoTime,
   base: {
-    service: process.env.SERVICE_NAME || 'soma-squad-ai',
+    service: process.env.SERVICE_NAME || 'devflow',
     env: process.env.NODE_ENV || 'development',
     version: process.env.SERVICE_VERSION || '1.5.0',
   },

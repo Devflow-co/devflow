@@ -11,7 +11,7 @@ import {
   CoverageReport,
   CIStatus,
   createLogger,
-} from '@soma-squad-ai/common';
+} from '@devflow/common';
 
 import { CIDriver } from './ci.interface';
 
