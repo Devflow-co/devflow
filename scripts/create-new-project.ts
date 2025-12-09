@@ -166,7 +166,7 @@ async function main() {
   console.log('   (Should be on http://localhost:8000)\n');
 
   console.log('2️⃣  Test GitHub OAuth (Device Flow):');
-  console.log(`   ./test-oauth-flow.sh ${project.id} github\n`);
+  console.log(`   ./tests/integration/test-oauth-flow.sh ${project.id} github\n`);
   console.log('   Or manually:');
   console.log(`   curl -X POST http://localhost:8000/api/v1/auth/github/device/initiate \\`);
   console.log(`     -H "Content-Type: application/json" \\`);
@@ -174,7 +174,7 @@ async function main() {
   console.log('');
 
   console.log('3️⃣  Test Linear OAuth (Authorization Code):');
-  console.log(`   ./test-oauth-flow.sh ${project.id} linear\n`);
+  console.log(`   ./tests/integration/test-oauth-flow.sh ${project.id} linear\n`);
   console.log('   Or manually:');
   console.log(`   curl -X POST http://localhost:8000/api/v1/auth/linear/authorize \\`);
   console.log(`     -H "Content-Type: application/json" \\`);

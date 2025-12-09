@@ -1,188 +1,328 @@
 {
-  "dashboard": {
-    "title": "DevFlow - Overview",
-    "tags": ["devflow", "overview"],
-    "timezone": "browser",
-    "panels": [
+  "annotations": {
+    "list": [
       {
-        "id": 1,
-        "title": "Active Workflows",
-        "type": "stat",
-        "targets": [
-          {
-            "expr": "devflow_active_workflows",
-            "refId": "A"
-          }
-        ],
-        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 }
-      },
-      {
-        "id": 2,
-        "title": "Workflow Success Rate (24h)",
-        "type": "gauge",
-        "targets": [
-          {
-            "expr": "rate(devflow_workflow_executions_total{status=\"completed\"}[24h]) / rate(devflow_workflow_executions_total[24h]) * 100",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "percent",
-            "min": 0,
-            "max": 100,
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                { "value": 0, "color": "red" },
-                { "value": 80, "color": "yellow" },
-                { "value": 95, "color": "green" }
-              ]
-            }
-          }
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
         },
-        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 }
-      },
-      {
-        "id": 3,
-        "title": "LLM Daily Cost",
-        "type": "stat",
-        "targets": [
-          {
-            "expr": "devflow_llm_cost_usd{period=\"day\"}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "currencyUSD",
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                { "value": 0, "color": "green" },
-                { "value": 40, "color": "yellow" },
-                { "value": 50, "color": "red" }
-              ]
-            }
-          }
-        },
-        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 }
-      },
-      {
-        "id": 4,
-        "title": "Alerts (Last Hour)",
-        "type": "stat",
-        "targets": [
-          {
-            "expr": "increase(devflow_alerts_total[1h])",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                { "value": 0, "color": "green" },
-                { "value": 5, "color": "yellow" },
-                { "value": 10, "color": "red" }
-              ]
-            }
-          }
-        },
-        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 }
-      },
-      {
-        "id": 5,
-        "title": "Workflow Duration (P50/P95/P99)",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "histogram_quantile(0.50, rate(devflow_workflow_duration_seconds_bucket[5m]))",
-            "legendFormat": "P50",
-            "refId": "A"
-          },
-          {
-            "expr": "histogram_quantile(0.95, rate(devflow_workflow_duration_seconds_bucket[5m]))",
-            "legendFormat": "P95",
-            "refId": "B"
-          },
-          {
-            "expr": "histogram_quantile(0.99, rate(devflow_workflow_duration_seconds_bucket[5m]))",
-            "legendFormat": "P99",
-            "refId": "C"
-          }
-        ],
-        "yaxes": [
-          { "format": "s", "label": "Duration" }
-        ],
-        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 }
-      },
-      {
-        "id": 6,
-        "title": "Agent Latency by Provider",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "rate(devflow_agent_latency_seconds_sum[5m]) / rate(devflow_agent_latency_seconds_count[5m])",
-            "legendFormat": "{{provider}} - {{phase}}",
-            "refId": "A"
-          }
-        ],
-        "yaxes": [
-          { "format": "s", "label": "Latency" }
-        ],
-        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 }
-      },
-      {
-        "id": 7,
-        "title": "SLA Compliance",
-        "type": "bargauge",
-        "targets": [
-          {
-            "expr": "devflow_sla_compliance_percent",
-            "legendFormat": "{{sla_name}}",
-            "refId": "A"
-          }
-        ],
-        "fieldConfig": {
-          "defaults": {
-            "unit": "percent",
-            "min": 0,
-            "max": 100,
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                { "value": 0, "color": "red" },
-                { "value": 90, "color": "yellow" },
-                { "value": 95, "color": "green" }
-              ]
-            }
-          }
-        },
-        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 }
-      },
-      {
-        "id": 8,
-        "title": "Tickets by State",
-        "type": "piechart",
-        "targets": [
-          {
-            "expr": "devflow_tickets_in_progress",
-            "legendFormat": "{{state}}",
-            "refId": "A"
-          }
-        ],
-        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 }
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
       }
-    ],
-    "refresh": "10s",
-    "time": {
-      "from": "now-1h",
-      "to": "now"
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "# DevFlow System Dashboard\n\nWelcome to DevFlow monitoring! This dashboard shows real-time metrics from your DevFlow instance.\n\n**Note:** Metrics will appear once your API and Worker expose a `/metrics` endpoint.",
+        "mode": "markdown"
+      },
+      "pluginVersion": "10.2.2",
+      "title": "Welcome",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "up{job=~\"devflow.*\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "Service Health (Up/Down)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "DOWN"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "UP"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 4
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "up{job=\"devflow-api\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "API Status",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "DOWN"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "UP"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 4
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.2.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "up{job=\"devflow-worker\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "Worker Status",
+      "type": "stat"
     }
-  }
+  ],
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["devflow"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "DevFlow Overview",
+  "uid": "devflow-overview",
+  "version": 0,
+  "weekStart": ""
 }
-
-
-
