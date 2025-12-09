@@ -5,7 +5,7 @@
 
 import { QdrantClient } from '@qdrant/js-client-rest';
 import { createLogger } from '@devflow/common';
-import { metricsCollector } from '../metrics/metrics-collector';
+import { metricsCollector } from '@/rag/metrics/metrics-collector';
 
 const logger = createLogger('QdrantProvider');
 

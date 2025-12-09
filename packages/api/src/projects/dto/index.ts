@@ -1,4 +1,4 @@
-export * from './create-project.dto';
-export * from './update-project.dto';
-export * from './link-repository.dto';
+export * from '@/projects/dto/create-project.dto';
+export * from '@/projects/dto/update-project.dto';
+export * from '@/projects/dto/link-repository.dto';
 

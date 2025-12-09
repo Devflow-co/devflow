@@ -6,12 +6,20 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
-import { AppModule } from './app.module';
-import { createLogger } from '@devflow/common';
+import { AppModule } from '@/app.module';
+import { createLogger, validateConfig } from '@devflow/common';
 
 const logger = createLogger('Bootstrap');
 
 async function bootstrap() {
+  // Validate configuration before starting server
+  try {
+    validateConfig();
+  } catch (error) {
+    logger.error('Configuration validation failed. Please check your environment variables.', error as Error);
+    process.exit(1);
+  }
+
   const app = await NestFactory.create(AppModule);
 
   // Security

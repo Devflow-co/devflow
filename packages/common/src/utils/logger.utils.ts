@@ -2,7 +2,7 @@
  * Logger utility functions
  */
 
-import { LogLevel } from '../enums';
+import { LogLevel } from '@/enums';
 
 export interface LoggerOptions {
   level: LogLevel;

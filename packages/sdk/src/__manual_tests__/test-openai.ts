@@ -8,7 +8,7 @@
  */
 
 import 'dotenv/config';
-import { OpenAIProvider } from '../agents/openai.provider';
+import { OpenAIProvider } from '@/agents/openai.provider';
 
 async function testOpenAIProvider() {
   console.log('🤖 OpenAI Provider Manual Test\n');

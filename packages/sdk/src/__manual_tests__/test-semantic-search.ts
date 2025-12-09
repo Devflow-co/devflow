@@ -2,7 +2,7 @@
  * Test Semantic Search on Indexed Repository
  */
 
-import { SemanticRetriever } from '../rag/retrieval/semantic-retriever';
+import { SemanticRetriever } from '@/rag/retrieval/semantic-retriever';
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 

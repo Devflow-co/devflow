@@ -4,7 +4,7 @@
 
 import chalk from 'chalk';
 import ora from 'ora';
-import inquirer from 'inquirer';
+import prompts from 'prompts';
 import { apiClient } from '../utils/api-client';
 
 export const workflowCommands = {
@@ -13,18 +13,16 @@ export const workflowCommands = {
 
     // Prompt for missing options
     if (!task || !project) {
-      const answers = await inquirer.prompt([
+      const answers = await prompts([
         {
-          type: 'input',
+          type: !task ? 'text' : null,
           name: 'task',
           message: 'Task ID:',
-          when: !task,
         },
         {
-          type: 'input',
+          type: !project ? 'text' : null,
           name: 'project',
           message: 'Project ID:',
-          when: !project,
         },
       ]);
       task = task || answers.task;
@@ -74,14 +72,12 @@ export const workflowCommands = {
   },
 
   async cancel(id: string) {
-    const { confirm } = await inquirer.prompt([
-      {
-        type: 'confirm',
-        name: 'confirm',
-        message: `Are you sure you want to cancel workflow ${id}?`,
-        default: false,
-      },
-    ]);
+    const { confirm } = await prompts({
+      type: 'confirm',
+      name: 'confirm',
+      message: `Are you sure you want to cancel workflow ${id}?`,
+      initial: false,
+    });
 
     if (!confirm) {
       console.log(chalk.gray('Cancelled'));

@@ -2,4 +2,4 @@
  * Cache Module Exports
  */
 
-export * from './embeddings-cache';
+export * from '@/rag/cache/embeddings-cache';

@@ -1,13 +1,30 @@
 /**
- * Codebase Analysis Activities
+ * Codebase Analysis Activities - OAuth Integrated (Phase 5)
  */
 
 import { createLogger } from '@devflow/common';
 import { GitHubProvider, analyzeRepository, CodebaseContext } from '@devflow/sdk';
 import { PrismaClient } from '@prisma/client';
+import { oauthResolver } from '@/services/oauth-context';
 
 const logger = createLogger('CodebaseActivities');
 const prisma = new PrismaClient();
+
+/**
+ * Resolve GitHub token for a project via OAuth
+ * No fallback - OAuth required
+ */
+async function resolveGitHubToken(projectId: string): Promise<string> {
+  try {
+    const token = await oauthResolver.resolveGitHubToken(projectId);
+    logger.info('Using OAuth token for GitHub', { projectId });
+    return token;
+  } catch (error) {
+    throw new Error(
+      `No GitHub OAuth connection configured for project ${projectId}. Please configure OAuth via: POST /api/v1/auth/github/device/initiate`,
+    );
+  }
+}
 
 export interface AnalyzeRepositoryInput {
   projectId: string;
@@ -44,11 +61,8 @@ export async function analyzeRepositoryContext(
 
     logger.info('Repository info extracted', { owner, repo });
 
-    // Get GitHub token
-    const token = process.env.GITHUB_TOKEN || process.env.GITHUB_APP_TOKEN;
-    if (!token) {
-      throw new Error('GitHub token not configured (GITHUB_TOKEN or GITHUB_APP_TOKEN)');
-    }
+    // Resolve GitHub token via OAuth
+    const token = await resolveGitHubToken(input.projectId);
 
     // Create GitHub provider
     const github = new GitHubProvider(token);

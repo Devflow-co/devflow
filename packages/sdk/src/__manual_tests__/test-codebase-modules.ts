@@ -1,8 +1,11 @@
+// DEPRECATED: These tests use old token auth. Will be updated to OAuth in Phase 5.
+// For now, these tests are disabled.
+
 /**
  * Test that codebase analysis modules are correctly exported and functional
  */
 
-import { parseGitHubUrl, parseRepositoryUrl, normalizeRepositoryUrl } from '../vcs/repository-utils';
+import { parseGitHubUrl, parseRepositoryUrl, normalizeRepositoryUrl } from '@/vcs/repository-utils';
 
 console.log('🧪 Testing Codebase Analysis Modules\n');
 

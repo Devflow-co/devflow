@@ -4,8 +4,8 @@
  */
 
 import { createLogger } from '@devflow/common';
-import { PolicyGuard } from './policy.guard';
-import { auditLogger, AuditEventType } from './audit.logger';
+import { PolicyGuard } from '@/security/policy.guard';
+import { auditLogger, AuditEventType } from '@/security/audit.logger';
 
 const logger = createLogger('MergePolicyManager');
 

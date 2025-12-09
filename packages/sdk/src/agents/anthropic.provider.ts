@@ -21,7 +21,7 @@ import {
   TestGenerationOutput,
   TestFailureAnalysisInput,
   TestFixOutput,
-} from './agent.interface';
+} from '@/agents/agent.interface';
 
 export class AnthropicProvider implements CodeAgentDriver {
   private apiKey: string;

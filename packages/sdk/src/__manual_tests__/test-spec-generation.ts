@@ -1,4 +1,4 @@
-import { AnthropicProvider } from '../agents/anthropic.provider';
+import { AnthropicProvider } from '@/agents/anthropic.provider';
 
 async function testSpecGeneration() {
   const apiKey = process.env.ANTHROPIC_API_KEY;

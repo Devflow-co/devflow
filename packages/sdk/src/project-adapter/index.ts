@@ -1,2 +1,2 @@
-export * from './project-adapter';
-export * from './devflow-profile.types';
+export * from '@/project-adapter/project-adapter';
+export * from '@/project-adapter/devflow-profile.types';

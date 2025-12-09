@@ -5,14 +5,18 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { createLogger } from '@devflow/common';
 import { parseRepositoryUrl, GitHubProvider, createVCSDriver } from '@devflow/sdk';
-import { PrismaService } from '../prisma/prisma.service';
-import { CreateProjectDto, UpdateProjectDto } from './dto';
+import { PrismaService } from '@/prisma/prisma.service';
+import { TokenRefreshService } from '@/auth/services/token-refresh.service';
+import { CreateProjectDto, UpdateProjectDto } from '@/projects/dto';
 
 @Injectable()
 export class ProjectsService {
   private logger = createLogger('ProjectsService');
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private tokenRefresh: TokenRefreshService,
+  ) {}
 
   async findAll() {
     this.logger.info('Finding all projects');
@@ -157,10 +161,15 @@ export class ProjectsService {
       const repoInfo = parseRepositoryUrl(repositoryUrl);
       this.logger.info('Repository info extracted', repoInfo);
 
-      // Get GitHub token
-      const token = process.env.GITHUB_TOKEN || process.env.GITHUB_APP_TOKEN;
-      if (!token) {
-        throw new BadRequestException('GitHub token not configured (GITHUB_TOKEN or GITHUB_APP_TOKEN)');
+      // Get GitHub token via OAuth
+      let token: string;
+      try {
+        token = await this.tokenRefresh.getAccessToken(id, 'GITHUB');
+      } catch (error) {
+        this.logger.error('OAuth token not available', error as Error);
+        throw new BadRequestException(
+          'GitHub OAuth not configured for this project. Please connect GitHub via: POST /api/v1/auth/github/device/initiate'
+        );
       }
 
       // Test repository access
@@ -172,7 +181,7 @@ export class ProjectsService {
         } catch (error) {
           this.logger.error('Cannot access repository', error as Error);
           throw new BadRequestException(
-            `Cannot access repository ${repoInfo.owner}/${repoInfo.repo}. Check token permissions.`
+            `Cannot access repository ${repoInfo.owner}/${repoInfo.repo}. Check OAuth permissions.`
           );
         }
       }

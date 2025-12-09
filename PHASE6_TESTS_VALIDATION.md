@@ -1,3 +1,7 @@
+> **DEPRECATED: Token-based auth** - This document references old GITHUB_TOKEN/LINEAR_API_KEY.
+> DevFlow now uses OAuth per-project. See CLAUDE.md for OAuth setup.
+
+
 # Phase 6: Tests & Validation
 
 **Date**: December 6, 2025

@@ -317,25 +317,21 @@ devflow connect github
 
 ```bash
 # ===================================
-# GitHub
+# OAuth Token Encryption (REQUIRED)
 # ===================================
-GITHUB_TOKEN=ghp_your_token_here
-
-# Configuration repository par défaut
-DEFAULT_REPO_OWNER=your-username
-DEFAULT_REPO_NAME=your-repo
-DEFAULT_REPO_URL=https://github.com/your-username/your-repo
+# Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+OAUTH_ENCRYPTION_KEY=your_base64_encryption_key_here
 
 # ===================================
 # AI Providers (au moins un requis)
 # ===================================
 ANTHROPIC_API_KEY=sk-ant-xxx
 OPENAI_API_KEY=sk-proj-xxx
+OPENROUTER_API_KEY=sk-or-xxx
 
 # ===================================
 # Linear
 # ===================================
-LINEAR_API_KEY=lin_api_xxx
 LINEAR_WEBHOOK_SECRET=xxx
 
 # Status que Linear doit avoir pour déclencher le workflow (optionnel)
@@ -353,7 +349,137 @@ DATABASE_URL=postgresql://devflow:changeme@localhost:5432/devflow?schema=public
 TEMPORAL_ADDRESS=localhost:7233
 TEMPORAL_NAMESPACE=default
 TEMPORAL_TASK_QUEUE=devflow
+
+# ===================================
+# RAG (Retrieval-Augmented Generation)
+# ===================================
+QDRANT_HOST=localhost
+QDRANT_PORT=6333
+QDRANT_COLLECTION_NAME=devflow_codebase
+
+# ===================================
+# Redis
+# ===================================
+REDIS_HOST=localhost
+REDIS_PORT=6379
 ```
+
+### Configuration OAuth (Recommandé)
+
+**⚠️ Important:** DevFlow utilise maintenant OAuth 2.0 pour se connecter à GitHub et Linear. Cette approche est plus sécurisée et permet une gestion multi-tenant où chaque projet peut avoir ses propres credentials.
+
+**Documentation complète:**
+- `docs/LINEAR_OAUTH_SETUP.md` - Guide détaillé pour Linear
+- `docs/OAUTH_MULTITENANT.md` - Architecture multi-tenant
+
+#### 1. Enregistrer une Application OAuth
+
+**Pour Linear (Authorization Code Flow):**
+
+1. Créez une OAuth app dans Linear:
+   - Allez sur https://linear.app/settings/api/applications
+   - Créez une nouvelle application
+   - Scopes requis: `read`, `write`, `issues:create`, `comments:create`
+   - Redirect URI: `http://localhost:3000/api/v1/auth/linear/callback`
+
+2. Enregistrez l'app dans DevFlow:
+```bash
+curl -X POST http://localhost:3000/api/v1/auth/apps/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "projectId": "your-project-id",
+    "provider": "LINEAR",
+    "clientId": "your-linear-client-id",
+    "clientSecret": "your-linear-client-secret",
+    "redirectUri": "http://localhost:3000/api/v1/auth/linear/callback",
+    "scopes": ["read", "write", "issues:create", "comments:create"],
+    "flowType": "authorization_code"
+  }'
+```
+
+**Pour GitHub (Device Flow):**
+
+1. Créez une OAuth app dans GitHub:
+   - Allez sur https://github.com/settings/apps
+   - Créez une nouvelle OAuth App
+   - Scopes requis: `repo`, `workflow`, `read:user`
+
+2. Enregistrez l'app dans DevFlow:
+```bash
+curl -X POST http://localhost:3000/api/v1/auth/apps/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "projectId": "your-project-id",
+    "provider": "GITHUB",
+    "clientId": "your-github-client-id",
+    "clientSecret": "your-github-client-secret",
+    "redirectUri": "urn:ietf:wg:oauth:2.0:oob",
+    "scopes": ["repo", "workflow", "read:user"],
+    "flowType": "device"
+  }'
+```
+
+#### 2. Connecter un Utilisateur
+
+**Linear:**
+```bash
+# 1. Obtenir l'URL d'autorisation
+curl -X POST http://localhost:3000/api/v1/auth/linear/authorize \
+  -H "Content-Type: application/json" \
+  -d '{"projectId": "your-project-id"}'
+
+# 2. Visitez l'URL retournée dans votre navigateur
+# 3. Autorisez DevFlow
+# 4. Vous serez redirigé automatiquement
+```
+
+**GitHub:**
+```bash
+# 1. Initier le Device Flow
+curl -X POST http://localhost:3000/api/v1/auth/github/device/initiate \
+  -H "Content-Type: application/json" \
+  -d '{"projectId": "your-project-id"}'
+
+# 2. Visitez l'URL et entrez le code utilisateur
+# 3. Poller pour obtenir les tokens
+curl -X POST http://localhost:3000/api/v1/auth/github/device/poll \
+  -H "Content-Type: application/json" \
+  -d '{
+    "projectId": "your-project-id",
+    "deviceCode": "device_code_from_step_1"
+  }'
+```
+
+#### 3. Vérifier la Connexion
+
+```bash
+# Lister toutes les connexions OAuth d'un projet
+curl http://localhost:3000/api/v1/auth/connections?project=your-project-id
+
+# Forcer le refresh d'un token
+curl -X POST http://localhost:3000/api/v1/auth/linear/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"projectId": "your-project-id"}'
+
+# Déconnecter un provider
+curl -X POST http://localhost:3000/api/v1/auth/linear/disconnect \
+  -H "Content-Type: application/json" \
+  -d '{"projectId": "your-project-id"}'
+```
+
+### Configuration Manuelle (Legacy - Non Recommandé)
+
+Si vous ne pouvez pas utiliser OAuth, vous pouvez toujours utiliser des tokens API:
+
+```bash
+# GitHub Personal Access Token
+GITHUB_TOKEN=ghp_your_token_here
+
+# Linear API Key
+LINEAR_API_KEY=lin_api_xxx
+```
+
+**⚠️ Attention:** Cette approche est dépréciée et sera supprimée dans une version future. Utilisez OAuth pour une sécurité optimale.
 
 ### Fichier .devflow.yml
 

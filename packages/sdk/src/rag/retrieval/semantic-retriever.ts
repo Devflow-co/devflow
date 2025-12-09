@@ -3,12 +3,12 @@
  * Vector-based semantic search using embeddings and Qdrant
  */
 
-import { OpenAIEmbeddingsProvider } from '../embeddings/openai.embeddings';
-import { QdrantVectorStore, VectorSearchResult } from '../vector-store/qdrant.provider';
-import { EmbeddingsCache } from '../cache/embeddings-cache';
+import { OpenAIEmbeddingsProvider } from '@/rag/embeddings/openai.embeddings';
+import { QdrantVectorStore, VectorSearchResult } from '@/rag/vector-store/qdrant.provider';
+import { EmbeddingsCache } from '@/rag/cache/embeddings-cache';
 import { createLogger } from '@devflow/common';
 import { PrismaClient } from '@prisma/client';
-import { metricsCollector } from '../metrics/metrics-collector';
+import { metricsCollector } from '@/rag/metrics/metrics-collector';
 import { randomUUID } from 'crypto';
 
 const logger = createLogger('SemanticRetriever');

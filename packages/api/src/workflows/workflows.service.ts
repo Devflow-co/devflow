@@ -4,16 +4,26 @@
 
 import { Injectable } from '@nestjs/common';
 import { Connection, Client } from '@temporalio/client';
-import { createLogger } from '@devflow/common';
-import { StartWorkflowDto } from './dto';
+import { createLogger, loadConfig, WorkflowConfig } from '@devflow/common';
+import { StartWorkflowDto } from '@/workflows/dto';
 
 @Injectable()
 export class WorkflowsService {
   private logger = createLogger('WorkflowsService');
   private client: Client | null = null;
+  private workflowConfig: WorkflowConfig;
 
   async onModuleInit() {
     try {
+      // Load config once at service initialization
+      const fullConfig = loadConfig();
+      this.workflowConfig = {
+        linear: {
+          statuses: fullConfig.linear.statuses,
+        },
+      };
+      this.logger.info('Workflow config loaded');
+
       const connection = await Connection.connect({
         address: process.env.TEMPORAL_ADDRESS || 'localhost:7233',
       });
@@ -48,6 +58,7 @@ export class WorkflowsService {
           taskId: dto.taskId,
           projectId: dto.projectId,
           userId: dto.userId || 'system',
+          config: this.workflowConfig, // Pass workflow config
         },
       ],
     });

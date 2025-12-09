@@ -1,12 +1,15 @@
+// DEPRECATED: These tests use old token auth. Will be updated to OAuth in Phase 5.
+// For now, these tests are disabled.
+
 /**
  * Manual Test for RAG Phase 4: Retrieval System
  * Tests semantic retrieval, hybrid search, and LLM reranking
  */
 
-import { SemanticRetriever } from '../rag/retrieval/semantic-retriever';
-import { HybridRetriever } from '../rag/retrieval/hybrid-retriever';
-import { LLMReranker } from '../rag/retrieval/reranker';
-import { RepositoryIndexer } from '../rag/indexing/repository-indexer';
+import { SemanticRetriever } from '@/rag/retrieval/semantic-retriever';
+import { HybridRetriever } from '@/rag/retrieval/hybrid-retriever';
+import { LLMReranker } from '@/rag/retrieval/reranker';
+import { RepositoryIndexer } from '@/rag/indexing/repository-indexer';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();

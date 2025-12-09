@@ -4,7 +4,7 @@
  */
 
 import { createLogger } from '@devflow/common';
-import { auditLogger, AuditEventType } from './audit.logger';
+import { auditLogger, AuditEventType } from '@/security/audit.logger';
 
 const logger = createLogger('LLMBudgetManager');
 

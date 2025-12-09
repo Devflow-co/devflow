@@ -1,3 +1,6 @@
+// DEPRECATED: These tests use old token auth. Will be updated to OAuth in Phase 5.
+// For now, these tests are disabled.
+
 /**
  * Test script to list Linear issues
  */
@@ -8,7 +11,7 @@ import * as path from 'path';
 // Load .env from project root
 dotenv.config({ path: path.join(__dirname, '../../../../.env') });
 
-import { LinearClient } from '../linear/linear.client';
+import { LinearClient } from '@/linear/linear.client';
 
 async function main() {
   const apiKey = process.env.LINEAR_API_KEY;

@@ -4,9 +4,10 @@
 
 import { proxyActivities } from '@temporalio/workflow';
 import type { WorkflowInput, WorkflowResult, WorkflowStage } from '@devflow/common';
+import { DEFAULT_WORKFLOW_CONFIG } from '@devflow/common';
 
 // Import activity types
-import type * as activities from '../activities';
+import type * as activities from '@/activities';
 
 // Configure activity proxies
 const {
@@ -31,6 +32,20 @@ const {
  * Spec generation workflow - only generates specification
  */
 export async function specGenerationWorkflow(input: WorkflowInput): Promise<WorkflowResult> {
+  // Extract config with fallback to defaults
+  const config = input.config || DEFAULT_WORKFLOW_CONFIG;
+  const LINEAR_STATUSES = {
+    SPEC_IN_PROGRESS: config.linear.statuses.specInProgress,
+    SPEC_READY: config.linear.statuses.specReady,
+    SPEC_FAILED: config.linear.statuses.specFailed,
+    SPECIFICATION: config.linear.statuses.specification,
+    IN_REVIEW: config.linear.statuses.inReview,
+    DONE: config.linear.statuses.done,
+    BLOCKED: config.linear.statuses.blocked,
+    TRIGGER_STATUS: config.linear.statuses.triggerStatus,
+    NEXT_STATUS: config.linear.statuses.nextStatus,
+  };
+
   let currentStage: WorkflowStage = 'linear_sync' as WorkflowStage;
 
   try {
@@ -54,20 +69,23 @@ export async function specGenerationWorkflow(input: WorkflowInput): Promise<Work
 
     // Update Linear status to stay in Specification
     await updateLinearTask({
+      projectId: input.projectId,
       linearId: task.linearId,
       updates: {
-        status: 'Specification',
+        status: LINEAR_STATUSES.SPECIFICATION,
       },
     });
 
     // Append spec to Linear issue description as markdown
     await appendSpecToLinearIssue({
+      projectId: input.projectId,
       linearId: task.linearId,
       spec: spec,
     });
 
     // Append warning message about auto-generated specs
     await appendWarningToLinearIssue({
+      projectId: input.projectId,
       linearId: task.linearId,
     });
 
@@ -128,8 +146,9 @@ export async function specGenerationWorkflow(input: WorkflowInput): Promise<Work
     if (input.taskId) {
       try {
         await updateLinearTask({
+          projectId: input.projectId,
           linearId: input.taskId,
-          updates: { status: 'Blocked' },
+          updates: { status: LINEAR_STATUSES.BLOCKED },
         });
       } catch {
         // Ignore errors updating Linear on failure

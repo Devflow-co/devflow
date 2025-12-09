@@ -3,11 +3,11 @@
  */
 
 import { createLogger } from '@devflow/common';
-import { GitHubProvider } from '../vcs/github.provider';
-import { analyzeStructure, ProjectStructure } from './structure-analyzer';
-import { analyzeDependencies, DependencyInfo } from './dependency-analyzer';
-import { findSimilarCode, SimilarCode } from './code-similarity.service';
-import { scanDocumentation, DocumentationInfo } from './documentation-scanner';
+import { GitHubProvider } from '@/vcs/github.provider';
+import { analyzeStructure, ProjectStructure } from '@/codebase/structure-analyzer';
+import { analyzeDependencies, DependencyInfo } from '@/codebase/dependency-analyzer';
+import { findSimilarCode, SimilarCode } from '@/codebase/code-similarity.service';
+import { scanDocumentation, DocumentationInfo } from '@/codebase/documentation-scanner';
 
 const logger = createLogger('CodebaseAnalyzer');
 

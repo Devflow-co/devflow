@@ -1,6 +1,6 @@
 /**
  * RAG (Retrieval-Augmented Generation) Module
- * Provides embeddings, vector storage, and caching for semantic code search
+ * Provides embeddings, vector storage, caching, indexing, and retrieval for semantic code search
  */
 
 // Embeddings
@@ -11,3 +11,15 @@ export * from './vector-store';
 
 // Cache
 export * from './cache';
+
+// Indexing
+export * from './indexing';
+
+// Retrieval
+export * from './retrieval';
+
+// Chunking
+export * from './chunking';
+
+// Metrics
+export * from './metrics';

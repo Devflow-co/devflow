@@ -13,7 +13,7 @@ import {
   createLogger,
 } from '@devflow/common';
 
-import { CIDriver } from './ci.interface';
+import { CIDriver } from '@/ci/ci.interface';
 
 export class GitHubActionsProvider implements CIDriver {
   private octokit: Octokit;

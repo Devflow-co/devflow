@@ -1,5 +1,6 @@
 import { IsString, IsNotEmpty, IsOptional, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { TaskPriority } from '@devflow/common';
 
 export class CreateTaskDto {
   @ApiProperty({ example: 'Add user authentication' })
@@ -17,9 +18,9 @@ export class CreateTaskDto {
   @IsNotEmpty()
   projectId: string;
 
-  @ApiProperty({ example: 'high', enum: ['low', 'medium', 'high', 'critical'] })
-  @IsEnum(['low', 'medium', 'high', 'critical'])
-  priority: string;
+  @ApiProperty({ example: 'high', enum: TaskPriority })
+  @IsEnum(TaskPriority)
+  priority: TaskPriority;
 
   @ApiProperty({ example: 'ABC-123', required: false, description: 'Linear issue ID' })
   @IsString()

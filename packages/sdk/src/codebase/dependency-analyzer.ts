@@ -3,7 +3,7 @@
  */
 
 import { createLogger } from '@devflow/common';
-import { GitHubProvider } from '../vcs/github.provider';
+import { GitHubProvider } from '@/vcs/github.provider';
 
 export interface DependencyInfo {
   production: Record<string, string>;

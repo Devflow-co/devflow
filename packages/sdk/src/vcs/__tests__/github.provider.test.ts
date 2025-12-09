@@ -2,7 +2,7 @@
  * GitHub Provider Integration Tests
  */
 
-import { GitHubProvider } from '../github.provider';
+import { GitHubProvider } from '@/vcs/github.provider';
 
 describe('GitHubProvider', () => {
   let provider: GitHubProvider;

@@ -2,7 +2,7 @@
  * ProjectAdapter Tests - Phase 3
  */
 
-import { ProjectAdapter } from '../project-adapter';
+import { ProjectAdapter } from '@/project-adapter/project-adapter';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 

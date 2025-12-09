@@ -63,7 +63,7 @@ export class CodeChunker {
         FunctionDeclaration(path) {
           const { start, end, loc } = path.node;
           if (start !== null && end !== null && loc) {
-            const funcContent = content.substring(start, end);
+            const funcContent = content.substring(start!, end!);
 
             // Skip if too large
             if (funcContent.length > maxChunkSize * 2) {
@@ -96,7 +96,7 @@ export class CodeChunker {
           ) {
             const { start, end, loc } = path.node;
             if (start !== null && end !== null && loc) {
-              const funcContent = content.substring(start, end);
+              const funcContent = content.substring(start!, end!);
 
               if (funcContent.length <= maxChunkSize * 2) {
                 chunks.push({
@@ -118,7 +118,7 @@ export class CodeChunker {
         ClassDeclaration(path) {
           const { start, end, loc } = path.node;
           if (start !== null && end !== null && loc) {
-            const classContent = content.substring(start, end);
+            const classContent = content.substring(start!, end!);
 
             // Skip if too large
             if (classContent.length > maxChunkSize * 3) {

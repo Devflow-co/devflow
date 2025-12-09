@@ -2,8 +2,8 @@
  * PolicyGuard Tests - Phase 4
  */
 
-import { PolicyGuard } from '../policy.guard';
-import { DevFlowProfile } from '../../project-adapter/devflow-profile.types';
+import { PolicyGuard } from '@/security/policy.guard';
+import { DevFlowProfile } from '@/project-adapter/devflow-profile.types';
 
 describe('PolicyGuard', () => {
   const mockProfile: DevFlowProfile = {

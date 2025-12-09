@@ -1,3 +1,6 @@
+// DEPRECATED: These tests use old token auth. Will be updated to OAuth in Phase 5.
+// For now, these tests are disabled.
+
 /**
  * End-to-End Integration Test
  *
@@ -31,7 +34,7 @@ import {
   extractSpecGenerationContext,
   extractCodeGenerationContext,
   generateCodebaseSummary,
-} from '../index';
+} from '@/index';
 
 async function main() {
   const args = process.argv.slice(2);

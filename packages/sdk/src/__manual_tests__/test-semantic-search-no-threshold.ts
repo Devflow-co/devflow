@@ -2,7 +2,7 @@
  * Test Semantic Search WITHOUT score threshold
  */
 
-import { SemanticRetriever } from '../rag/retrieval/semantic-retriever';
+import { SemanticRetriever } from '@/rag/retrieval/semantic-retriever';
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 

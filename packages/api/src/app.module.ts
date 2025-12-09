@@ -5,12 +5,13 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { PrismaModule } from './prisma/prisma.module';
-import { ProjectsModule } from './projects/projects.module';
-import { TasksModule } from './tasks/tasks.module';
-import { WorkflowsModule } from './workflows/workflows.module';
-import { WebhooksModule } from './webhooks/webhooks.module';
-import { HealthModule } from './health/health.module';
+import { PrismaModule } from '@/prisma/prisma.module';
+import { ProjectsModule } from '@/projects/projects.module';
+import { TasksModule } from '@/tasks/tasks.module';
+import { WorkflowsModule } from '@/workflows/workflows.module';
+import { WebhooksModule } from '@/webhooks/webhooks.module';
+import { HealthModule } from '@/health/health.module';
+import { AuthModule } from '@/auth/auth.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { HealthModule } from './health/health.module';
 
     // Feature modules
     HealthModule,
+    AuthModule,
     ProjectsModule,
     TasksModule,
     WorkflowsModule,

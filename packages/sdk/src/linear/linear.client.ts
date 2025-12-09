@@ -4,8 +4,8 @@
 
 import { LinearClient as LinearSDK, Issue, WorkflowState } from '@linear/sdk';
 import { createLogger } from '@devflow/common';
-import { LinearConfig, LinearIssue, LinearQueryOptions, LinearTask } from './linear.types';
-import { LinearMapper } from './linear.mapper';
+import { LinearConfig, LinearIssue, LinearQueryOptions, LinearTask } from '@/linear/linear.types';
+import { LinearMapper } from '@/linear/linear.mapper';
 
 export class LinearClient {
   private client: LinearSDK;
@@ -279,13 +279,12 @@ export class LinearClient {
 }
 
 /**
- * Create a LinearClient instance from environment variables
+ * Create a LinearClient instance
+ * @param apiKey - OAuth token or API key (required)
  */
-export function createLinearClient(): LinearClient {
-  const apiKey = process.env.LINEAR_API_KEY;
-
+export function createLinearClient(apiKey: string): LinearClient {
   if (!apiKey) {
-    throw new Error('LINEAR_API_KEY environment variable is not set');
+    throw new Error('apiKey is required for LinearClient');
   }
 
   return new LinearClient({

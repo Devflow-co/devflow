@@ -3,11 +3,11 @@
  * Updates repository index with only changed files
  */
 
-import { GitHubProvider } from '../../vcs/github.provider';
-import { CodeChunker } from '../chunking/code-chunker';
-import { OpenAIEmbeddingsProvider } from '../embeddings/openai.embeddings';
-import { QdrantVectorStore } from '../vector-store/qdrant.provider';
-import { EmbeddingsCache } from '../cache/embeddings-cache';
+import { GitHubProvider } from '@/vcs/github.provider';
+import { CodeChunker } from '@/rag/chunking/code-chunker';
+import { OpenAIEmbeddingsProvider } from '@/rag/embeddings/openai.embeddings';
+import { QdrantVectorStore } from '@/rag/vector-store/qdrant.provider';
+import { EmbeddingsCache } from '@/rag/cache/embeddings-cache';
 import { createLogger } from '@devflow/common';
 import { PrismaClient } from '@prisma/client';
 

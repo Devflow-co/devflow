@@ -5,7 +5,7 @@
 
 import { createLogger } from '@devflow/common';
 import * as path from 'path';
-import { GuardrailsConfig } from '../project-adapter/devflow-profile.types';
+import { GuardrailsConfig } from '@/project-adapter/devflow-profile.types';
 
 const logger = createLogger('PolicyGuard');
 

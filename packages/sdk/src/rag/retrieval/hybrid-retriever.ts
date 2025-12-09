@@ -3,7 +3,7 @@
  * Combines semantic search with keyword search for better results
  */
 
-import { SemanticRetriever, RetrievalResult, RetrievalFilter } from './semantic-retriever';
+import { SemanticRetriever, RetrievalResult, RetrievalFilter } from '@/rag/retrieval/semantic-retriever';
 import { PrismaClient } from '@prisma/client';
 import { createLogger } from '@devflow/common';
 

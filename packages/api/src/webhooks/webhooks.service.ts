@@ -4,7 +4,7 @@
 
 import { Injectable } from '@nestjs/common';
 import { createLogger } from '@devflow/common';
-import { WorkflowsService } from '../workflows/workflows.service';
+import { WorkflowsService } from '@/workflows/workflows.service';
 
 @Injectable()
 export class WebhooksService {

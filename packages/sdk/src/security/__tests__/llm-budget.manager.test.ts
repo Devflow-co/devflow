@@ -2,7 +2,7 @@
  * LLMBudgetManager Tests - Phase 4
  */
 
-import { LLMBudgetManager } from '../llm-budget.manager';
+import { LLMBudgetManager } from '@/security/llm-budget.manager';
 
 describe('LLMBudgetManager', () => {
   let budgetManager: LLMBudgetManager;

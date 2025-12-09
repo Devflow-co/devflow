@@ -1,3 +1,6 @@
+// DEPRECATED: These tests use old token auth. Will be updated to OAuth in Phase 5.
+// For now, these tests are disabled.
+
 /**
  * Test script for codebase analysis
  *
@@ -8,15 +11,15 @@
  * GITHUB_TOKEN="ghp_xxx" npx ts-node src/__manual_tests__/test-codebase-analysis.ts facebook/react
  */
 
-import { GitHubProvider } from '../vcs/github.provider';
-import { parseGitHubUrl } from '../vcs/repository-utils';
+import { GitHubProvider } from '@/vcs/github.provider';
+import { parseGitHubUrl } from '@/vcs/repository-utils';
 import {
   analyzeRepository,
   generateCodebaseSummary,
   formatContextForAI,
   extractSpecGenerationContext,
   extractCodeGenerationContext,
-} from '../codebase';
+} from '@/codebase';
 
 async function main() {
   const token = process.env.GITHUB_TOKEN;

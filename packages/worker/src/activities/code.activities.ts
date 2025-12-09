@@ -4,7 +4,7 @@
 
 import { createLogger, generateBranchName } from '@devflow/common';
 import { createCodeAgentDriver, extractCodeGenerationContext, formatContextForAI } from '@devflow/sdk';
-import { analyzeRepositoryContext } from './codebase.activities';
+import { analyzeRepositoryContext } from '@/activities/codebase.activities';
 
 const logger = createLogger('CodeActivities');
 

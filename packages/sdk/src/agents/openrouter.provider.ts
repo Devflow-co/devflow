@@ -21,7 +21,7 @@ import {
   TestGenerationOutput,
   TestFailureAnalysisInput,
   TestFixOutput,
-} from './agent.interface';
+} from '@/agents/agent.interface';
 
 const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 

@@ -1,2 +1,2 @@
-export * from './start-workflow.dto';
+export * from '@/workflows/dto/start-workflow.dto';
 

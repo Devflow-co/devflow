@@ -5,7 +5,7 @@
 
 import OpenAI from 'openai';
 import { createLogger } from '@devflow/common';
-import type { RetrievalResult } from './semantic-retriever';
+import type { RetrievalResult } from '@/rag/retrieval/semantic-retriever';
 
 const logger = createLogger('LLMReranker');
 

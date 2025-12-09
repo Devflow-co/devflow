@@ -6,7 +6,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { createLogger } from '@devflow/common';
-import { auditLogger, AuditEventType } from './audit.logger';
+import { auditLogger, AuditEventType } from '@/security/audit.logger';
 
 const logger = createLogger('SecurityScanner');
 

@@ -1,16 +1,20 @@
+// TODO Phase 5: OAuth integration - Replace process.env tokens with OAuth
+
 /**
  * RAG Temporal Activities
  * Activities for repository indexing and context retrieval
  */
 
 import { createLogger } from '@devflow/common';
-import { RepositoryIndexer } from '@devflow/sdk/src/rag/indexing/repository-indexer';
-import { IncrementalIndexer } from '@devflow/sdk/src/rag/indexing/incremental-indexer';
-import { SemanticRetriever } from '@devflow/sdk/src/rag/retrieval/semantic-retriever';
-import { HybridRetriever } from '@devflow/sdk/src/rag/retrieval/hybrid-retriever';
-import { LLMReranker } from '@devflow/sdk/src/rag/retrieval/reranker';
+import {
+  RepositoryIndexer,
+  IncrementalIndexer,
+  SemanticRetriever,
+  HybridRetriever,
+  LLMReranker,
+} from '@devflow/sdk';
 import { PrismaClient } from '@prisma/client';
-import { getProjectRepositoryConfig } from './codebase.activities';
+import { getProjectRepositoryConfig } from '@/activities/codebase.activities';
 
 const logger = createLogger('RagActivities');
 const prisma = new PrismaClient();
@@ -77,7 +81,7 @@ export async function indexRepository(
   logger.info('Starting repository indexing', input);
 
   const indexer = new RepositoryIndexer({
-    githubToken: process.env.GITHUB_TOKEN!,
+    githubToken: (() => { throw new Error("GitHub OAuth required - update in Phase 5"); })(),
     embeddingsApiKey: process.env.OPENROUTER_API_KEY!,
     qdrantHost: process.env.QDRANT_HOST || 'localhost',
     qdrantPort: parseInt(process.env.QDRANT_PORT || '6333'),
@@ -288,7 +292,7 @@ export async function updateRepositoryIndex(
   });
 
   const indexer = new IncrementalIndexer({
-    githubToken: process.env.GITHUB_TOKEN!,
+    githubToken: (() => { throw new Error("GitHub OAuth required - update in Phase 5"); })(),
     embeddingsApiKey: process.env.OPENROUTER_API_KEY!,
     qdrantHost: process.env.QDRANT_HOST || 'localhost',
     qdrantPort: parseInt(process.env.QDRANT_PORT || '6333'),

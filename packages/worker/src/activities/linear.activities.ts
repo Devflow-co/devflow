@@ -1,11 +1,30 @@
 /**
- * Linear Integration Activities - Temporal activities for Linear integration
+ * Linear Integration Activities - OAuth Ready (Phase 5)
+ * Linear OAuth Device Flow will be added in Phase 6
  */
 
 import { createLogger } from '@devflow/common';
 import { createLinearClient, formatSpecAsMarkdown, formatWarningMessage } from '@devflow/sdk';
+import { oauthResolver } from '@/services/oauth-context';
 
 const logger = createLogger('LinearActivities');
+
+/**
+ * Resolve Linear API key for a project via OAuth
+ * TODO Phase 6: Implement Linear OAuth Device Flow
+ * For now, throws error until Linear OAuth is implemented
+ */
+async function resolveLinearApiKey(projectId: string): Promise<string> {
+  try {
+    const token = await oauthResolver.resolveLinearToken(projectId);
+    logger.info('Using OAuth token for Linear', { projectId });
+    return token;
+  } catch (error) {
+    throw new Error(
+      `No Linear OAuth connection configured for project ${projectId}. Linear OAuth Device Flow coming in Phase 6. Please configure via: POST /api/v1/auth/linear/device/initiate`,
+    );
+  }
+}
 
 // ============================================
 // Input/Output Types
@@ -40,14 +59,11 @@ export interface SyncLinearTaskOutput {
 export async function syncLinearTask(input: SyncLinearTaskInput): Promise<SyncLinearTaskOutput> {
   logger.info('Syncing task from Linear', input);
 
-  const apiKey = process.env.LINEAR_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('LINEAR_API_KEY not configured');
-  }
+  // Resolve Linear API key via OAuth
+  const apiKey = await resolveLinearApiKey(input.projectId);
 
   try {
-    const client = createLinearClient();
+    const client = createLinearClient(apiKey);
     const task = await client.getTask(input.taskId);
 
     logger.info('Task synced from Linear', { identifier: task.identifier });
@@ -78,6 +94,7 @@ export async function syncLinearTask(input: SyncLinearTaskInput): Promise<SyncLi
  * Update task status in Linear
  */
 export async function updateLinearTask(input: {
+  projectId: string;
   linearId: string;
   updates: {
     status?: string;
@@ -86,14 +103,11 @@ export async function updateLinearTask(input: {
 }): Promise<void> {
   logger.info('Updating task in Linear', { linearId: input.linearId });
 
-  const apiKey = process.env.LINEAR_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('LINEAR_API_KEY not configured');
-  }
+  // Resolve Linear API key via OAuth
+  const apiKey = await resolveLinearApiKey(input.projectId);
 
   try {
-    const client = createLinearClient();
+    const client = createLinearClient(apiKey);
 
     if (input.updates.status) {
       await client.updateStatus(input.linearId, input.updates.status);
@@ -113,18 +127,18 @@ export async function updateLinearTask(input: {
 /**
  * Query tasks from Linear by status
  */
-export async function queryLinearTasksByStatus(status: string): Promise<SyncLinearTaskOutput[]> {
-  logger.info('Querying Linear tasks by status', { status });
+export async function queryLinearTasksByStatus(input: {
+  projectId: string;
+  status: string;
+}): Promise<SyncLinearTaskOutput[]> {
+  logger.info('Querying Linear tasks by status', { status: input.status });
 
-  const apiKey = process.env.LINEAR_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('LINEAR_API_KEY not configured');
-  }
+  // Resolve Linear API key via OAuth
+  const apiKey = await resolveLinearApiKey(input.projectId);
 
   try {
-    const client = createLinearClient();
-    const tasks = await client.queryIssuesByStatus(status);
+    const client = createLinearClient(apiKey);
+    const tasks = await client.queryIssuesByStatus(input.status);
 
     logger.info('Tasks queried from Linear', { count: tasks.length });
 
@@ -150,6 +164,7 @@ export async function queryLinearTasksByStatus(status: string): Promise<SyncLine
  * Append spec content to Linear issue description
  */
 export async function appendSpecToLinearIssue(input: {
+  projectId: string;
   linearId: string;
   spec: any;
   codebaseContext?: {
@@ -175,14 +190,11 @@ export async function appendSpecToLinearIssue(input: {
 }): Promise<void> {
   logger.info('Appending spec to Linear issue', { linearId: input.linearId });
 
-  const apiKey = process.env.LINEAR_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('LINEAR_API_KEY not configured');
-  }
+  // Resolve Linear API key via OAuth
+  const apiKey = await resolveLinearApiKey(input.projectId);
 
   try {
-    const client = createLinearClient();
+    const client = createLinearClient(apiKey);
 
     // Format spec as markdown
     let markdown = formatSpecAsMarkdown(input.spec);
@@ -261,19 +273,17 @@ export async function appendSpecToLinearIssue(input: {
  * Add a warning comment to Linear issue after spec generation
  */
 export async function appendWarningToLinearIssue(input: {
+  projectId: string;
   linearId: string;
   message?: string;
 }): Promise<void> {
   logger.info('Adding warning comment to Linear issue', { linearId: input.linearId });
 
-  const apiKey = process.env.LINEAR_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('LINEAR_API_KEY not configured');
-  }
+  // Resolve Linear API key via OAuth
+  const apiKey = await resolveLinearApiKey(input.projectId);
 
   try {
-    const client = createLinearClient();
+    const client = createLinearClient(apiKey);
 
     // Use custom message or default
     const warningMessage =

@@ -4,8 +4,8 @@
 
 import { createLogger } from '@devflow/common';
 import { createCodeAgentDriver, extractSpecGenerationContext, formatContextForAI } from '@devflow/sdk';
-import { analyzeRepositoryContext } from './codebase.activities';
-import { generateSpecsWithMultiLLM } from './spec-multi-llm.activities';
+import { analyzeRepositoryContext } from '@/activities/codebase.activities';
+import { generateSpecsWithMultiLLM } from '@/activities/spec-multi-llm.activities';
 
 const logger = createLogger('SpecActivities');
 

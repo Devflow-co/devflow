@@ -3,8 +3,8 @@
  * Exports all codebase analyzers and utilities
  */
 
-export * from './codebase-analyzer.service';
-export * from './structure-analyzer';
-export * from './dependency-analyzer';
-export * from './code-similarity.service';
-export * from './documentation-scanner';
+export * from '@/codebase/codebase-analyzer.service';
+export * from '@/codebase/structure-analyzer';
+export * from '@/codebase/dependency-analyzer';
+export * from '@/codebase/code-similarity.service';
+export * from '@/codebase/documentation-scanner';

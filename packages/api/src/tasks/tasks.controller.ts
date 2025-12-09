@@ -4,8 +4,8 @@
 
 import { Controller, Get, Post, Param, Body, Query, Put } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
-import { TasksService } from './tasks.service';
-import { CreateTaskDto } from './dto';
+import { TasksService } from '@/tasks/tasks.service';
+import { CreateTaskDto } from '@/tasks/dto';
 
 @ApiTags('Tasks')
 @Controller('tasks')

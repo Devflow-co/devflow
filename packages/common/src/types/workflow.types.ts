@@ -2,6 +2,8 @@
  * Workflow Types - Enhanced for Phase 3
  */
 
+import type { WorkflowConfig } from './workflow-config.types';
+
 export enum WorkflowStage {
   LINEAR_SYNC = 'linear_sync',
   SPEC_GENERATION = 'spec_generation',
@@ -30,6 +32,7 @@ export interface WorkflowInput {
     skipCI?: boolean;
     autoMerge?: boolean;
   };
+  config?: WorkflowConfig; // Configuration passed from API layer
 }
 
 export interface WorkflowResult {

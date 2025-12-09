@@ -16,7 +16,7 @@ import {
   createLogger,
 } from '@devflow/common';
 
-import { VCSDriver } from './vcs.interface';
+import { VCSDriver } from '@/vcs/vcs.interface';
 
 export class GitHubProvider implements VCSDriver {
   private octokit: Octokit;

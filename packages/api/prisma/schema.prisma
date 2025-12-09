@@ -35,6 +35,8 @@ model Project {
   organizations    OrganizationProject[]
   codebaseIndices  CodebaseIndex[]
   ragRetrievals    RagRetrieval[]
+  oauthApplications OAuthApplication[]
+  oauthConnections OAuthConnection[]
 
   @@map("projects")
   @@index([name])
@@ -59,11 +61,11 @@ enum TaskStatus {
 }
 
 enum TaskPriority {
-  LOW
-  MEDIUM
-  HIGH
-  CRITICAL
-  
+  LOW      @map("low")
+  MEDIUM   @map("medium")
+  HIGH     @map("high")
+  CRITICAL @map("critical")
+
   @@map("task_priority")
 }
 
@@ -1049,5 +1051,92 @@ model PluginExecution {
   @@index([pluginId])
   @@index([workflowId])
   @@index([createdAt])
+}
+
+// ============================================
+// OAuth Applications & Connections
+// ============================================
+
+enum OAuthProvider {
+  GITHUB
+  LINEAR
+}
+
+// OAuth Application Credentials (per project, per provider)
+// Stores CLIENT_ID, CLIENT_SECRET, REDIRECT_URI for multi-tenant OAuth
+model OAuthApplication {
+  id             String   @id @default(cuid())
+  projectId      String   @map("project_id")
+  provider       OAuthProvider
+
+  // OAuth app credentials (encrypted)
+  clientId       String   @map("client_id")
+  clientSecret   String   @map("client_secret") @db.Text // Encrypted
+  encryptionIv   String   @map("encryption_iv")
+  redirectUri    String   @map("redirect_uri")
+
+  // OAuth flow type
+  flowType       String   @map("flow_type") // device, authorization_code
+
+  // Scopes
+  scopes         String[] @default([])
+
+  // App metadata
+  name           String?  // User-friendly name
+  description    String?
+
+  // Status
+  isActive       Boolean  @default(true) @map("is_active")
+
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, provider])
+  @@map("oauth_applications")
+  @@index([projectId])
+  @@index([provider])
+  @@index([isActive])
+}
+
+// OAuth Connections (User tokens per project)
+// Stores access/refresh tokens for OAuth connections
+model OAuthConnection {
+  id             String   @id @default(cuid())
+  projectId      String   @map("project_id")
+
+  provider       OAuthProvider
+
+  // Encrypted tokens
+  refreshToken   String   @map("refresh_token") @db.Text
+  encryptionIv   String   @map("encryption_iv")
+
+  // Token metadata
+  scopes         String[] @default([])
+  expiresAt      DateTime? @map("expires_at")
+
+  // Provider user info
+  providerUserId String?  @map("provider_user_id")
+  providerEmail  String?  @map("provider_email")
+
+  // Connection status
+  isActive       Boolean  @default(true) @map("is_active")
+  lastRefreshed  DateTime? @map("last_refreshed")
+  refreshFailed  Boolean  @default(false) @map("refresh_failed")
+  failureReason  String?  @map("failure_reason")
+
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, provider])
+  @@map("oauth_connections")
+  @@index([projectId])
+  @@index([provider])
+  @@index([isActive])
 }
 

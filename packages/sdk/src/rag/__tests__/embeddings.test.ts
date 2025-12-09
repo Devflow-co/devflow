@@ -2,7 +2,7 @@
  * Unit Tests for Embeddings Provider
  */
 
-import { OpenAIEmbeddingsProvider } from '../embeddings/openai.embeddings';
+import { OpenAIEmbeddingsProvider } from '@/rag/embeddings/openai.embeddings';
 
 describe('OpenAIEmbeddingsProvider', () => {
   let provider: OpenAIEmbeddingsProvider;

@@ -13,7 +13,7 @@ import {
   CommandResult,
   GuardrailsValidationResult,
   GuardrailsViolation,
-} from './devflow-profile.types';
+} from '@/project-adapter/devflow-profile.types';
 import { createLogger, ConfigurationError, DEVFLOW_CONFIG_FILE } from '@devflow/common';
 
 const execAsync = promisify(exec);

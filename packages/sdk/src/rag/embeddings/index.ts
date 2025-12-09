@@ -2,5 +2,5 @@
  * Embeddings Module Exports
  */
 
-export * from './embeddings.interface';
-export * from './openai.embeddings';
+export * from '@/rag/embeddings/embeddings.interface';
+export * from '@/rag/embeddings/openai.embeddings';

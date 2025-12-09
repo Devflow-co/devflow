@@ -5,7 +5,7 @@
  */
 
 import { createLogger } from '@devflow/common';
-import { metricsCollector } from './metrics-collector';
+import { metricsCollector } from '@/rag/metrics/metrics-collector';
 import type { RagMetrics } from '@devflow/common';
 
 const logger = createLogger('PrometheusExporter');

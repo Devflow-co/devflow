@@ -1,3 +1,5 @@
+// DEPRECATED: This test uses old token auth. Update to OAuth in Phase 5.
+
 /**
  * Integration Tests for RAG Pipeline
  *
@@ -11,11 +13,11 @@
  * To run: npm test -- integration.test.ts
  */
 
-import { RepositoryIndexer } from '../indexing/repository-indexer';
-import { SemanticRetriever } from '../retrieval/semantic-retriever';
-import { HybridRetriever } from '../retrieval/hybrid-retriever';
-import { LLMReranker } from '../retrieval/reranker';
-import { IncrementalIndexer } from '../indexing/incremental-indexer';
+import { RepositoryIndexer } from '@/rag/indexing/repository-indexer';
+import { SemanticRetriever } from '@/rag/retrieval/semantic-retriever';
+import { HybridRetriever } from '@/rag/retrieval/hybrid-retriever';
+import { LLMReranker } from '@/rag/retrieval/reranker';
+import { IncrementalIndexer } from '@/rag/indexing/incremental-indexer';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();

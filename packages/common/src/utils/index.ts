@@ -1,3 +1,3 @@
-export * from './string.utils';
-export * from './date.utils';
+export * from '@/utils/string.utils';
+export * from '@/utils/date.utils';
 

@@ -3,7 +3,7 @@
  */
 
 import { TaskStatus, TaskPriority } from '@devflow/common';
-import { LinearIssue, LinearTask } from './linear.types';
+import { LinearIssue, LinearTask } from '@/linear/linear.types';
 
 export class LinearMapper {
   /**

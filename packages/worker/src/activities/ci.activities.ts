@@ -1,3 +1,5 @@
+// TODO Phase 5: OAuth integration - Replace process.env tokens with OAuth
+
 /**
  * CI Activities
  */
@@ -25,9 +27,15 @@ export interface WaitForCIOutput {
 export async function waitForCI(input: WaitForCIInput): Promise<WaitForCIOutput> {
   logger.info('Waiting for CI', input);
 
+  // TODO: Replace with OAuth token from TokenRefreshService
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    throw new Error('GITHUB_TOKEN not configured. Set up GitHub OAuth via devflow oauth:register');
+  }
+
   const ci = createCIDriver({
     provider: 'github-actions',
-    token: process.env.GITHUB_TOKEN || '',
+    token,
   });
 
   const maxAttempts = 60; // 30 minutes (30s intervals)

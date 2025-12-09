@@ -6,7 +6,7 @@
 import Redis from 'ioredis';
 import { createLogger } from '@devflow/common';
 import crypto from 'crypto';
-import { metricsCollector } from '../metrics/metrics-collector';
+import { metricsCollector } from '@/rag/metrics/metrics-collector';
 
 const logger = createLogger('EmbeddingsCache');
 

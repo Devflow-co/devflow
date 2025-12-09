@@ -4,9 +4,10 @@
 
 import { proxyActivities, sleep, ActivityFailure, ApplicationFailure } from '@temporalio/workflow';
 import type { WorkflowInput, WorkflowResult, WorkflowStage } from '@devflow/common';
+import { DEFAULT_WORKFLOW_CONFIG } from '@devflow/common';
 
 // Import activity types
-import type * as activities from '../activities';
+import type * as activities from '@/activities';
 
 // Configure activity proxies with advanced retry policies
 const {
@@ -47,6 +48,20 @@ const {
  * Main DevFlow workflow with full Testing ↔ Fix loop (Phase 3)
  */
 export async function devflowWorkflow(input: WorkflowInput): Promise<WorkflowResult> {
+  // Extract config with fallback to defaults
+  const config = input.config || DEFAULT_WORKFLOW_CONFIG;
+  const LINEAR_STATUSES = {
+    SPEC_IN_PROGRESS: config.linear.statuses.specInProgress,
+    SPEC_READY: config.linear.statuses.specReady,
+    SPEC_FAILED: config.linear.statuses.specFailed,
+    SPECIFICATION: config.linear.statuses.specification,
+    IN_REVIEW: config.linear.statuses.inReview,
+    DONE: config.linear.statuses.done,
+    BLOCKED: config.linear.statuses.blocked,
+    TRIGGER_STATUS: config.linear.statuses.triggerStatus,
+    NEXT_STATUS: config.linear.statuses.nextStatus,
+  };
+
   let currentStage: WorkflowStage = 'linear_sync' as WorkflowStage;
   let prNumber: number | undefined;
   let branchName: string | undefined;
@@ -69,8 +84,9 @@ export async function devflowWorkflow(input: WorkflowInput): Promise<WorkflowRes
 
     // Update Linear status to "Spec In Progress"
     await updateLinearTask({
+      projectId: input.projectId,
       linearId: task.linearId,
-      updates: { status: 'Spec In Progress' },
+      updates: { status: LINEAR_STATUSES.SPEC_IN_PROGRESS },
     });
 
     // ============================================
@@ -137,14 +153,16 @@ export async function devflowWorkflow(input: WorkflowInput): Promise<WorkflowRes
 
     // Update Linear status to "Spec Ready"
     await updateLinearTask({
+      projectId: input.projectId,
       linearId: task.linearId,
       updates: {
-        status: 'Spec Ready',
+        status: LINEAR_STATUSES.SPEC_READY,
       },
     });
 
     // Append spec to Linear issue description as markdown with codebase context and multi-LLM results
     await appendSpecToLinearIssue({
+      projectId: input.projectId,
       linearId: task.linearId,
       spec: spec,
       codebaseContext: spec.contextUsed,
@@ -153,6 +171,7 @@ export async function devflowWorkflow(input: WorkflowInput): Promise<WorkflowRes
 
     // Append warning comment about auto-generated specs
     await appendWarningToLinearIssue({
+      projectId: input.projectId,
       linearId: task.linearId,
     });
 
@@ -254,8 +273,9 @@ export async function devflowWorkflow(input: WorkflowInput): Promise<WorkflowRes
 
     // Update Linear with PR link
     await updateLinearTask({
+      projectId: input.projectId,
       linearId: task.linearId,
-      updates: { status: 'In Review' },
+      updates: { status: LINEAR_STATUSES.IN_REVIEW },
     });
 
     // ============================================
@@ -389,8 +409,9 @@ export async function devflowWorkflow(input: WorkflowInput): Promise<WorkflowRes
 
     // Update Linear to "Done"
     await updateLinearTask({
+      projectId: input.projectId,
       linearId: task.linearId,
-      updates: { status: 'Done' },
+      updates: { status: LINEAR_STATUSES.DONE },
     });
 
     // ============================================
@@ -471,8 +492,9 @@ export async function devflowWorkflow(input: WorkflowInput): Promise<WorkflowRes
     if (input.taskId) {
       try {
         await updateLinearTask({
+          projectId: input.projectId,
           linearId: input.taskId,
-          updates: { status: 'Spec Failed' },
+          updates: { status: LINEAR_STATUSES.SPEC_FAILED },
         });
       } catch {
         // Ignore errors updating Linear on failure

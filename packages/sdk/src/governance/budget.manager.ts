@@ -4,7 +4,7 @@
  */
 
 import { createLogger } from '@devflow/common';
-import { auditLogger, AuditEventType } from './audit.logger';
+import { auditLogger, AuditEventType } from '@/governance/audit.logger';
 
 const logger = createLogger('BudgetManager');
 

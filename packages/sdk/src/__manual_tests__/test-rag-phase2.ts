@@ -3,9 +3,9 @@
  * Tests OpenAI embeddings, Qdrant vector store, and Redis caching
  */
 
-import { OpenAIEmbeddingsProvider } from '../rag/embeddings/openai.embeddings';
-import { QdrantVectorStore } from '../rag/vector-store/qdrant.provider';
-import { EmbeddingsCache } from '../rag/cache/embeddings-cache';
+import { OpenAIEmbeddingsProvider } from '@/rag/embeddings/openai.embeddings';
+import { QdrantVectorStore } from '@/rag/vector-store/qdrant.provider';
+import { EmbeddingsCache } from '@/rag/cache/embeddings-cache';
 import { randomUUID } from 'crypto';
 
 async function testPhase2() {

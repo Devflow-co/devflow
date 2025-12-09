@@ -5,7 +5,7 @@
 
 import OpenAI from 'openai';
 import { createLogger } from '@devflow/common';
-import type { EmbeddingsProvider, EmbeddingResult, BatchEmbeddingResult } from './embeddings.interface';
+import type { EmbeddingsProvider, EmbeddingResult, BatchEmbeddingResult } from '@/rag/embeddings/embeddings.interface';
 
 const logger = createLogger('OpenRouterEmbeddings');
 

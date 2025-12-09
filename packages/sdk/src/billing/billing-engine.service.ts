@@ -4,7 +4,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import { UsageMeteringService } from './usage-metering.service';
+import { UsageMeteringService } from '@/billing/usage-metering.service';
 
 // Local type definitions (normally from Prisma schema)
 export enum InvoiceStatus {

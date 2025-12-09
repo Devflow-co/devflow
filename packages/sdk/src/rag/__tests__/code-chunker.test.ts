@@ -2,7 +2,7 @@
  * Unit Tests for Code Chunker
  */
 
-import { CodeChunker } from '../chunking/code-chunker';
+import { CodeChunker } from '@/rag/chunking/code-chunker';
 
 describe('CodeChunker', () => {
   let chunker: CodeChunker;

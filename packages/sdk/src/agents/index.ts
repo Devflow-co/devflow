@@ -2,14 +2,14 @@
  * Code Agents - Multi-provider support
  */
 
-export * from './agent.interface';
-export * from './anthropic.provider';
-export * from './openrouter.provider';
+export * from '@/agents/agent.interface';
+export * from '@/agents/anthropic.provider';
+export * from '@/agents/openrouter.provider';
 
 // Agent Factory
-import { CodeAgentDriver, AgentConfig } from './agent.interface';
-import { AnthropicProvider } from './anthropic.provider';
-import { OpenRouterProvider } from './openrouter.provider';
+import { CodeAgentDriver, AgentConfig } from '@/agents/agent.interface';
+import { AnthropicProvider } from '@/agents/anthropic.provider';
+import { OpenRouterProvider } from '@/agents/openrouter.provider';
 
 export function createCodeAgentDriver(config: AgentConfig): CodeAgentDriver {
   switch (config.provider) {

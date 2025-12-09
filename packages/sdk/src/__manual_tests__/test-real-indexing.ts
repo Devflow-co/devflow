@@ -1,3 +1,6 @@
+// DEPRECATED: These tests use old token auth. Will be updated to OAuth in Phase 5.
+// For now, these tests are disabled.
+
 /**
  * Test Real Repository Indexing
  *
@@ -7,9 +10,9 @@
  *   GITHUB_TOKEN=xxx OPENROUTER_API_KEY=xxx npx ts-node src/__manual_tests__/test-real-indexing.ts
  */
 
-import { RepositoryIndexer } from '../rag/indexing/repository-indexer';
-import { SemanticRetriever } from '../rag/retrieval/semantic-retriever';
-import { PrometheusExporter } from '../rag/metrics/prometheus-exporter';
+import { RepositoryIndexer } from '@/rag/indexing/repository-indexer';
+import { SemanticRetriever } from '@/rag/retrieval/semantic-retriever';
+import { PrometheusExporter } from '@/rag/metrics/prometheus-exporter';
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 

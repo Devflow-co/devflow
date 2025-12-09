@@ -1,4 +1,4 @@
-export * from './vcs.interface';
-export * from './github.provider';
-export * from './repository-utils';
+export * from '@/vcs/vcs.interface';
+export * from '@/vcs/github.provider';
+export * from '@/vcs/repository-utils';
 

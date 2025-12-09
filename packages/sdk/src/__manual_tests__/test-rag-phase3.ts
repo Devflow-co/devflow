@@ -1,11 +1,14 @@
+// DEPRECATED: These tests use old token auth. Will be updated to OAuth in Phase 5.
+// For now, these tests are disabled.
+
 /**
  * Manual Test for RAG Phase 3: Code Chunking & Indexing
  * Tests AST-based chunking, repository indexing, and full pipeline
  */
 
-import { CodeChunker } from '../rag/chunking/code-chunker';
-import { RepositoryIndexer } from '../rag/indexing/repository-indexer';
-import { QdrantVectorStore } from '../rag/vector-store/qdrant.provider';
+import { CodeChunker } from '@/rag/chunking/code-chunker';
+import { RepositoryIndexer } from '@/rag/indexing/repository-indexer';
+import { QdrantVectorStore } from '@/rag/vector-store/qdrant.provider';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -43,7 +46,7 @@ async function testPhase3() {
 
   // Test TypeScript chunking
   const tsCode = `
-import { User } from './types';
+import { User } from '@/__manual_tests__/types';
 
 /**
  * Get user by ID

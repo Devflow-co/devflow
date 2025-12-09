@@ -2,4 +2,4 @@
  * Vector Store Module Exports
  */
 
-export * from './qdrant.provider';
+export * from '@/rag/vector-store/qdrant.provider';

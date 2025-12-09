@@ -40,5 +40,8 @@ export * from './codebase';
 // RAG (Retrieval-Augmented Generation)
 export * from './rag';
 
+// Auth
+export * from './auth';
+
 // Factory functions
 export * from './factories';

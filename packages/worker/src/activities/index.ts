@@ -3,29 +3,29 @@
  */
 
 // Linear activities
-export * from './linear.activities';
+export * from '@/activities/linear.activities';
 
 // VCS activities
-export * from './vcs.activities';
+export * from '@/activities/vcs.activities';
 
 // CI activities
-export * from './ci.activities';
+export * from '@/activities/ci.activities';
 
 // Notification activities
-export * from './notification.activities';
+export * from '@/activities/notification.activities';
 
 // Codebase analysis activities
-export * from './codebase.activities';
+export * from '@/activities/codebase.activities';
 
 // Code generation activities (from Phase 2)
-export * from './code.activities';
-export * from './spec.activities';
+export * from '@/activities/code.activities';
+export * from '@/activities/spec.activities';
 
 // Phase 3: QA activities
-export * from './qa.activities';
+export * from '@/activities/qa.activities';
 
 // Phase 4: Security activities
-export * from './security.activities';
+export * from '@/activities/security.activities';
 
 // RAG activities
 export {
@@ -40,4 +40,4 @@ export {
   type CheckIndexStatusOutput,
   type UpdateRepositoryIndexInput,
   type UpdateRepositoryIndexOutput,
-} from './rag.activities';
+} from '@/activities/rag.activities';

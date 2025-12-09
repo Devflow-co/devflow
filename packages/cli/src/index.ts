@@ -9,6 +9,7 @@ import { initCommand } from './commands/init';
 import { projectCommands } from './commands/project';
 import { workflowCommands } from './commands/workflow';
 import { configCommands } from './commands/config';
+import { oauthCommands } from './commands/oauth';
 
 const program = new Command();
 
@@ -21,7 +22,18 @@ program
 program
   .command('init')
   .description('Initialize DevFlow in current directory')
-  .action(initCommand);
+  .option('-m, --monorepo', 'Initialize for monorepo project')
+  .option('-s, --stack <stack>', 'Technology stack (node, php, python, go, rust)')
+  .option('--dry-run', 'Show what would be created without creating')
+  .option('-f, --force', 'Overwrite existing .devflow.yml')
+  .action((options) =>
+    initCommand({
+      monorepo: options.monorepo,
+      stack: options.stack,
+      dryRun: options.dryRun,
+      force: options.force,
+    }),
+  );
 
 // Project commands
 program
@@ -67,6 +79,32 @@ program
   .command('config:show')
   .description('Show current configuration')
   .action(configCommands.show);
+
+// OAuth commands
+program
+  .command('oauth:register')
+  .description('Register OAuth application for a project')
+  .action(oauthCommands.register);
+
+program
+  .command('oauth:list [projectId]')
+  .description('List OAuth applications for a project')
+  .action(oauthCommands.list);
+
+program
+  .command('oauth:connect [projectId] [provider]')
+  .description('Connect OAuth application (initiate OAuth flow)')
+  .action(oauthCommands.connect);
+
+program
+  .command('oauth:status [projectId]')
+  .description('Check OAuth connection status')
+  .action(oauthCommands.status);
+
+program
+  .command('oauth:delete [projectId] [provider]')
+  .description('Delete OAuth application and revoke connections')
+  .action(oauthCommands.delete);
 
 program.parse();
 

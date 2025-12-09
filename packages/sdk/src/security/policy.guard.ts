@@ -6,7 +6,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { createLogger, ConfigurationError } from '@devflow/common';
-import { DevFlowProfile } from '../project-adapter/devflow-profile.types';
+import { DevFlowProfile } from '@/project-adapter/devflow-profile.types';
 
 const logger = createLogger('PolicyGuard');
 

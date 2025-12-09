@@ -2,11 +2,11 @@
  * Factory functions to create providers - MVP with GitHub only
  */
 
-import { VCSDriver } from '../vcs/vcs.interface';
-import { GitHubProvider } from '../vcs/github.provider';
+import { VCSDriver } from '@/vcs/vcs.interface';
+import { GitHubProvider } from '@/vcs/github.provider';
 
-import { CIDriver } from '../ci/ci.interface';
-import { GitHubActionsProvider } from '../ci/github-actions.provider';
+import { CIDriver } from '@/ci/ci.interface';
+import { GitHubActionsProvider } from '@/ci/github-actions.provider';
 
 import { ConfigurationError } from '@devflow/common';
 

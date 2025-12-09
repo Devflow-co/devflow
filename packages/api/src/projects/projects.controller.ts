@@ -4,8 +4,8 @@
 
 import { Controller, Get, Post, Put, Delete, Body, Param, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { ProjectsService } from './projects.service';
-import { CreateProjectDto, UpdateProjectDto, LinkRepositoryDto } from './dto';
+import { ProjectsService } from '@/projects/projects.service';
+import { CreateProjectDto, UpdateProjectDto, LinkRepositoryDto } from '@/projects/dto';
 
 @ApiTags('Projects')
 @Controller('projects')

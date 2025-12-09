@@ -4,11 +4,11 @@
 
 import { Injectable, NotFoundException, forwardRef, Inject } from '@nestjs/common';
 import { createLogger } from '@devflow/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { LinearClient } from '@devflow/sdk';
 import { ConfigService } from '@nestjs/config';
-import { CreateTaskDto, UpdateTaskDto } from './dto';
-import { WorkflowsService } from '../workflows/workflows.service';
+import { CreateTaskDto, UpdateTaskDto } from '@/tasks/dto';
+import { WorkflowsService } from '@/workflows/workflows.service';
 
 @Injectable()
 export class TasksService {
@@ -21,17 +21,10 @@ export class TasksService {
     @Inject(forwardRef(() => WorkflowsService))
     private workflowsService: WorkflowsService,
   ) {
-    // Initialize Linear client if configured
-    const linearApiKey = this.config.get('LINEAR_API_KEY');
-
-    if (linearApiKey) {
-      this.linearClient = new LinearClient({
-        apiKey: linearApiKey,
-      });
-      this.logger.info('Linear client initialized');
-    } else {
-      this.logger.warn('Linear not configured - sync features will be disabled');
-    }
+    // Linear client will be initialized per-project using OAuth
+    // TODO: Implement per-project Linear OAuth in Phase 5
+    this.linearClient = null;
+    this.logger.info('TasksService initialized - Linear OAuth per-project coming in Phase 5');
   }
 
   async findAll() {
@@ -75,13 +68,21 @@ export class TasksService {
   async create(dto: CreateTaskDto) {
     this.logger.info('Creating task', { title: dto.title });
 
+    // Map priority to Prisma enum
+    const priorityMap: Record<string, any> = {
+      low: 'LOW',
+      medium: 'MEDIUM',
+      high: 'HIGH',
+      critical: 'CRITICAL',
+    };
+
     return this.prisma.task.create({
       data: {
         projectId: dto.projectId,
         linearId: dto.linearId,
         title: dto.title,
         description: dto.description,
-        priority: dto.priority as any,
+        priority: priorityMap[dto.priority] || dto.priority,
         // assignee: dto.assignee,
       },
       include: {
