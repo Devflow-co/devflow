@@ -32,7 +32,7 @@ DevFlow est un orchestrateur DevOps universel qui transforme automatiquement les
 - Cache : Redis 7
 - Node.js >= 20, pnpm workspace
 
-**⚠️ Architecture Rule:** NestJS decorators (@Injectable, @Module, @Controller) are used **only in @devflow/api**. SDK, worker, CLI and common packages are **plain TypeScript** to ensure reusability and clean builds. See [ARCHITECTURE.md](./ARCHITECTURE.md) for complete guidelines.
+**⚠️ Architecture Rule:** NestJS decorators (@Injectable, @Module, @Controller) are used **only in @devflow/api**. SDK, worker, CLI and common packages are **plain TypeScript** to ensure reusability and clean builds. See [ARCHITECTURE.md](ARCHITECTURE.md) for complete guidelines.
 
 ```
 devflow/
@@ -149,8 +149,8 @@ REDIS_PORT=6379
 DevFlow utilise OAuth 2.0 pour se connecter à GitHub et Linear. Chaque projet peut avoir ses propres credentials OAuth.
 
 **Documentation détaillée:**
-- `docs/LINEAR_OAUTH_SETUP.md` - Guide setup Linear OAuth
-- `docs/OAUTH_MULTITENANT.md` - Architecture multi-tenant OAuth
+- `.docs/LINEAR_OAUTH_SETUP.md` - Guide setup Linear OAuth
+- `.docs/OAUTH_MULTITENANT.md` - Architecture multi-tenant OAuth
 
 #### Étape 1: Enregistrer l'application OAuth
 
@@ -244,10 +244,10 @@ Body: {"projectId": "your-project-id"}
 - Logs : `docker-compose logs -f api worker`
 
 ## Fichiers clés à consulter
-- `ARCHITECTURE.md` (architecture & NestJS boundaries - **LIRE EN PREMIER**)
-- `DOCUMENTATION.md` (documentation complète)
-- `docs/LINEAR_OAUTH_SETUP.md` (guide setup Linear OAuth)
-- `docs/OAUTH_MULTITENANT.md` (architecture multi-tenant OAuth)
+- `.docs/ARCHITECTURE.md` (architecture & NestJS boundaries - **LIRE EN PREMIER**)
+- `.docs/DOCUMENTATION.md` (documentation complète)
+- `.docs/LINEAR_OAUTH_SETUP.md` (guide setup Linear OAuth)
+- `.docs/OAUTH_MULTITENANT.md` (architecture multi-tenant OAuth)
 - `packages/worker/src/workflows/devflow.workflow.ts` (workflow principal)
 - `packages/sdk/src/linear/linear.client.ts` (Linear client)
 - `packages/sdk/src/agents/agent.interface.ts` (interface AI agents)
