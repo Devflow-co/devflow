@@ -104,10 +104,8 @@ devflow/
 
 ## Documentation
 
-All documentation is centralized in the `.docs/` folder:
-
 ### Core Documentation
-- **[CLAUDE.md](.docs/CLAUDE.md)** - Quick reference for AI agents (Claude/Cursor)
+- **[CLAUDE.md](CLAUDE.md)** - Quick reference for AI agents (Claude/Cursor) - **Root level for auto-detection**
 - **[ARCHITECTURE.md](.docs/ARCHITECTURE.md)** - Complete architecture guide
 - **[DOCUMENTATION.md](.docs/DOCUMENTATION.md)** - Full technical documentation
 - **[CHANGELOG.md](.docs/CHANGELOG.md)** - Version history
