@@ -19,6 +19,9 @@ build/
 *.swo
 *~
 
+# Claude Code settings (contains API keys)
+.claude/settings.local.json
+
 # OS
 .DS_Store
 Thumbs.db
