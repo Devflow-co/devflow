@@ -138,7 +138,7 @@ Expected response:
 #### Option A: Using the Test Script
 
 ```bash
-./test-oauth-flow.sh <PROJECT_ID> github
+./tests/integration/test-oauth-flow.sh <PROJECT_ID> github
 ```
 
 #### Option B: Manual Testing with cURL
@@ -197,7 +197,7 @@ Keep polling (every 5 seconds) until you get a success response:
 #### Option A: Using the Test Script
 
 ```bash
-./test-oauth-flow.sh <PROJECT_ID> linear
+./tests/integration/test-oauth-flow.sh <PROJECT_ID> linear
 ```
 
 #### Option B: Manual Testing with cURL
