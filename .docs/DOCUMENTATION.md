@@ -1,6 +1,6 @@
 # 📚 DevFlow - Documentation Complète
 
-**Version:** 1.13.0
+**Version:** 1.14.0
 **Dernière mise à jour:** 13 décembre 2025
 **Statut:** Production Ready
 
@@ -216,6 +216,41 @@ Auto-merge (si configuré)
 | **Append Spec** | ✅ | Ajoute spec à l'issue Linear |
 | **Warning Message** | ✅ | Commentaire après génération spec |
 | **Comments** | ✅ | Commentaires sur issues |
+| **Comment Sync** | ✅ | Synchronisation automatique des commentaires (v1.14.0) |
+
+#### Comment Synchronization (v1.14.0)
+
+DevFlow synchronise automatiquement les commentaires Linear vers la base de données locale.
+
+**Fonctionnalités :**
+- Sync automatique via webhooks (create/update)
+- Récupération des informations auteur (id, name, email)
+- Timestamps Linear préservés
+- API pour créer des commentaires depuis DevFlow
+
+**SDK Methods :**
+```typescript
+// Get all comments for an issue
+const comments = await linearClient.getComments(issueId);
+
+// Get a single comment
+const comment = await linearClient.getComment(commentId);
+```
+
+**API Service Methods :**
+```typescript
+// Sync a single comment
+await linearSyncService.syncCommentToDatabase(projectId, commentId, issueId);
+
+// Sync all comments for an issue
+await linearSyncService.syncAllCommentsForIssue(projectId, issueId);
+
+// Create comment in Linear
+await linearSyncService.createCommentInLinear(projectId, taskId, body);
+
+// Get comments from database
+const comments = await linearSyncService.getTaskComments(taskId);
+```
 
 ### Services Core
 
@@ -1234,9 +1269,9 @@ devflow/
 
 ---
 
-**DevFlow v1.13.0** - De Linear à Production, Automatiquement. ✨
+**DevFlow v1.14.0** - De Linear à Production, Automatiquement. ✨
 
 **Dernière mise à jour :** 13 décembre 2025
 **Status :** ✅ Production Ready
-**Prochaine version :** v1.14.0 (Q1 2025)
+**Prochaine version :** v1.15.0 (Q1 2025)
 

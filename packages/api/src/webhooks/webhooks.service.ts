@@ -170,8 +170,47 @@ export class WebhooksService {
   }
 
   /**
+   * Auto-sync a comment from Linear to database
+   * Non-blocking: errors are logged but don't fail the webhook
+   */
+  private async autoSyncComment(
+    commentId: string,
+    issueId: string,
+    context: string,
+  ): Promise<void> {
+    if (!this.autoSyncEnabled || !this.linearSyncService) {
+      return;
+    }
+
+    const projectId = process.env.DEFAULT_PROJECT_ID;
+    if (!projectId) {
+      this.logger.debug('Auto-sync comment skipped: no DEFAULT_PROJECT_ID');
+      return;
+    }
+
+    try {
+      this.logger.info('Auto-syncing comment', { commentId, issueId, context });
+      const result = await this.linearSyncService.syncCommentToDatabase(
+        projectId,
+        commentId,
+        issueId,
+      );
+
+      this.logger.info('Comment auto-sync completed', {
+        commentId,
+        action: result.action,
+        localCommentId: result.commentId,
+        context,
+      });
+    } catch (error) {
+      // Non-blocking: log error but don't fail the webhook
+      this.logger.error('Comment auto-sync failed', error as Error, { commentId, context });
+    }
+  }
+
+  /**
    * Handle Linear Comment webhook
-   * Auto-syncs the parent issue and supports @devflow commands
+   * Auto-syncs the parent issue AND the comment itself
    */
   private async handleLinearComment(payload: any) {
     const action = payload?.action;
@@ -179,10 +218,11 @@ export class WebhooksService {
 
     // Extract issue ID from comment
     const issueId = comment?.issueId || comment?.issue?.id;
+    const commentId = comment?.id;
 
     this.logger.info('Linear comment webhook received', {
       action,
-      commentId: comment?.id,
+      commentId,
       issueId,
     });
 
@@ -191,13 +231,19 @@ export class WebhooksService {
       await this.autoSyncIssue(issueId, `comment:${action}`);
     }
 
+    // Auto-sync the comment itself (create or update)
+    if (commentId && issueId && (action === 'create' || action === 'update')) {
+      await this.autoSyncComment(commentId, issueId, `comment:${action}`);
+    }
+
     // Only process create actions for commands
     if (action !== 'create') {
       return {
         received: true,
         action,
         type: 'Comment',
-        autoSynced: this.autoSyncEnabled && !!issueId,
+        issueSynced: this.autoSyncEnabled && !!issueId,
+        commentSynced: this.autoSyncEnabled && !!commentId && !!issueId,
       };
     }
 
@@ -211,7 +257,8 @@ export class WebhooksService {
         received: true,
         action,
         type: 'Comment',
-        autoSynced: this.autoSyncEnabled && !!issueId,
+        issueSynced: this.autoSyncEnabled && !!issueId,
+        commentSynced: this.autoSyncEnabled && !!commentId,
         processed: false,
       };
     }
@@ -223,7 +270,8 @@ export class WebhooksService {
         received: true,
         action,
         type: 'Comment',
-        autoSynced: this.autoSyncEnabled && !!issueId,
+        issueSynced: this.autoSyncEnabled && !!issueId,
+        commentSynced: this.autoSyncEnabled && !!commentId,
         processed: false,
         reason: 'LinearSyncApiService not configured',
       };
@@ -234,6 +282,7 @@ export class WebhooksService {
         received: true,
         action,
         type: 'Comment',
+        commentSynced: this.autoSyncEnabled && !!commentId,
         processed: false,
         reason: 'No issue ID in comment',
       };
@@ -245,7 +294,8 @@ export class WebhooksService {
         received: true,
         action,
         type: 'Comment',
-        autoSynced: false,
+        issueSynced: false,
+        commentSynced: false,
         processed: false,
         reason: 'No project ID configured',
       };
@@ -274,7 +324,8 @@ export class WebhooksService {
         received: true,
         action,
         type: 'Comment',
-        autoSynced: this.autoSyncEnabled,
+        issueSynced: this.autoSyncEnabled,
+        commentSynced: this.autoSyncEnabled,
         processed: result.action.type !== 'none',
         commandAction: result.action,
         result: result.result,
@@ -282,7 +333,7 @@ export class WebhooksService {
       };
     } catch (error) {
       this.logger.error('Failed to process comment command', error as Error, {
-        commentId: comment?.id,
+        commentId,
         issueId,
       });
 
@@ -290,7 +341,8 @@ export class WebhooksService {
         received: true,
         action,
         type: 'Comment',
-        autoSynced: this.autoSyncEnabled,
+        issueSynced: this.autoSyncEnabled,
+        commentSynced: this.autoSyncEnabled,
         processed: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       };

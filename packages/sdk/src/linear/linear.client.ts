@@ -291,6 +291,70 @@ export class LinearClient {
     await this.addComment(issueId, warningMessage);
   }
 
+  /**
+   * Get all comments for an issue
+   */
+  async getComments(issueId: string): Promise<LinearComment[]> {
+    this.logger.info('Getting comments for issue', { issueId });
+
+    try {
+      const issue = await this.client.issue(issueId);
+      const comments = await issue.comments();
+
+      const result: LinearComment[] = [];
+
+      for (const comment of comments.nodes) {
+        const user = await comment.user;
+
+        result.push({
+          id: comment.id,
+          body: comment.body,
+          authorId: user?.id,
+          authorName: user?.name,
+          authorEmail: user?.email || undefined,
+          createdAt: comment.createdAt.toISOString(),
+          updatedAt: comment.updatedAt.toISOString(),
+        });
+      }
+
+      this.logger.info('Comments retrieved', { issueId, count: result.length });
+      return result;
+    } catch (error) {
+      this.logger.error('Failed to get comments', error as Error, { issueId });
+      throw error;
+    }
+  }
+
+  /**
+   * Get a single comment by ID
+   */
+  async getComment(commentId: string): Promise<LinearComment | null> {
+    this.logger.info('Getting comment', { commentId });
+
+    try {
+      const comment = await this.client.comment({ id: commentId });
+
+      if (!comment) {
+        return null;
+      }
+
+      const user = await comment.user;
+
+      return {
+        id: comment.id,
+        body: comment.body,
+        authorId: user?.id,
+        authorName: user?.name,
+        authorEmail: user?.email || undefined,
+        createdAt: comment.createdAt.toISOString(),
+        updatedAt: comment.updatedAt.toISOString(),
+      };
+    } catch (error) {
+      this.logger.error('Failed to get comment', error as Error, { commentId });
+      return null;
+    }
+  }
+
   // ============================================
   // Utility Operations
   // ============================================
@@ -601,6 +665,16 @@ export interface LinearCustomField {
   name: string;
   type: string;
   teamId?: string;
+}
+
+export interface LinearComment {
+  id: string;
+  body: string;
+  authorId?: string;
+  authorName?: string;
+  authorEmail?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /**

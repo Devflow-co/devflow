@@ -107,8 +107,9 @@ devflow/
 ### @devflow/sdk
 - **VCS** : GitHubProvider (13/13).
 - **CI/CD** : GitHubActionsProvider (10/10).
-- **Linear** : `LinearClient` - getTask, queryIssues, queryIssuesByStatus, updateStatus, updateDescription, appendToDescription, addComment, getCustomFields, createCustomField, getIssueCustomFields, updateIssueCustomField.
+- **Linear** : `LinearClient` - getTask, queryIssues, queryIssuesByStatus, updateStatus, updateDescription, appendToDescription, addComment, getCustomFields, createCustomField, getIssueCustomFields, updateIssueCustomField, **getComments**, **getComment**.
 - **LinearSetupService** : `ensureCustomFields(teamId)`, `validateSetup(teamId)`, `getDevFlowFieldValues(issueId)` - Setup automatique des custom fields DevFlow.
+- **LinearSyncApiService** : syncCommentToDatabase, syncAllCommentsForIssue, createCommentInLinear, getTaskComments - Synchronisation des commentaires Linear.
 - **AI** : AnthropicProvider, OpenAIProvider, OpenRouterProvider, Cursor (non implémenté).
 - **Codebase analysis** : `structure-analyzer.ts`, `dependency-analyzer.ts`, `code-similarity.service.ts`, `documentation-scanner.ts`.
 - **Gouvernance/Sécurité** : `policy.guard.ts`, `auto-merge.engine.ts`, `audit.logger.ts`, `security.scanner.ts`.

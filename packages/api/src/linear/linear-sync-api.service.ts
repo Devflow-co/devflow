@@ -13,7 +13,9 @@ import {
   createLinearClient,
   createLinearSyncService,
   LinearSyncService,
+  LinearClient,
   TaskSyncData,
+  LinearComment,
 } from '@devflow/sdk';
 import { TokenRefreshService } from '@/auth/services/token-refresh.service';
 
@@ -50,15 +52,22 @@ export class LinearSyncApiService {
   ) {}
 
   /**
-   * Get LinearSyncService for a project using OAuth token
+   * Get LinearClient for a project using OAuth token
    */
-  private async getSyncService(projectId: string): Promise<LinearSyncService> {
+  private async getLinearClient(projectId: string): Promise<LinearClient> {
     const token = await this.tokenRefreshService.getAccessToken(
       projectId,
       OAuthProvider.LINEAR,
     );
 
-    const client = createLinearClient(token);
+    return createLinearClient(token);
+  }
+
+  /**
+   * Get LinearSyncService for a project using OAuth token
+   */
+  private async getSyncService(projectId: string): Promise<LinearSyncService> {
+    const client = await this.getLinearClient(projectId);
     return createLinearSyncService(client);
   }
 
@@ -334,6 +343,210 @@ export class LinearSyncApiService {
 
     return { action };
   }
+
+  // ============================================
+  // Comment Synchronization
+  // ============================================
+
+  /**
+   * Sync a single comment from Linear to database
+   */
+  async syncCommentToDatabase(
+    projectId: string,
+    linearCommentId: string,
+    linearIssueId: string,
+  ): Promise<{
+    commentId: string;
+    action: 'created' | 'updated' | 'skipped';
+  }> {
+    logger.info('Syncing comment to database', { linearCommentId, linearIssueId });
+
+    // Find the task by linearId
+    const task = await this.prisma.task.findUnique({
+      where: { linearId: linearIssueId },
+    });
+
+    if (!task) {
+      logger.warn('Task not found for comment sync, skipping', { linearIssueId });
+      return { commentId: '', action: 'skipped' };
+    }
+
+    // Get comment from Linear
+    const client = await this.getLinearClient(projectId);
+    const linearComment = await client.getComment(linearCommentId);
+
+    if (!linearComment) {
+      logger.warn('Comment not found in Linear', { linearCommentId });
+      return { commentId: '', action: 'skipped' };
+    }
+
+    // Check if comment exists
+    const existingComment = await this.prisma.taskComment.findUnique({
+      where: { linearId: linearCommentId },
+    });
+
+    if (existingComment) {
+      // Update existing comment
+      await this.prisma.taskComment.update({
+        where: { linearId: linearCommentId },
+        data: {
+          body: linearComment.body,
+          linearUpdatedAt: new Date(linearComment.updatedAt),
+        },
+      });
+
+      logger.info('Comment updated', { commentId: existingComment.id });
+      return { commentId: existingComment.id, action: 'updated' };
+    }
+
+    // Create new comment
+    const newComment = await this.prisma.taskComment.create({
+      data: {
+        taskId: task.id,
+        linearId: linearCommentId,
+        body: linearComment.body,
+        authorId: linearComment.authorId,
+        authorName: linearComment.authorName,
+        authorEmail: linearComment.authorEmail,
+        linearCreatedAt: new Date(linearComment.createdAt),
+        linearUpdatedAt: new Date(linearComment.updatedAt),
+      },
+    });
+
+    logger.info('Comment created', { commentId: newComment.id });
+    return { commentId: newComment.id, action: 'created' };
+  }
+
+  /**
+   * Sync all comments for an issue from Linear to database
+   */
+  async syncAllCommentsForIssue(
+    projectId: string,
+    linearIssueId: string,
+  ): Promise<{
+    synced: number;
+    created: number;
+    updated: number;
+    errors: number;
+  }> {
+    logger.info('Syncing all comments for issue', { linearIssueId });
+
+    // Find the task by linearId
+    const task = await this.prisma.task.findUnique({
+      where: { linearId: linearIssueId },
+    });
+
+    if (!task) {
+      logger.warn('Task not found for comments sync', { linearIssueId });
+      return { synced: 0, created: 0, updated: 0, errors: 0 };
+    }
+
+    // Get all comments from Linear
+    const client = await this.getLinearClient(projectId);
+    const linearComments = await client.getComments(linearIssueId);
+
+    let synced = 0;
+    let created = 0;
+    let updated = 0;
+    let errors = 0;
+
+    for (const linearComment of linearComments) {
+      try {
+        const existingComment = await this.prisma.taskComment.findUnique({
+          where: { linearId: linearComment.id },
+        });
+
+        if (existingComment) {
+          // Update existing comment
+          await this.prisma.taskComment.update({
+            where: { linearId: linearComment.id },
+            data: {
+              body: linearComment.body,
+              linearUpdatedAt: new Date(linearComment.updatedAt),
+            },
+          });
+          updated++;
+        } else {
+          // Create new comment
+          await this.prisma.taskComment.create({
+            data: {
+              taskId: task.id,
+              linearId: linearComment.id,
+              body: linearComment.body,
+              authorId: linearComment.authorId,
+              authorName: linearComment.authorName,
+              authorEmail: linearComment.authorEmail,
+              linearCreatedAt: new Date(linearComment.createdAt),
+              linearUpdatedAt: new Date(linearComment.updatedAt),
+            },
+          });
+          created++;
+        }
+        synced++;
+      } catch (error) {
+        logger.error('Failed to sync comment', error as Error, {
+          linearCommentId: linearComment.id,
+        });
+        errors++;
+      }
+    }
+
+    logger.info('Comments sync completed', { synced, created, updated, errors });
+    return { synced, created, updated, errors };
+  }
+
+  /**
+   * Create a comment in Linear from DevFlow
+   */
+  async createCommentInLinear(
+    projectId: string,
+    taskId: string,
+    body: string,
+  ): Promise<{ linearCommentId?: string; localCommentId?: string; error?: string }> {
+    logger.info('Creating comment in Linear', { taskId });
+
+    // Find the task
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+    });
+
+    if (!task) {
+      return { error: `Task ${taskId} not found` };
+    }
+
+    if (!task.linearId) {
+      return { error: `Task ${taskId} has no Linear ID` };
+    }
+
+    try {
+      // Create comment in Linear
+      const client = await this.getLinearClient(projectId);
+      await client.addComment(task.linearId, body);
+
+      // Note: Linear's addComment doesn't return the comment ID directly
+      // The comment will be synced back via webhook
+      logger.info('Comment created in Linear', { linearIssueId: task.linearId });
+
+      return { linearCommentId: 'pending-webhook-sync' };
+    } catch (error) {
+      logger.error('Failed to create comment in Linear', error as Error, { taskId });
+      return { error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  /**
+   * Get all comments for a task from database
+   */
+  async getTaskComments(taskId: string): Promise<any[]> {
+    return this.prisma.taskComment.findMany({
+      where: { taskId },
+      orderBy: { linearCreatedAt: 'asc' },
+    });
+  }
+
+  // ============================================
+  // Mapping Helpers
+  // ============================================
 
   /**
    * Map Linear status string to Prisma TaskStatus enum

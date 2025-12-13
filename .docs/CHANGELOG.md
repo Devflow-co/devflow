@@ -1,5 +1,21 @@
 # CHANGELOG - DevFlow
 
+## [1.14.0] - 2025-12-13
+### Added
+- **Comment Synchronization** - Sync Linear comments to database
+  - New `TaskComment` model in Prisma schema with author info and timestamps
+  - `LinearClient.getComments(issueId)` - Get all comments for an issue
+  - `LinearClient.getComment(commentId)` - Get a single comment by ID
+  - `LinearComment` type exported from SDK
+  - `LinearSyncApiService.syncCommentToDatabase()` - Sync single comment
+  - `LinearSyncApiService.syncAllCommentsForIssue()` - Sync all comments for an issue
+  - `LinearSyncApiService.createCommentInLinear()` - Create comment from DevFlow
+  - `LinearSyncApiService.getTaskComments()` - Get comments from database
+  - Auto-sync comments via webhooks on create/update events
+
+### Changed
+- Webhook response now includes `issueSynced` and `commentSynced` fields (replaces `autoSynced`)
+
 ## [1.13.0] - 2025-12-13
 ### Added
 - Linear Custom Fields support in SDK (getCustomFields, createCustomField, getIssueCustomFields, updateIssueCustomField)

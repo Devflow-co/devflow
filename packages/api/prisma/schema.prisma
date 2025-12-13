@@ -103,12 +103,47 @@ model Task {
   project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   workflows   Workflow[]
   specs       TaskSpec[]
+  comments    TaskComment[]
 
   @@map("tasks")
   @@index([projectId])
   @@index([linearId])
   @@index([status])
   @@index([priority])
+}
+
+// ============================================
+// Task Comments (synced from Linear)
+// ============================================
+
+model TaskComment {
+  id            String   @id @default(uuid())
+  taskId        String   @map("task_id")
+  linearId      String   @unique @map("linear_id")
+
+  // Comment content
+  body          String   @db.Text
+
+  // Author info (from Linear)
+  authorId      String?  @map("author_id")
+  authorName    String?  @map("author_name")
+  authorEmail   String?  @map("author_email")
+
+  // Timestamps (from Linear)
+  linearCreatedAt DateTime @map("linear_created_at")
+  linearUpdatedAt DateTime @map("linear_updated_at")
+
+  // Local timestamps
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  task          Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("task_comments")
+  @@index([taskId])
+  @@index([linearId])
+  @@index([linearCreatedAt])
 }
 
 // ============================================

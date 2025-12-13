@@ -9,7 +9,7 @@ export * from './vcs';
 export * from './ci';
 
 // Linear Client
-export { LinearClient, createLinearClient, type LinearCustomField } from './linear/linear.client';
+export { LinearClient, createLinearClient, type LinearCustomField, type LinearComment } from './linear/linear.client';
 export { LinearMapper } from './linear/linear.mapper';
 export {
   LinearSetupService,
