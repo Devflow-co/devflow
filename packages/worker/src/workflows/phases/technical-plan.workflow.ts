@@ -16,6 +16,7 @@ const {
   syncLinearTask,
   updateLinearTask,
   retrieveContext,
+  fetchBestPractices,
   generateTechnicalPlan,
   appendTechnicalPlanToLinearIssue,
 } = proxyActivities<typeof activities>({
@@ -150,24 +151,41 @@ export async function technicalPlanWorkflow(
     // Step 4: Extract user story from Linear description
     const userStory = extractUserStoryFromDescription(task.description);
 
-    // Step 5: Generate technical plan
+    // Step 5: Fetch best practices from Perplexity
+    const bestPracticesResult = await fetchBestPractices({
+      task: {
+        title: task.title,
+        description: task.description,
+      },
+      projectId: input.projectId,
+      context: ragContext?.chunks?.[0]
+        ? {
+            language: ragContext.chunks[0].language,
+            framework: undefined, // TODO: Extract framework from RAG context
+          }
+        : undefined,
+    });
+
+    // Step 6: Generate technical plan with best practices
     const result = await generateTechnicalPlan({
       task,
       projectId: input.projectId,
       userStory,
       ragContext,
+      bestPractices: bestPracticesResult,
     });
 
-    // Step 6: Append technical plan to Linear issue
+    // Step 7: Append technical plan to Linear issue with best practices
     await appendTechnicalPlanToLinearIssue({
       projectId: input.projectId,
       linearId: task.linearId,
       plan: result.plan,
       contextUsed: result.contextUsed,
       multiLLM: result.multiLLM,
+      bestPractices: bestPracticesResult,
     });
 
-    // Step 7: Update status to Plan Ready
+    // Step 8: Update status to Plan Ready
     await updateLinearTask({
       projectId: input.projectId,
       linearId: task.linearId,

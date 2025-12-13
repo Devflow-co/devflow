@@ -428,6 +428,10 @@ export async function appendTechnicalPlanToLinearIssue(input: {
     bestModel: string;
     detailedExplanation: string;
   };
+  bestPractices?: {
+    bestPractices: string;
+    perplexityModel: string;
+  };
 }): Promise<void> {
   logger.info('Appending technical plan to Linear issue', { linearId: input.linearId });
 
@@ -462,6 +466,15 @@ export async function appendTechnicalPlanToLinearIssue(input: {
       }
 
       markdown += '\n> This plan was generated with codebase context to follow existing patterns.\n';
+    }
+
+    // Add best practices section if provided
+    if (input.bestPractices) {
+      markdown += '\n\n---\n\n';
+      markdown += '## 💡 Industry Best Practices\n\n';
+      markdown += `> Fetched from ${input.bestPractices.perplexityModel}\n\n`;
+      markdown += input.bestPractices.bestPractices;
+      markdown += '\n\n> These best practices were retrieved from Perplexity to ensure the implementation follows industry standards.\n';
     }
 
     // Add multi-LLM comparison section if used

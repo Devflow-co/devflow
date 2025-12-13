@@ -6,6 +6,7 @@
  * Uses RAG context for codebase-aware planning
  */
 
+import axios from 'axios';
 import { createLogger } from '@devflow/common';
 import type {
   TechnicalPlanGenerationInput,
@@ -37,6 +38,7 @@ export interface GenerateTechnicalPlanInput {
     retrievalTimeMs: number;
     totalChunks: number;
   };
+  bestPractices?: FetchBestPracticesOutput;
 }
 
 export interface GenerateTechnicalPlanOutput {
@@ -65,6 +67,106 @@ const MULTI_LLM_MODELS = [
   'google/gemini-2.0-flash-exp',
   'perplexity/sonar-pro',
 ];
+
+/**
+ * Fetch best practices for a given task using Perplexity
+ */
+export interface FetchBestPracticesInput {
+  task: {
+    title: string;
+    description: string;
+  };
+  projectId: string;
+  context?: {
+    language: string;
+    framework?: string;
+  };
+}
+
+export interface FetchBestPracticesOutput {
+  bestPractices: string;
+  sources?: string[];
+  perplexityModel: string;
+}
+
+export async function fetchBestPractices(
+  input: FetchBestPracticesInput
+): Promise<FetchBestPracticesOutput> {
+  logger.info('Fetching best practices from Perplexity', {
+    taskTitle: input.task.title,
+    projectId: input.projectId,
+  });
+
+  try {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      throw new Error('OPENROUTER_API_KEY not configured');
+    }
+
+    // Build context-aware query for Perplexity
+    let query = `What are the best practices for: ${input.task.title}`;
+
+    if (input.context) {
+      if (input.context.language) {
+        query += `\nLanguage: ${input.context.language}`;
+      }
+      if (input.context.framework) {
+        query += `\nFramework: ${input.context.framework}`;
+      }
+    }
+
+    query += `\n\nTask description: ${input.task.description}`;
+    query += `\n\nPlease provide:
+1. Industry best practices for this type of task
+2. Common pitfalls to avoid
+3. Recommended patterns and approaches
+4. Security considerations if applicable
+5. Performance optimization tips`;
+
+    // Call Perplexity via OpenRouter
+    const response = await axios.post(
+      'https://openrouter.ai/api/v1/chat/completions',
+      {
+        model: 'perplexity/sonar-pro',
+        messages: [
+          {
+            role: 'user',
+            content: query,
+          },
+        ],
+        max_tokens: 2048,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://devflow.dev',
+          'X-Title': 'DevFlow - Best Practices',
+        },
+      }
+    );
+
+    const bestPractices = response.data.choices[0].message.content;
+    const model = response.data.model;
+
+    logger.info('Best practices fetched successfully', {
+      length: bestPractices.length,
+      model,
+    });
+
+    return {
+      bestPractices,
+      perplexityModel: model,
+    };
+  } catch (error) {
+    logger.error('Failed to fetch best practices from Perplexity', error);
+    // Return empty best practices instead of failing the entire workflow
+    return {
+      bestPractices: 'Unable to fetch best practices at this time.',
+      perplexityModel: 'perplexity/sonar-pro',
+    };
+  }
+}
 
 /**
  * Generate technical plan from user story using AI with codebase context
@@ -145,7 +247,7 @@ export async function generateTechnicalPlan(
       usingRAG,
     });
 
-    // Step 3: Load prompts with user story and context
+    // Step 3: Load prompts with user story, context, and best practices
     const prompts = await loadPrompts('technical-plan', {
       userStoryActor: input.userStory.userStory.actor,
       userStoryGoal: input.userStory.userStory.goal,
@@ -157,6 +259,7 @@ export async function generateTechnicalPlan(
       projectFramework: specContext.framework || 'Not specified',
       projectDependencies: specContext.dependencies.join(', '),
       codebaseContext: formatContextForAI(codebaseContext),
+      bestPractices: input.bestPractices?.bestPractices || 'No best practices available',
     });
 
     // Step 4: Generate with AI (multi-LLM or single model)

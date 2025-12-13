@@ -22,6 +22,12 @@ Generate a detailed technical implementation plan for the following user story:
 
 {{codebaseContext}}
 
+## Industry Best Practices
+
+{{bestPractices}}
+
+**Note:** The above best practices are fetched from Perplexity to ensure your implementation follows industry standards and avoids common pitfalls. Consider these recommendations when creating your technical plan.
+
 ## Your Task
 
 Create a comprehensive technical plan that:
