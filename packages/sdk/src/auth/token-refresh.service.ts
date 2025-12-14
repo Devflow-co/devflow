@@ -3,14 +3,16 @@ import { TokenEncryptionService } from './token-encryption.service';
 import { TokenStorageService } from './token-storage.service';
 import { OAuthService } from './oauth.service';
 import { OAuthProvider, OAuthDatabase } from './oauth.types';
+import { ITokenResolver } from './token-resolver.interface';
 
 const logger = createLogger('TokenRefreshService');
 
 /**
  * Token Refresh Service
  * Handles automatic token refresh and caching
+ * Implements ITokenResolver for use with integration services
  */
-export class TokenRefreshService {
+export class TokenRefreshService implements ITokenResolver {
   constructor(
     private readonly db: OAuthDatabase,
     private readonly tokenEncryption: TokenEncryptionService,

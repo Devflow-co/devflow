@@ -10,7 +10,9 @@ import {
   BadRequestException,
   NotFoundException,
   Logger,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { OAuthProvider } from '@prisma/client';
 import { OAuthService } from '@/auth/services/oauth.service';
 
@@ -169,15 +171,16 @@ export class AuthController {
   async linearCallback(
     @Query('code') code: string,
     @Query('state') state: string,
+    @Res() res: Response,
   ) {
     if (!code || !state) {
-      throw new BadRequestException('code and state are required');
+      return res.status(400).send(this.renderErrorPage('Missing code or state parameter'));
     }
 
     // Retrieve projectId from state (stored in Redis during authorization)
     const projectId = await this.oauthService.getProjectIdFromState(state, 'LINEAR');
     if (!projectId) {
-      throw new BadRequestException('Invalid or expired state parameter');
+      return res.status(400).send(this.renderErrorPage('Invalid or expired state parameter'));
     }
 
     this.logger.log(`Linear OAuth callback received for project ${projectId}`);
@@ -190,24 +193,10 @@ export class AuthController {
         state,
       );
 
-      // Return success HTML page or redirect
-      return {
-        success: true,
-        message: 'Linear OAuth connection established successfully!',
-        connection: {
-          id: connection.id,
-          projectId: connection.projectId,
-          provider: connection.provider,
-          scopes: connection.scopes,
-          providerUserId: connection.providerUserId,
-          providerEmail: connection.providerEmail,
-          isActive: connection.isActive,
-          createdAt: connection.createdAt,
-        },
-      };
+      return res.send(this.renderSuccessPage('Linear', connection.providerEmail));
     } catch (error) {
       this.logger.error(`Failed to complete Linear OAuth callback`, error);
-      throw new BadRequestException(error.message);
+      return res.status(400).send(this.renderErrorPage(error.message));
     }
   }
 
@@ -254,15 +243,16 @@ export class AuthController {
   async sentryCallback(
     @Query('code') code: string,
     @Query('state') state: string,
+    @Res() res: Response,
   ) {
     if (!code || !state) {
-      throw new BadRequestException('code and state are required');
+      return res.status(400).send(this.renderErrorPage('Missing code or state parameter'));
     }
 
     // Retrieve projectId from state (stored in Redis during authorization)
     const projectId = await this.oauthService.getProjectIdFromState(state, 'SENTRY');
     if (!projectId) {
-      throw new BadRequestException('Invalid or expired state parameter');
+      return res.status(400).send(this.renderErrorPage('Invalid or expired state parameter'));
     }
 
     this.logger.log(`Sentry OAuth callback received for project ${projectId}`);
@@ -275,23 +265,10 @@ export class AuthController {
         state,
       );
 
-      return {
-        success: true,
-        message: 'Sentry OAuth connection established successfully!',
-        connection: {
-          id: connection.id,
-          projectId: connection.projectId,
-          provider: connection.provider,
-          scopes: connection.scopes,
-          providerUserId: connection.providerUserId,
-          providerEmail: connection.providerEmail,
-          isActive: connection.isActive,
-          createdAt: connection.createdAt,
-        },
-      };
+      return res.send(this.renderSuccessPage('Sentry', connection.providerEmail));
     } catch (error) {
       this.logger.error(`Failed to complete Sentry OAuth callback`, error);
-      throw new BadRequestException(error.message);
+      return res.status(400).send(this.renderErrorPage(error.message));
     }
   }
 
@@ -338,15 +315,16 @@ export class AuthController {
   async figmaCallback(
     @Query('code') code: string,
     @Query('state') state: string,
+    @Res() res: Response,
   ) {
     if (!code || !state) {
-      throw new BadRequestException('code and state are required');
+      return res.status(400).send(this.renderErrorPage('Missing code or state parameter'));
     }
 
     // Retrieve projectId from state (stored in Redis during authorization)
     const projectId = await this.oauthService.getProjectIdFromState(state, 'FIGMA');
     if (!projectId) {
-      throw new BadRequestException('Invalid or expired state parameter');
+      return res.status(400).send(this.renderErrorPage('Invalid or expired state parameter'));
     }
 
     this.logger.log(`Figma OAuth callback received for project ${projectId}`);
@@ -359,23 +337,10 @@ export class AuthController {
         state,
       );
 
-      return {
-        success: true,
-        message: 'Figma OAuth connection established successfully!',
-        connection: {
-          id: connection.id,
-          projectId: connection.projectId,
-          provider: connection.provider,
-          scopes: connection.scopes,
-          providerUserId: connection.providerUserId,
-          providerEmail: connection.providerEmail,
-          isActive: connection.isActive,
-          createdAt: connection.createdAt,
-        },
-      };
+      return res.send(this.renderSuccessPage('Figma', connection.providerEmail));
     } catch (error) {
       this.logger.error(`Failed to complete Figma OAuth callback`, error);
-      throw new BadRequestException(error.message);
+      return res.status(400).send(this.renderErrorPage(error.message));
     }
   }
 
@@ -620,6 +585,207 @@ export class AuthController {
         throw new NotFoundException('OAuth application not found');
       }
       this.logger.error(`Failed to delete OAuth app`, error);
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  /**
+   * Render OAuth success page
+   */
+  private renderSuccessPage(provider: string, email: string | null): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>OAuth Success - DevFlow</title>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              min-height: 100vh;
+              margin: 0;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            }
+            .container {
+              background: white;
+              padding: 3rem;
+              border-radius: 1rem;
+              box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+              text-align: center;
+              max-width: 500px;
+            }
+            .icon {
+              font-size: 4rem;
+              margin-bottom: 1rem;
+            }
+            h1 {
+              color: #2d3748;
+              margin: 0 0 0.5rem 0;
+              font-size: 2rem;
+            }
+            p {
+              color: #718096;
+              margin: 0 0 2rem 0;
+              font-size: 1.1rem;
+            }
+            .email {
+              background: #f7fafc;
+              padding: 0.75rem 1rem;
+              border-radius: 0.5rem;
+              color: #4a5568;
+              font-family: 'Monaco', 'Courier New', monospace;
+              margin: 1rem 0;
+            }
+            .footer {
+              margin-top: 2rem;
+              color: #a0aec0;
+              font-size: 0.9rem;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="icon">✅</div>
+            <h1>${provider} Connected!</h1>
+            <p>Your OAuth connection has been established successfully.</p>
+            ${email ? `<div class="email">${email}</div>` : ''}
+            <div class="footer">
+              You can close this window and return to your terminal.
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Render OAuth error page
+   */
+  private renderErrorPage(error: string): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>OAuth Error - DevFlow</title>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              min-height: 100vh;
+              margin: 0;
+              background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            }
+            .container {
+              background: white;
+              padding: 3rem;
+              border-radius: 1rem;
+              box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+              text-align: center;
+              max-width: 500px;
+            }
+            .icon {
+              font-size: 4rem;
+              margin-bottom: 1rem;
+            }
+            h1 {
+              color: #2d3748;
+              margin: 0 0 0.5rem 0;
+              font-size: 2rem;
+            }
+            p {
+              color: #718096;
+              margin: 0 0 2rem 0;
+              font-size: 1.1rem;
+            }
+            .error {
+              background: #fff5f5;
+              border: 1px solid #fc8181;
+              padding: 1rem;
+              border-radius: 0.5rem;
+              color: #c53030;
+              margin: 1rem 0;
+            }
+            .footer {
+              margin-top: 2rem;
+              color: #a0aec0;
+              font-size: 0.9rem;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="icon">❌</div>
+            <h1>Connection Failed</h1>
+            <p>We encountered an error while connecting your OAuth account.</p>
+            <div class="error">${error}</div>
+            <div class="footer">
+              Please try again or contact support if the issue persists.
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Test Figma context extraction
+   * POST /auth/figma/test-context
+   *
+   * Body: { projectId: string, fileKey: string, nodeId?: string }
+   * Returns: { fileName, lastModified, comments, screenshots }
+   */
+  @Post('figma/test-context')
+  @HttpCode(HttpStatus.OK)
+  async testFigmaContext(
+    @Body('projectId') projectId: string,
+    @Body('fileKey') fileKey: string,
+    @Body('nodeId') nodeId?: string,
+  ) {
+    if (!projectId || !fileKey) {
+      throw new BadRequestException('projectId and fileKey are required');
+    }
+
+    this.logger.log(`Testing Figma context extraction for project ${projectId}, file ${fileKey}`);
+
+    try {
+      // Get Figma context using the OAuth service
+      const context = await this.oauthService.getFigmaContext(projectId, fileKey, nodeId);
+
+      return {
+        success: true,
+        context,
+      };
+    } catch (error: any) {
+      this.logger.error(`Failed to extract Figma context: ${error.message}`);
+      this.logger.error(`Full error: ${JSON.stringify(error.response?.data || error)}`);
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  /**
+   * Test Figma user info
+   * POST /auth/figma/test-me
+   */
+  @Post('figma/test-me')
+  @HttpCode(HttpStatus.OK)
+  async testFigmaMe(@Body('projectId') projectId: string) {
+    if (!projectId) {
+      throw new BadRequestException('projectId is required');
+    }
+
+    try {
+      const userInfo = await this.oauthService.getFigmaUserInfo(projectId);
+      return { success: true, userInfo };
+    } catch (error: any) {
+      this.logger.error(`Failed to get Figma user info: ${error.message}`);
       throw new BadRequestException(error.message);
     }
   }

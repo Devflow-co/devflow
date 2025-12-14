@@ -12,6 +12,7 @@ import { WorkflowsModule } from '@/workflows/workflows.module';
 import { WebhooksModule } from '@/webhooks/webhooks.module';
 import { HealthModule } from '@/health/health.module';
 import { AuthModule } from '@/auth/auth.module';
+import { IntegrationsModule } from '@/integrations/integrations.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { AuthModule } from '@/auth/auth.module';
     // Feature modules
     HealthModule,
     AuthModule,
+    IntegrationsModule,
     ProjectsModule,
     TasksModule,
     WorkflowsModule,

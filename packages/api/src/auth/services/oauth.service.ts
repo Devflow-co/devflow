@@ -1,9 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaClient, OAuthConnection, OAuthProvider } from '@prisma/client';
 import axios from 'axios';
-import { OAUTH_CONSTANTS } from '@devflow/sdk';
+import { randomBytes, timingSafeEqual } from 'crypto';
+import {
+  OAUTH_CONSTANTS,
+  createFigmaClient,
+  FigmaIntegrationService,
+} from '@devflow/sdk';
 import { TokenEncryptionService } from '@/auth/services/token-encryption.service';
 import { TokenStorageService } from '@/auth/services/token-storage.service';
+import { TokenRefreshService } from '@/auth/services/token-refresh.service';
 
 interface DeviceFlowResponse {
   deviceCode: string;
@@ -29,12 +35,17 @@ interface UserInfo {
 @Injectable()
 export class OAuthService {
   private readonly logger = new Logger(OAuthService.name);
+  private readonly figmaService: FigmaIntegrationService;
 
   constructor(
     private readonly prisma: PrismaClient,
     private readonly tokenEncryption: TokenEncryptionService,
     private readonly tokenStorage: TokenStorageService,
-  ) {}
+    private readonly tokenRefresh: TokenRefreshService,
+  ) {
+    // Create Figma integration service with TokenRefreshService as resolver
+    this.figmaService = new FigmaIntegrationService(tokenRefresh);
+  }
 
   /**
    * Initiate Device Flow OAuth
@@ -139,6 +150,7 @@ export class OAuthService {
           projectId,
           provider,
           response.data,
+          [...githubConfig.SCOPES],
         );
       } catch (error) {
         const errorCode = error.response?.data?.error;
@@ -241,8 +253,9 @@ export class OAuthService {
       FLOW_TYPE: 'authorization_code';
     };
 
-    // Generate random state for CSRF protection
-    const state = Math.random().toString(36).substring(2, 15);
+    // Generate cryptographically secure random state for CSRF protection
+    // 32 bytes = 256 bits of entropy (OWASP recommendation for session tokens)
+    const state = randomBytes(32).toString('hex');
 
     // Build authorization URL with provider-specific parameters
     const params = new URLSearchParams({
@@ -306,9 +319,19 @@ export class OAuthService {
       throw new Error(`Authorization Code Flow not supported for ${provider}`);
     }
 
-    // Validate state to prevent CSRF attacks
+    // Validate state to prevent CSRF attacks (timing-safe comparison)
     const cachedState = await this.tokenStorage.getState(projectId, provider);
-    if (!cachedState || cachedState !== state) {
+    if (!cachedState) {
+      throw new Error('Invalid state parameter - possible CSRF attack');
+    }
+
+    // Use timing-safe comparison to prevent timing attacks
+    const stateMatch = timingSafeEqual(
+      Buffer.from(cachedState, 'utf8'),
+      Buffer.from(state, 'utf8'),
+    );
+
+    if (!stateMatch) {
       throw new Error('Invalid state parameter - possible CSRF attack');
     }
 
@@ -342,7 +365,7 @@ export class OAuthService {
 
       this.logger.log(`Authorization code exchanged successfully for ${provider}`);
 
-      return await this.storeOAuthConnection(projectId, provider, tokens);
+      return await this.storeOAuthConnection(projectId, provider, tokens, oauthApp.scopes);
     } catch (error) {
       this.logger.error(
         `Failed to exchange authorization code for ${provider}`,
@@ -361,6 +384,7 @@ export class OAuthService {
     projectId: string,
     provider: OAuthProvider,
     tokens: OAuthTokens,
+    registeredScopes: string[],
   ): Promise<OAuthConnection> {
     // Encrypt refresh token (if provided)
     let encryptedRefreshToken: string | undefined;
@@ -380,6 +404,11 @@ export class OAuthService {
       ? new Date(Date.now() + tokens.expires_in * 1000)
       : null;
 
+    // Parse scopes - some providers return scope as string, others don't return it at all
+    const scopes = tokens.scope
+      ? tokens.scope.split(' ')
+      : registeredScopes; // Fallback to registered app scopes
+
     // Store in database
     const connection = await this.prisma.oAuthConnection.upsert({
       where: {
@@ -390,7 +419,7 @@ export class OAuthService {
         provider,
         refreshToken: encryptedRefreshToken || '',
         encryptionIv: encryptionIv || '',
-        scopes: tokens.scope.split(' '),
+        scopes,
         expiresAt,
         providerUserId: userInfo.id,
         providerEmail: userInfo.email,
@@ -400,7 +429,7 @@ export class OAuthService {
       update: {
         refreshToken: encryptedRefreshToken || '',
         encryptionIv: encryptionIv || '',
-        scopes: tokens.scope.split(' '),
+        scopes,
         expiresAt,
         providerUserId: userInfo.id,
         providerEmail: userInfo.email,
@@ -760,5 +789,62 @@ export class OAuthService {
     this.logger.log(
       `OAuth app deleted successfully for ${provider} on project ${projectId}`,
     );
+  }
+
+  /**
+   * Get Figma design context for a file/node
+   * Used for testing Figma OAuth integration
+   */
+  async getFigmaContext(
+    projectId: string,
+    fileKey: string,
+    nodeId?: string,
+  ): Promise<any> {
+    this.logger.log(
+      `Extracting Figma context for project ${projectId}, file ${fileKey}, node ${nodeId || 'N/A'}`,
+    );
+
+    // Delegate to Figma integration service
+    const context = await this.figmaService.getDesignContext(projectId, fileKey, nodeId);
+
+    this.logger.log(`Successfully extracted Figma context: ${context.fileName}`);
+
+    return context;
+  }
+
+  /**
+   * Get Figma user info to test OAuth token
+   */
+  async getFigmaUserInfo(projectId: string): Promise<any> {
+    this.logger.log(`Getting Figma user info for project ${projectId}`);
+
+    // 1. Get OAuth connection
+    const connection = await this.prisma.oAuthConnection.findUnique({
+      where: {
+        projectId_provider: {
+          projectId,
+          provider: 'FIGMA',
+        },
+      },
+    });
+
+    if (!connection) {
+      throw new Error(`No Figma OAuth connection found for project ${projectId}`);
+    }
+
+    // 2. Get access token
+    let accessToken = await this.tokenStorage.getAccessToken(projectId, 'FIGMA');
+    if (!accessToken) {
+      accessToken = await this.refreshToken(connection);
+    }
+
+    // 3. Call Figma /me endpoint
+    const response = await axios.get('https://api.figma.com/v1/me', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    return response.data;
   }
 }

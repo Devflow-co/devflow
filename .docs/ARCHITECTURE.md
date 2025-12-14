@@ -1,7 +1,7 @@
 # 🏗️ DevFlow - Architecture & Design Decisions
 
-**Version:** 1.0.0
-**Last Updated:** December 8, 2025
+**Version:** 1.1.0
+**Last Updated:** December 14, 2025
 **Status:** Active
 
 ---
@@ -15,6 +15,11 @@
 5. [Import Patterns](#import-patterns)
 6. [Decision Records](#decision-records)
 7. [Future Guidelines](#future-guidelines)
+8. [Architecture Validation](#architecture-validation)
+9. [OAuth Architecture](#oauth-architecture)
+10. [Configuration Management](#configuration-management)
+11. [Integration Services Pattern](#integration-services-pattern) ⭐ NEW
+12. [Summary](#summary)
 
 ---
 
@@ -935,6 +940,236 @@ export class WorkflowsService {
 
 ---
 
+## Integration Services Pattern
+
+### Overview
+
+DevFlow uses a **unified integration service pattern** to interact with external APIs (Figma, Sentry, GitHub, Linear). This pattern provides:
+
+- **Testability** - Easy mocking via `ITokenResolver` interface
+- **Reusability** - Services work in API, Worker, and CLI
+- **Consistency** - Same pattern across all providers
+- **Separation of Concerns** - OAuth token management separated from API calls
+
+### Architecture Layers
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              API Layer (NestJS - Optional)                  │
+│                                                              │
+│  • OAuthService uses FigmaIntegrationService internally    │
+│  • Future: Dedicated API service wrappers if needed        │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│         Integration Services (SDK - Plain TypeScript)       │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ FigmaIntegrationService                             │   │
+│  │ - getDesignContext(projectId, fileKey, nodeId?)    │   │
+│  │ - getFileMetadata(projectId, fileKey)              │   │
+│  │ - getFileComments(projectId, fileKey)              │   │
+│  │ - getNodeImages(...)                                │   │
+│  │ - getScreenshot(...)                                │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ SentryIntegrationService                            │   │
+│  │ - getIssueContext(projectId, issueId)              │   │
+│  │ - getIssue(projectId, issueId)                     │   │
+│  │ - getLatestEvent(projectId, issueId)               │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ GitHubIntegrationService                            │   │
+│  │ - getIssueContext(projectId, owner, repo, number)  │   │
+│  │ - getRepository(projectId, owner, repo)            │   │
+│  │ - getIssue(projectId, owner, repo, number)         │   │
+│  │ - createBranch(...)                                 │   │
+│  │ - commitFiles(...)                                  │   │
+│  │ - createPullRequest(...)                            │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ LinearIntegrationService                            │   │
+│  │ - getTask(projectId, issueId)                      │   │
+│  │ - queryIssues(projectId, options)                  │   │
+│  │ - updateStatus(projectId, issueId, status)         │   │
+│  │ - addComment(projectId, issueId, body)             │   │
+│  │ - getComments(projectId, issueId)                  │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                              │
+│         All services depend on ITokenResolver               │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│              Token Resolution (SDK Interface)                │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ ITokenResolver (interface)                          │   │
+│  │   getAccessToken(projectId, provider): Promise<str>│   │
+│  └─────────────────────────────────────────────────────┘   │
+│                          ↑                                   │
+│                          │ implements                        │
+│                          │                                   │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ TokenRefreshService                                 │   │
+│  │ - Handles OAuth token refresh                       │   │
+│  │ - Caches tokens in Redis                            │   │
+│  │ - Refreshes before expiry                           │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│              Provider Clients (SDK - Plain TypeScript)       │
+│                                                              │
+│  • FigmaClient - Figma REST API calls                       │
+│  • SentryClient - Sentry REST API calls                     │
+│  • GitHubProvider - GitHub REST API via Octokit             │
+│  • LinearClient - Linear GraphQL API calls                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### The Pattern
+
+**Every integration service follows this pattern:**
+
+```typescript
+export class XxxIntegrationService {
+  constructor(private readonly tokenResolver: ITokenResolver) {}
+
+  async getSomething(projectId: string, ...params): Promise<Result> {
+    // 1. Resolve OAuth token for the project
+    const token = await this.tokenResolver.getAccessToken(projectId, 'PROVIDER');
+
+    // 2. Create provider client with token
+    const client = createXxxClient(token);
+
+    // 3. Call API method
+    return await client.getSomething(...params);
+  }
+}
+```
+
+### Benefits
+
+**1. Testability**
+```typescript
+// Easy to mock token resolution
+const mockResolver: ITokenResolver = {
+  getAccessToken: jest.fn().mockResolvedValue('mock-token'),
+};
+
+const service = new FigmaIntegrationService(mockResolver);
+const result = await service.getDesignContext('proj-1', 'file-key');
+
+expect(mockResolver.getAccessToken).toHaveBeenCalledWith('proj-1', 'FIGMA');
+```
+
+**2. Reusability**
+```typescript
+// API Layer - OAuthService uses it internally
+export class OAuthService {
+  private figmaService: FigmaIntegrationService;
+
+  constructor(tokenRefresh: TokenRefreshService) {
+    this.figmaService = new FigmaIntegrationService(tokenRefresh);
+  }
+
+  async getFigmaContext(projectId, fileKey, nodeId) {
+    return this.figmaService.getDesignContext(projectId, fileKey, nodeId);
+  }
+}
+
+// Worker Layer - Activities use it directly
+import { createFigmaIntegrationService } from '@devflow/sdk';
+
+const tokenResolver: ITokenResolver = {
+  async getAccessToken(projectId, provider) {
+    return await oauthResolver.resolveFigmaToken(projectId);
+  }
+};
+
+const figmaService = createFigmaIntegrationService(tokenResolver);
+const context = await figmaService.getDesignContext(projectId, fileKey);
+```
+
+**3. Consistency**
+
+All 4 integration services use the same pattern:
+- ✅ FigmaIntegrationService
+- ✅ SentryIntegrationService
+- ✅ GitHubIntegrationService
+- ✅ LinearIntegrationService
+
+### Implementation Files
+
+**SDK Integration Services:**
+- `packages/sdk/src/figma/figma-integration.service.ts`
+- `packages/sdk/src/sentry/sentry-integration.service.ts`
+- `packages/sdk/src/vcs/github-integration.service.ts`
+- `packages/sdk/src/linear/linear-integration.service.ts`
+
+**SDK Core:**
+- `packages/sdk/src/auth/token-resolver.interface.ts` - ITokenResolver interface
+- `packages/sdk/src/auth/token-refresh.service.ts` - TokenRefreshService (implements ITokenResolver)
+
+**API Integration:**
+- `packages/api/src/auth/services/oauth.service.ts` - Uses FigmaIntegrationService internally
+- `packages/api/src/integrations/` - (Optional) Future NestJS service wrappers
+
+### Factory Functions
+
+Each integration service provides a factory function for easy instantiation:
+
+```typescript
+// Figma
+export function createFigmaIntegrationService(
+  tokenResolver: ITokenResolver
+): FigmaIntegrationService {
+  return new FigmaIntegrationService(tokenResolver);
+}
+
+// Similar factories for Sentry, GitHub, Linear
+```
+
+### Usage Guidelines
+
+**✅ DO:**
+- Use integration services for all external API calls
+- Inject ITokenResolver for token resolution
+- Use factory functions for instantiation
+- Keep services in SDK layer (plain TypeScript)
+
+**❌ DON'T:**
+- Create provider clients directly with hardcoded tokens
+- Bypass token resolution logic
+- Add NestJS decorators to integration services
+- Mix OAuth logic with API call logic
+
+### Migration from Legacy Pattern
+
+**Before (Manual Token + Client Creation):**
+```typescript
+// Bad - Manual token resolution in multiple places
+const token = await this.tokenStorage.getAccessToken(projectId, 'FIGMA');
+if (!token) {
+  const connection = await this.prisma.oAuthConnection.findUnique(...);
+  token = await this.refreshToken(connection);
+}
+const client = createFigmaClient(token);
+const context = await client.getDesignContext(fileKey);
+```
+
+**After (Integration Service):**
+```typescript
+// Good - Single responsibility, testable
+const figmaService = new FigmaIntegrationService(tokenRefresh);
+const context = await figmaService.getDesignContext(projectId, fileKey);
+```
+
+---
+
 ## Summary
 
 **The DevFlow architecture follows these core principles:**
@@ -961,6 +1196,6 @@ export class WorkflowsService {
 
 ---
 
-**Last Updated:** December 8, 2025
+**Last Updated:** December 14, 2025
 **Maintained By:** DevFlow Team
 **Questions?** See [DOCUMENTATION.md](./DOCUMENTATION.md) or [CLAUDE.md](./CLAUDE.md)

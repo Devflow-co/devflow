@@ -10,6 +10,10 @@ export * from './ci';
 
 // Linear Client
 export { LinearClient, createLinearClient, type LinearCustomField, type LinearComment } from './linear/linear.client';
+export {
+  LinearIntegrationService,
+  createLinearIntegrationService,
+} from './linear/linear-integration.service';
 export { LinearMapper } from './linear/linear.mapper';
 export {
   LinearSetupService,

@@ -5,6 +5,10 @@
  */
 
 export { SentryClient, createSentryClient } from './sentry.client';
+export {
+  SentryIntegrationService,
+  createSentryIntegrationService,
+} from './sentry-integration.service';
 export type {
   SentryIssue,
   SentryEvent,

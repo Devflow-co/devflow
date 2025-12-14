@@ -1,0 +1,38 @@
+### Test Figma Context Extraction
+### This demonstrates how to extract design context from a Figma node
+
+# Extract context for a specific Figma node
+POST http://localhost:3001/api/v1/figma/extract-context
+Content-Type: application/json
+
+{
+  "projectId": "indy-promocode-prod",
+  "fileKey": "TfJw2zsGB11mbievCt5c3n",
+  "nodeId": "12252-33902"
+}
+
+###
+
+# Example Response Structure:
+# {
+#   "fileKey": "TfJw2zsGB11mbievCt5c3n",
+#   "fileName": "Crown - Core Functionality",
+#   "lastModified": "2025-12-14T10:00:00.000Z",
+#   "thumbnailUrl": "https://...",
+#   "comments": [
+#     {
+#       "id": "123",
+#       "message": "Please update this button color",
+#       "user": { "handle": "victor@studionomad.me" },
+#       "created_at": "2025-12-14T09:00:00.000Z"
+#     }
+#   ],
+#   "screenshots": [
+#     {
+#       "nodeId": "12252-33902",
+#       "nodeName": "Button/Primary/Default",
+#       "imageUrl": "https://s3-alpha.figma.com/...",
+#       "imageBase64": "iVBORw0KGgoAAAANSUhEUgAA..." // Pour l'AI vision
+#     }
+#   ]
+# }

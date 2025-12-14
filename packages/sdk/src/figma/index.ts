@@ -5,6 +5,10 @@
  */
 
 export { FigmaClient, createFigmaClient } from './figma.client';
+export {
+  FigmaIntegrationService,
+  createFigmaIntegrationService,
+} from './figma-integration.service';
 export type {
   FigmaFile,
   FigmaComment,

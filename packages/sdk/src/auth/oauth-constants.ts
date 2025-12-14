@@ -44,10 +44,11 @@ export const OAUTH_CONSTANTS = {
     // Figma OAuth App (uses Authorization Code Flow)
     // Credentials are stored per-project in the database (OAuthApplication table)
     // Register at: https://www.figma.com/developers/apps
+    // Note: Figma migrated token endpoint to api.figma.com/v1 (2024+)
     AUTHORIZE_URL: 'https://www.figma.com/oauth',
-    TOKEN_URL: 'https://www.figma.com/api/oauth/token',
+    TOKEN_URL: 'https://api.figma.com/v1/oauth/token',
     USER_API_URL: 'https://api.figma.com/v1/me',
-    SCOPES: ['file_content:read', 'file_comments:read'],
+    SCOPES: ['current_user:read', 'file_content:read', 'file_comments:read'],
     FLOW_TYPE: 'authorization_code' as const,
   },
   GITHUB_ISSUES: {
