@@ -48,8 +48,11 @@ export async function devflowWorkflow(input: WorkflowInput): Promise<WorkflowRes
     console.log('[devflowWorkflow] Status match:', task.status === LINEAR_STATUSES.toRefinement);
 
     // Route to appropriate sub-workflow based on status
-    // Phase 1: Refinement
-    if (task.status === LINEAR_STATUSES.toRefinement) {
+    // Phase 1: Refinement (also accepts "In Progress" for PO answer re-triggers)
+    if (
+      task.status === LINEAR_STATUSES.toRefinement ||
+      task.status === LINEAR_STATUSES.refinementInProgress
+    ) {
       const result = await executeChild(refinementWorkflow, {
         workflowId: `refinement-${input.taskId}-${Date.now()}`,
         args: [
