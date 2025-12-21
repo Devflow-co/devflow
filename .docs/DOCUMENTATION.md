@@ -1,8 +1,40 @@
 # 📚 DevFlow - Documentation Complète
 
-**Version:** 1.15.0
-**Dernière mise à jour:** 15 décembre 2025
-**Statut:** Production Ready (Integration Testing Added)
+**Version:** 2.3.0
+**Dernière mise à jour:** 21 décembre 2025
+**Statut:** Production Ready (Three-Phase Agile + Parent-Child Cascade/Rollup + LLM Council)
+
+---
+
+## 🆕 Changelog v2.3.0 (21 décembre 2025)
+
+### Parent-Child Issue Management
+- **Cascade**: Quand une issue parent est déplacée vers "To User Story" ou "To Plan", le statut cascade automatiquement à tous les enfants
+- **Rollup**: Le statut du parent reflète toujours le minimum (le moins avancé) de tous ses enfants
+- **Parallel Workflows**: Les workflows des enfants démarrent en parallèle
+
+### Centralized Status Configuration
+- Nouvelle configuration centralisée dans `@devflow/common`
+- Helper functions: `getStatusRank()`, `isTriggerStatus()`, `isCascadeStatus()`, `isRollupStatus()`
+- Plus de statuts hardcodés dans le code
+
+### PO Questions & Answers
+- Les questions générées par le refinement sont postées en commentaires Linear
+- Détection automatique des réponses du PO via webhook
+- Re-démarrage automatique du workflow quand toutes les questions sont répondues
+
+### Sub-Issue Creation from Refinement
+- Création automatique de sous-issues quand le refinement propose un split
+- Préservation des dépendances entre sous-issues
+- Commentaire explicatif ajouté au parent
+
+### New Linear Client Methods
+- `getIssueChildren()` - Récupère les enfants d'une issue
+- `updateMultipleIssuesStatus()` - Met à jour plusieurs issues en parallèle
+- `createSubIssue()` - Crée une sous-issue avec relation parent
+
+### E2E Testing
+- Nouveau script `tests/e2e/test-refinement-workflow.sh` pour tester le workflow complet
 
 ---
 

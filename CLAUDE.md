@@ -1,8 +1,8 @@
 # CLAUDE.md - DevFlow
 
-**Version:** 2.2.0
-**Mise à jour:** 19 décembre 2025
-**Statut:** Three-Phase Agile System + LLM Council + Integration Testing - Production Ready
+**Version:** 2.3.0
+**Mise à jour:** 21 décembre 2025
+**Statut:** Three-Phase Agile System + Parent-Child Cascade/Rollup + LLM Council - Production Ready
 
 ## Rappel agents (Claude + Cursor)
 - Finir chaque tâche par une étape Documentation (code, infra, CI, scripts, data, tests).
@@ -101,16 +101,16 @@ devflow/
   - `packages/worker/src/workflows/phases/user-story.workflow.ts` - Phase 2
   - `packages/worker/src/workflows/phases/technical-plan.workflow.ts` - Phase 3
 - **Activities Three-Phase** :
-  - `generateRefinement`, `appendRefinementToLinearIssue`
-  - `generateUserStory`, `appendUserStoryToLinearIssue`
+  - `generateRefinement`, `appendRefinementToLinearIssue`, **postQuestionsToLinear** (v2.3.0)
+  - `generateUserStory`, `appendUserStoryToLinearIssue`, **createLinearSubtasks** (v2.3.0)
   - `generateTechnicalPlan`, `appendTechnicalPlanToLinearIssue`
-- **Activities génériques** : `syncLinearTask`, `updateLinearTask`, `retrieveContext`, `sendNotification`
+- **Activities génériques** : `syncLinearTask`, `updateLinearTask`, `retrieveContext`, `sendNotification`, **addCommentToLinearIssue** (v2.3.0)
 - **Activities legacy** (conservées) : `generateSpecification`, `generateCode`, `generateTests`, `createBranch`, `commitFiles`, `createPullRequest`, `waitForCI`, `runTests`, `analyzeTestFailures`, `mergePullRequest`
 
 ### @devflow/sdk
 - **VCS** : `GitHubProvider` (13/13) - Legacy direct client. **GitHubIntegrationService** - OAuth-based service (recommended).
 - **CI/CD** : `GitHubActionsProvider` (10/10).
-- **Linear** : `LinearClient` - getTask, queryIssues, queryIssuesByStatus, updateStatus, updateDescription, appendToDescription, addComment, getCustomFields, createCustomField, getIssueCustomFields, updateIssueCustomField, **getComments**, **getComment**.
+- **Linear** : `LinearClient` - getTask, queryIssues, queryIssuesByStatus, updateStatus, updateDescription, appendToDescription, addComment, getCustomFields, createCustomField, getIssueCustomFields, updateIssueCustomField, getComments, getComment, **getIssueChildren** (v2.3.0), **updateMultipleIssuesStatus** (v2.3.0), **createSubIssue** (v2.3.0).
 - **LinearSetupService** : `ensureCustomFields(teamId)`, `validateSetup(teamId)`, `getDevFlowFieldValues(issueId)` - Setup automatique des custom fields DevFlow.
 - **LinearIntegrationService** : OAuth-based service - queryIssues, queryIssuesByStatus, getTask, getComments avec auto token refresh.
 - **AI** : AnthropicProvider, OpenAIProvider, OpenRouterProvider, Cursor (non implémenté).
@@ -134,6 +134,7 @@ devflow/
 ### @devflow/common
 - **Configuration** : `loadConfig()`, `validateConfig()` - Gestion centralisée de la configuration avec validation Zod
 - **Types** : WorkflowInput, WorkflowConfig, DEFAULT_WORKFLOW_CONFIG
+- **Status Helpers (v2.3.0)** : `getStatusRank()`, `isTriggerStatus()`, `isCascadeStatus()`, `isRollupStatus()`, `getStatusAtRank()` - Fonctions pour gérer la hiérarchie des statuts
 - **Règle importante** : Les workflows Temporal ne peuvent PAS accéder à `process.env`. La configuration doit être passée via `WorkflowInput`.
 
 ## Gestion de la Configuration
@@ -155,30 +156,206 @@ Voir [ARCHITECTURE.md](./ARCHITECTURE.md#configuration-management) pour les dét
 ## Workflows Temporal (Three-Phase)
 Le workflow principal `devflowWorkflow` agit comme un router qui dirige vers le sous-workflow approprié selon le status Linear.
 
-### Three-Phase Data Flow
+### Three-Phase Data Flow (No Auto-Chaining)
 ```
-Linear Webhook → API → devflowWorkflow (router)
-        ↓
-    syncLinearTask (détecter le status)
-        ↓
-    ┌────────────────┬────────────────┬────────────────┐
-    ↓                ↓                ↓                ↓
-Phase 1          Phase 2          Phase 3
-To Refinement    Refinement Ready UserStory Ready
-    ↓                ↓                ↓
-refinementWorkflow userStoryWorkflow technicalPlanWorkflow
-    ↓                ↓                ↓
-generateRefinement generateUserStory generateTechnicalPlan
-    ↓                ↓                ↓
-Refinement Ready UserStory Ready  Plan Ready
+Each phase is triggered independently by moving the issue to a "To X" status.
+Phases do NOT auto-chain - manual intervention required between phases.
+
+Phase 1: To Refinement → refinementWorkflow → Refinement Ready (STOP)
+                                                    ↓
+                                          [Manual: move to "To User Story"]
+                                                    ↓
+Phase 2: To User Story → userStoryWorkflow → UserStory Ready (STOP)
+                                                    ↓
+                                          [Manual: move to "To Plan"]
+                                                    ↓
+Phase 3: To Plan → technicalPlanWorkflow → Plan Ready (STOP)
 ```
 
 ### Routing Logic
-- `To Refinement` → `refinementWorkflow` (Phase 1)
-- `Refinement Ready` → `userStoryWorkflow` (Phase 2)
-- `UserStory Ready` → `technicalPlanWorkflow` (Phase 3)
+- `To Refinement` → `refinementWorkflow` (Phase 1) → `Refinement Ready`
+- `To User Story` → `userStoryWorkflow` (Phase 2) → `UserStory Ready`
+- `To Plan` → `technicalPlanWorkflow` (Phase 3) → `Plan Ready`
+
+**Important:** Phases do NOT auto-chain. Each phase must be manually triggered by moving the issue to the corresponding "To X" status.
 
 Chaque phase met à jour le status Linear et ajoute son output en markdown dans la description de l'issue.
+
+---
+
+## Parent-Child Issue Management (v2.3.0)
+
+DevFlow gère automatiquement les relations parent-enfant dans Linear pour les epics et leurs sous-tâches.
+
+### Cascade: Parent → Children
+
+Quand une issue parent est déplacée vers "To User Story" ou "To Plan", le statut est automatiquement **cascadé** à tous ses enfants:
+
+```
+Parent: "Refinement Ready" → "To User Story"
+                ↓
+    [Cascade automatique]
+                ↓
+Child 1: → "To User Story" (workflow démarre)
+Child 2: → "To User Story" (workflow démarre)
+Child 3: → "To User Story" (workflow démarre)
+```
+
+**Comportement:**
+- Les workflows des enfants démarrent en **parallèle**
+- Le workflow du parent est **ignoré** (c'est juste un container/epic)
+- Les enfants déjà au bon statut sont ignorés
+
+### Rollup: Children → Parent
+
+Quand un enfant termine une phase (atteint un statut "Ready" ou "Done"), le statut du parent est automatiquement mis à jour pour refléter le **minimum** (le moins avancé) de tous ses enfants:
+
+```
+Child 1: "UserStory Ready"  (rank 7)
+Child 2: "UserStory Ready"  (rank 7)
+Child 3: "Refinement Ready" (rank 3)  ← minimum
+                ↓
+Parent: "Refinement Ready" (rollup au minimum)
+```
+
+**Statuts qui déclenchent le rollup:**
+- `Refinement Ready`
+- `UserStory Ready`
+- `Plan Ready`
+- `Done`
+
+### Configuration Centralisée des Statuts
+
+Les statuts sont définis de manière centralisée dans `@devflow/common`:
+
+```typescript
+// packages/common/src/types/workflow-config.types.ts
+
+DEFAULT_WORKFLOW_CONFIG.linear = {
+  // Hiérarchie des statuts (du moins avancé au plus avancé)
+  statusOrder: [
+    'To Refinement',       // rank 0
+    'Refinement In Progress',
+    'Refinement Failed',
+    'Refinement Ready',    // rank 3
+    'To User Story',
+    'UserStory In Progress',
+    'UserStory Failed',
+    'UserStory Ready',     // rank 7
+    'To Plan',
+    'Plan In Progress',
+    'Plan Failed',
+    'Plan Ready',          // rank 11
+    'Done',                // rank 12
+  ],
+
+  workflow: {
+    triggerStatuses: ['To Refinement', 'To User Story', 'To Plan'],
+    cascadeStatuses: ['To User Story', 'To Plan'],
+    rollupStatuses: ['Refinement Ready', 'UserStory Ready', 'Plan Ready', 'Done'],
+  },
+};
+```
+
+**Helper functions:**
+```typescript
+import {
+  getStatusRank,      // Obtenir le rang d'un statut
+  isTriggerStatus,    // Vérifie si déclenche un workflow
+  isCascadeStatus,    // Vérifie si cascade aux enfants
+  isRollupStatus,     // Vérifie si déclenche un rollup parent
+  getStatusAtRank,    // Obtenir le statut à un rang donné
+} from '@devflow/common';
+```
+
+---
+
+## PO Questions & Answers (v2.3.0)
+
+Quand le refinement génère des questions pour le Product Owner, DevFlow les poste en commentaires Linear et attend les réponses.
+
+### Flux de Questions
+
+```
+1. Refinement génère des questions
+        ↓
+2. DevFlow poste chaque question en commentaire Linear
+        ↓
+3. Issue passe en "Refinement In Progress" (awaiting answers)
+        ↓
+4. PO répond aux questions (reply to comment)
+        ↓
+5. Webhook détecte la réponse (parent comment match)
+        ↓
+6. Question marquée comme répondue
+        ↓
+7. Quand toutes les questions sont répondues:
+   - Workflow redémarre automatiquement
+   - Réponses injectées dans le contexte
+   - Refinement régénéré avec les clarifications
+```
+
+### Tracking en Base de Données
+
+```prisma
+model TaskQuestion {
+  id              String    @id @default(cuid())
+  taskId          String
+  task            Task      @relation(fields: [taskId], references: [id])
+  question        String    // Texte de la question
+  linearCommentId String    @unique  // ID du commentaire Linear
+  answered        Boolean   @default(false)
+  answerText      String?   // Réponse du PO
+  answerCommentId String?   // ID du commentaire de réponse
+  answeredAt      DateTime?
+  createdAt       DateTime  @default(now())
+}
+```
+
+### Détection des Réponses
+
+DevFlow détecte automatiquement les réponses du PO via le webhook Linear:
+- Un nouveau commentaire est créé
+- Le commentaire est une **réponse** (parent comment existe)
+- Le parent comment correspond à une question DevFlow (via `linearCommentId`)
+
+---
+
+## Sub-Issue Creation from Refinement (v2.3.0)
+
+Quand le refinement détecte qu'une tâche est trop complexe (L/XL), il peut proposer un **découpage automatique** en sous-tâches.
+
+### Format du Suggested Split
+
+```markdown
+### 🔀 Suggested Split
+**Reason:** Cette tâche couvre plusieurs domaines fonctionnels distincts...
+
+**Proposed Stories:**
+#### 1. Basic Login Authentication
+Description de la sous-tâche...
+**Dependencies:** None
+**Acceptance Criteria:**
+1. User can login with email/password
+2. Invalid credentials show error message
+
+#### 2. JWT Token Management
+Description...
+**Dependencies:**
+- Depends on: Basic Login Authentication
+**Acceptance Criteria:**
+1. JWT tokens generated on successful login
+2. Tokens expire after configured duration
+```
+
+### Comportement en Phase User Story
+
+Si un `suggestedSplit` est présent dans le refinement:
+1. **Création des sous-issues** dans Linear avec la relation parent
+2. **Préservation des dépendances** entre sous-issues
+3. **Statut initial:** `To Refinement` (chaque sous-issue passera par son propre cycle)
+4. **Parent mis à jour:** `UserStory Ready` (devient un epic container)
+5. **Commentaire ajouté** au parent expliquant le split avec liens vers les sous-issues
 
 ## Configuration rapide
 
@@ -197,14 +374,14 @@ LINEAR_STATUS_REFINEMENT_IN_PROGRESS=Refinement In Progress
 LINEAR_STATUS_REFINEMENT_READY=Refinement Ready
 LINEAR_STATUS_REFINEMENT_FAILED=Refinement Failed
 
-# Phase 2: User Story
-LINEAR_STATUS_TO_USER_STORY=Refinement Ready
+# Phase 2: User Story (requires separate "To User Story" status in Linear)
+LINEAR_STATUS_TO_USER_STORY=To User Story
 LINEAR_STATUS_USER_STORY_IN_PROGRESS=UserStory In Progress
 LINEAR_STATUS_USER_STORY_READY=UserStory Ready
 LINEAR_STATUS_USER_STORY_FAILED=UserStory Failed
 
-# Phase 3: Technical Plan
-LINEAR_STATUS_TO_PLAN=UserStory Ready
+# Phase 3: Technical Plan (requires separate "To Plan" status in Linear)
+LINEAR_STATUS_TO_PLAN=To Plan
 LINEAR_STATUS_PLAN_IN_PROGRESS=Plan In Progress
 LINEAR_STATUS_PLAN_READY=Plan Ready
 LINEAR_STATUS_PLAN_FAILED=Plan Failed
@@ -622,15 +799,20 @@ Scripts de test end-to-end qui valident le système complet via la CLI:
 
 ### Code source
 - `packages/worker/src/workflows/devflow.workflow.ts` - Workflow principal
+- `packages/worker/src/workflows/phases/` - Sub-workflows Three-Phase
 - `packages/sdk/src/linear/linear.client.ts` - Linear client
 - `packages/sdk/src/agents/agent.interface.ts` - Interface AI agents
 - `packages/sdk/src/auth/` - OAuth services (token encryption, storage, refresh)
 - `packages/api/src/auth/` - OAuth HTTP endpoints
+- `packages/api/src/webhooks/webhooks.service.ts` - Webhook handling avec cascade/rollup (v2.3.0)
+- `packages/api/src/linear/linear-sync-api.service.ts` - Linear sync avec cascade/rollup (v2.3.0)
 - `packages/api/src/integrations/` - Integration controllers & services (Nouveau v2.1.0)
-- `packages/api/prisma/schema.prisma` - Schéma complet
+- `packages/common/src/types/workflow-config.types.ts` - Configuration centralisée des statuts (v2.3.0)
+- `packages/api/prisma/schema.prisma` - Schéma complet (TaskQuestion model v2.3.0)
 
 ### Tests & validation
 - `packages/sdk/src/__manual_tests__/` - Tests SDK des intégrations (Nouveau v2.1.0)
 - `packages/sdk/src/__manual_tests__/README.md` - Guide des tests SDK
 - `tests/e2e/` - Scripts de tests E2E (Nouveau v2.1.0)
+- `tests/e2e/test-refinement-workflow.sh` - Test E2E du workflow refinement (v2.3.0)
 - `tests/e2e/README.md` - Guide des tests E2E
