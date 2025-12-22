@@ -113,6 +113,8 @@ export interface FixGenerationOutput {
 // Phase 1: Refinement Output
 export interface RefinementOutput {
   taskType: 'feature' | 'bug' | 'enhancement' | 'chore'; // Type détecté
+  suggestedTitle: string; // Reformulated title in English (clear, actionable)
+  reformulatedDescription: string; // Reformulated description in English (detailed, structured)
   businessContext: string; // Contexte métier clarifié
   objectives: string[]; // Objectifs business identifiés
   questionsForPO?: string[]; // Questions pour le Product Owner

@@ -25,8 +25,15 @@ import {
   formatRefinementContent,
   formatUserStoryContent,
   formatTechnicalPlanContent,
+  // Standalone document formatters
+  formatUserStoryDocument,
+  formatTechnicalPlanDocument,
+  formatBestPracticesDocument,
+  formatCodebaseContextDocument,
+  formatDocumentationContextDocument,
   DEVFLOW_CUSTOM_FIELDS,
 } from '@devflow/sdk';
+import type { AnalyzeProjectContextOutput } from '@/activities/codebase.activities';
 import { oauthResolver } from '@/services/oauth-context';
 import {
   parseExternalLinksFromDescription,
@@ -227,6 +234,7 @@ export async function updateLinearTask(input: {
   linearId: string;
   updates: {
     status?: string;
+    title?: string;
     description?: string;
   };
 }): Promise<void> {
@@ -242,7 +250,16 @@ export async function updateLinearTask(input: {
       await client.updateStatus(input.linearId, input.updates.status);
     }
 
-    if (input.updates.description) {
+    // Update title and description together if both are provided (single API call)
+    if (input.updates.title && input.updates.description) {
+      await client.updateTitleAndDescription(
+        input.linearId,
+        input.updates.title,
+        input.updates.description
+      );
+    } else if (input.updates.title) {
+      await client.updateTitle(input.linearId, input.updates.title);
+    } else if (input.updates.description) {
       await client.updateDescription(input.linearId, input.updates.description);
     }
 
@@ -487,18 +504,19 @@ export async function appendRefinementToLinearIssue(input: {
 }
 
 /**
- * Append user story content to Linear issue description
+ * Create/Update User Story as a Linear Document linked to the issue
  * Phase 2 of Three-Phase Agile Workflow
  *
- * Uses structured formatting with collapsible sections and progress summary
+ * Creates a standalone Linear Document linked via issueId
+ * Stores the document ID in Task for future retrieval
  */
 export async function appendUserStoryToLinearIssue(input: {
   projectId: string;
   linearId: string;
   userStory: UserStoryGenerationOutput;
   council?: CouncilSummary;
-}): Promise<void> {
-  logger.info('Appending user story to Linear issue', { linearId: input.linearId });
+}): Promise<{ documentId: string; documentUrl: string }> {
+  logger.info('Creating user story document for Linear issue', { linearId: input.linearId });
 
   // Resolve Linear API key via OAuth
   const apiKey = await resolveLinearApiKey(input.projectId);
@@ -506,47 +524,94 @@ export async function appendUserStoryToLinearIssue(input: {
   try {
     const client = createLinearClient(apiKey);
 
-    // Get current description to preserve original content and existing phases
+    // Get issue to get its identifier for document title
     const issue = await client.getIssue(input.linearId);
-    const currentDescription = issue.description || '';
 
-    // Parse existing DevFlow content
+    // Format content as standalone document
+    const content = formatUserStoryDocument(input.userStory, input.council);
+    const title = `${issue.identifier} - User Story`;
+
+    // Find task by linearId to check if document already exists
+    const task = await prisma.task.findFirst({
+      where: { linearId: input.linearId },
+      select: { id: true, userStoryDocumentId: true },
+    });
+
+    let documentId: string;
+    let documentUrl: string;
+
+    if (task?.userStoryDocumentId) {
+      // Update existing document
+      logger.info('Updating existing user story document', {
+        linearId: input.linearId,
+        documentId: task.userStoryDocumentId,
+      });
+
+      await client.updateDocument(task.userStoryDocumentId, content);
+      const doc = await client.getDocument(task.userStoryDocumentId);
+      documentId = task.userStoryDocumentId;
+      documentUrl = doc?.url || '';
+    } else {
+      // Create new document linked to issue
+      logger.info('Creating new user story document', { linearId: input.linearId });
+
+      const doc = await client.createIssueDocument({
+        issueId: input.linearId,
+        title,
+        content,
+      });
+
+      documentId = doc.id;
+      documentUrl = doc.url;
+
+      // Store document ID in Task if task exists
+      if (task) {
+        await prisma.task.update({
+          where: { id: task.id },
+          data: { userStoryDocumentId: documentId },
+        });
+        logger.info('Stored user story document ID in Task', { taskId: task.id, documentId });
+      }
+    }
+
+    // Update issue description to include document link
+    const currentDescription = issue.description || '';
     const parsed = parseDevFlowDescription(currentDescription);
 
-    // Format user story content (without H1 header - will be in collapsible)
-    const userStoryContent = formatUserStoryContent(input.userStory);
-
-    // Build new structured description
     const newDescription = formatDevFlowDescription({
       originalDescription: parsed.originalDescription,
-      // Preserve existing refinement if it exists
       refinement: parsed.refinementContent ? { content: parsed.refinementContent } : undefined,
-      userStory: {
-        content: userStoryContent,
-        councilSummary: input.council,
-      },
-      // Preserve existing technical plan if it exists
+      // Don't include userStory content - it's in the document
       technicalPlan: parsed.technicalPlanContent ? { content: parsed.technicalPlanContent } : undefined,
+      documentLinks: {
+        userStory: documentUrl,
+        // Preserve existing technical plan document link if any
+        technicalPlan: undefined, // Will be added by Phase 3
+      },
     });
 
-    // Replace entire description with new structured format
     await client.updateDescription(input.linearId, newDescription);
 
-    logger.info('User story appended to Linear issue with structured format', {
+    logger.info('User story document created/updated', {
       linearId: input.linearId,
+      documentId,
+      documentUrl,
       hasCouncil: !!input.council,
     });
+
+    return { documentId, documentUrl };
   } catch (error) {
-    logger.error('Failed to append user story to Linear', error as Error, { linearId: input.linearId });
+    logger.error('Failed to create user story document', error as Error, { linearId: input.linearId });
     throw error;
   }
 }
 
 /**
- * Append technical plan content to Linear issue description
+ * Create/Update Technical Plan as a Linear Document linked to the issue
  * Phase 3 of Three-Phase Agile Workflow
  *
- * Uses structured formatting with collapsible sections and progress summary
+ * Creates a standalone Linear Document linked via issueId
+ * Stores the document ID in Task for future retrieval
  */
 export async function appendTechnicalPlanToLinearIssue(input: {
   projectId: string;
@@ -565,8 +630,8 @@ export async function appendTechnicalPlanToLinearIssue(input: {
     bestPractices: string;
     perplexityModel: string;
   };
-}): Promise<void> {
-  logger.info('Appending technical plan to Linear issue', { linearId: input.linearId });
+}): Promise<{ documentId: string; documentUrl: string }> {
+  logger.info('Creating technical plan document for Linear issue', { linearId: input.linearId });
 
   // Resolve Linear API key via OAuth
   const apiKey = await resolveLinearApiKey(input.projectId);
@@ -574,41 +639,108 @@ export async function appendTechnicalPlanToLinearIssue(input: {
   try {
     const client = createLinearClient(apiKey);
 
-    // Get current description to preserve original content and existing phases
+    // Get issue to get its identifier for document title
     const issue = await client.getIssue(input.linearId);
-    const currentDescription = issue.description || '';
 
-    // Parse existing DevFlow content
+    // Format content as standalone document
+    const content = formatTechnicalPlanDocument(
+      input.plan,
+      input.contextUsed,
+      input.council,
+      input.bestPractices
+    );
+    const title = `${issue.identifier} - Technical Plan`;
+
+    // Find task by linearId to check if document already exists
+    const task = await prisma.task.findFirst({
+      where: { linearId: input.linearId },
+      select: { id: true, technicalPlanDocumentId: true },
+    });
+
+    let documentId: string;
+    let documentUrl: string;
+
+    if (task?.technicalPlanDocumentId) {
+      // Update existing document
+      logger.info('Updating existing technical plan document', {
+        linearId: input.linearId,
+        documentId: task.technicalPlanDocumentId,
+      });
+
+      await client.updateDocument(task.technicalPlanDocumentId, content);
+      const doc = await client.getDocument(task.technicalPlanDocumentId);
+      documentId = task.technicalPlanDocumentId;
+      documentUrl = doc?.url || '';
+    } else {
+      // Create new document linked to issue
+      logger.info('Creating new technical plan document', { linearId: input.linearId });
+
+      const doc = await client.createIssueDocument({
+        issueId: input.linearId,
+        title,
+        content,
+      });
+
+      documentId = doc.id;
+      documentUrl = doc.url;
+
+      // Store document ID in Task if task exists
+      if (task) {
+        await prisma.task.update({
+          where: { id: task.id },
+          data: { technicalPlanDocumentId: documentId },
+        });
+        logger.info('Stored technical plan document ID in Task', { taskId: task.id, documentId });
+      }
+    }
+
+    // Update issue description to include document link
+    const currentDescription = issue.description || '';
     const parsed = parseDevFlowDescription(currentDescription);
 
-    // Format technical plan content (without H1 header - will be in collapsible)
-    const technicalPlanContent = formatTechnicalPlanContent(input.plan);
+    // Try to get user story and best practices document URLs from task
+    let userStoryDocumentUrl: string | undefined;
+    let bestPracticesDocumentUrl: string | undefined;
+    if (task?.id) {
+      const taskWithDocs = await prisma.task.findUnique({
+        where: { id: task.id },
+        select: { userStoryDocumentId: true, bestPracticesDocumentId: true },
+      });
+      if (taskWithDocs?.userStoryDocumentId) {
+        const userStoryDoc = await client.getDocument(taskWithDocs.userStoryDocumentId);
+        userStoryDocumentUrl = userStoryDoc?.url;
+      }
+      if (taskWithDocs?.bestPracticesDocumentId) {
+        const bestPracticesDoc = await client.getDocument(taskWithDocs.bestPracticesDocumentId);
+        bestPracticesDocumentUrl = bestPracticesDoc?.url;
+      }
+    }
 
-    // Build new structured description
     const newDescription = formatDevFlowDescription({
       originalDescription: parsed.originalDescription,
-      // Preserve existing phases if they exist
       refinement: parsed.refinementContent ? { content: parsed.refinementContent } : undefined,
-      userStory: parsed.userStoryContent ? { content: parsed.userStoryContent } : undefined,
-      technicalPlan: {
-        content: technicalPlanContent,
-        councilSummary: input.council,
-        contextUsed: input.contextUsed,
-        bestPractices: input.bestPractices,
+      // Don't include content - it's in documents
+      documentLinks: {
+        userStory: userStoryDocumentUrl,
+        bestPractices: bestPracticesDocumentUrl,
+        technicalPlan: documentUrl,
       },
     });
 
-    // Replace entire description with new structured format
     await client.updateDescription(input.linearId, newDescription);
 
-    logger.info('Technical plan appended to Linear issue with structured format', {
+    logger.info('Technical plan document created/updated', {
       linearId: input.linearId,
+      documentId,
+      documentUrl,
       hasCouncil: !!input.council,
       hasContext: !!input.contextUsed,
       hasBestPractices: !!input.bestPractices,
     });
+
+    return { documentId, documentUrl };
   } catch (error) {
-    logger.error('Failed to append technical plan to Linear', error as Error, { linearId: input.linearId });
+    logger.error('Failed to create technical plan document', error as Error, { linearId: input.linearId });
     throw error;
   }
 }
@@ -1020,6 +1152,378 @@ export async function getPOAnswersForTask(input: {
     return { answers };
   } catch (error) {
     logger.error('Failed to get PO answers', error as Error, { linearIssueId: input.linearIssueId });
+    throw error;
+  }
+}
+
+// ============================================
+// Document Operations
+// ============================================
+
+/**
+ * Get document content for a phase
+ * Used to retrieve User Story content for Phase 3 (Technical Plan)
+ * or any other cross-phase context retrieval
+ */
+export async function getPhaseDocumentContent(input: {
+  projectId: string;
+  linearId: string;
+  phase: 'user_story' | 'technical_plan' | 'best_practices' | 'codebase_context' | 'documentation_context';
+}): Promise<{ content: string | null; documentId: string | null; documentUrl: string | null }> {
+  logger.info('Getting phase document content', {
+    linearId: input.linearId,
+    phase: input.phase,
+  });
+
+  try {
+    // Find task by linearId to get document ID
+    const task = await prisma.task.findFirst({
+      where: { linearId: input.linearId },
+      select: {
+        userStoryDocumentId: true,
+        technicalPlanDocumentId: true,
+        bestPracticesDocumentId: true,
+        codebaseContextDocumentId: true,
+        documentationContextDocumentId: true,
+      },
+    });
+
+    if (!task) {
+      logger.warn('Task not found for linearId', { linearId: input.linearId });
+      return { content: null, documentId: null, documentUrl: null };
+    }
+
+    // Get appropriate document ID based on phase
+    const phaseToDocumentId: Record<typeof input.phase, string | null> = {
+      user_story: task.userStoryDocumentId,
+      technical_plan: task.technicalPlanDocumentId,
+      best_practices: task.bestPracticesDocumentId,
+      codebase_context: task.codebaseContextDocumentId,
+      documentation_context: task.documentationContextDocumentId,
+    };
+    const documentId = phaseToDocumentId[input.phase];
+
+    if (!documentId) {
+      logger.info('No document ID found for phase', {
+        linearId: input.linearId,
+        phase: input.phase,
+      });
+      return { content: null, documentId: null, documentUrl: null };
+    }
+
+    // Resolve Linear API key and fetch document
+    const apiKey = await resolveLinearApiKey(input.projectId);
+    const client = createLinearClient(apiKey);
+
+    const doc = await client.getDocument(documentId);
+
+    if (!doc) {
+      logger.warn('Document not found in Linear', { documentId });
+      return { content: null, documentId, documentUrl: null };
+    }
+
+    logger.info('Phase document content retrieved', {
+      linearId: input.linearId,
+      phase: input.phase,
+      documentId,
+      contentLength: doc.content.length,
+    });
+
+    return {
+      content: doc.content,
+      documentId: doc.id,
+      documentUrl: doc.url,
+    };
+  } catch (error) {
+    logger.error('Failed to get phase document content', error as Error, {
+      linearId: input.linearId,
+      phase: input.phase,
+    });
+    // Return null instead of throwing - allows fallback to description extraction
+    return { content: null, documentId: null, documentUrl: null };
+  }
+}
+
+/**
+ * Save Best Practices as a Linear Document linked to the issue
+ * Called after fetching best practices from Perplexity
+ */
+export async function saveBestPracticesDocument(input: {
+  projectId: string;
+  linearId: string;
+  bestPractices: {
+    bestPractices: string;
+    perplexityModel: string;
+    sources?: string[];
+  };
+  taskContext?: {
+    title: string;
+    language?: string;
+    framework?: string;
+  };
+}): Promise<{ documentId: string; documentUrl: string }> {
+  logger.info('Creating best practices document for Linear issue', { linearId: input.linearId });
+
+  // Resolve Linear API key via OAuth
+  const apiKey = await resolveLinearApiKey(input.projectId);
+
+  try {
+    const client = createLinearClient(apiKey);
+
+    // Get issue to get its identifier for document title
+    const issue = await client.getIssue(input.linearId);
+
+    // Format content as standalone document
+    const content = formatBestPracticesDocument(input.bestPractices, input.taskContext);
+    const title = `${issue.identifier} - Best Practices`;
+
+    // Find task by linearId to check if document already exists
+    const task = await prisma.task.findFirst({
+      where: { linearId: input.linearId },
+      select: { id: true, bestPracticesDocumentId: true },
+    });
+
+    let documentId: string;
+    let documentUrl: string;
+
+    if (task?.bestPracticesDocumentId) {
+      // Update existing document
+      logger.info('Updating existing best practices document', {
+        linearId: input.linearId,
+        documentId: task.bestPracticesDocumentId,
+      });
+
+      await client.updateDocument(task.bestPracticesDocumentId, content);
+      const doc = await client.getDocument(task.bestPracticesDocumentId);
+      documentId = task.bestPracticesDocumentId;
+      documentUrl = doc?.url || '';
+    } else {
+      // Create new document linked to issue
+      logger.info('Creating new best practices document', { linearId: input.linearId });
+
+      const doc = await client.createIssueDocument({
+        issueId: input.linearId,
+        title,
+        content,
+      });
+
+      documentId = doc.id;
+      documentUrl = doc.url;
+
+      // Store document ID in Task if task exists
+      if (task) {
+        await prisma.task.update({
+          where: { id: task.id },
+          data: { bestPracticesDocumentId: documentId },
+        });
+        logger.info('Stored best practices document ID in Task', { taskId: task.id, documentId });
+      }
+    }
+
+    logger.info('Best practices document created/updated', {
+      linearId: input.linearId,
+      documentId,
+      documentUrl,
+    });
+
+    return { documentId, documentUrl };
+  } catch (error) {
+    logger.error('Failed to create best practices document', error as Error, { linearId: input.linearId });
+    throw error;
+  }
+}
+
+/**
+ * Save Codebase Context (RAG chunks) as a Linear Document linked to the issue
+ * Created in Phase 1 (Refinement), reused in Phases 2 and 3
+ *
+ * Contains top K RAG chunks with full code content
+ */
+export async function saveCodebaseContextDocument(input: {
+  projectId: string;
+  linearId: string;
+  chunks: Array<{
+    filePath: string;
+    content: string;
+    score: number;
+    language: string;
+    startLine?: number;
+    endLine?: number;
+    chunkType?: string;
+  }>;
+  taskContext?: {
+    title: string;
+    query: string;
+  };
+}): Promise<{ documentId: string; documentUrl: string }> {
+  logger.info('Creating codebase context document for Linear issue', {
+    linearId: input.linearId,
+    chunksCount: input.chunks.length,
+  });
+
+  // Resolve Linear API key via OAuth
+  const apiKey = await resolveLinearApiKey(input.projectId);
+
+  try {
+    const client = createLinearClient(apiKey);
+
+    // Get issue to get its identifier for document title
+    const issue = await client.getIssue(input.linearId);
+
+    // Format content as standalone document
+    const content = formatCodebaseContextDocument(input.chunks, input.taskContext);
+    const title = `${issue.identifier} - Codebase Context`;
+
+    // Find task by linearId to check if document already exists
+    const task = await prisma.task.findFirst({
+      where: { linearId: input.linearId },
+      select: { id: true, codebaseContextDocumentId: true },
+    });
+
+    let documentId: string;
+    let documentUrl: string;
+
+    if (task?.codebaseContextDocumentId) {
+      // Update existing document
+      logger.info('Updating existing codebase context document', {
+        linearId: input.linearId,
+        documentId: task.codebaseContextDocumentId,
+      });
+
+      await client.updateDocument(task.codebaseContextDocumentId, content);
+      const doc = await client.getDocument(task.codebaseContextDocumentId);
+      documentId = task.codebaseContextDocumentId;
+      documentUrl = doc?.url || '';
+    } else {
+      // Create new document linked to issue
+      logger.info('Creating new codebase context document', { linearId: input.linearId });
+
+      const doc = await client.createIssueDocument({
+        issueId: input.linearId,
+        title,
+        content,
+      });
+
+      documentId = doc.id;
+      documentUrl = doc.url;
+
+      // Store document ID in Task if task exists
+      if (task) {
+        await prisma.task.update({
+          where: { id: task.id },
+          data: { codebaseContextDocumentId: documentId },
+        });
+        logger.info('Stored codebase context document ID in Task', { taskId: task.id, documentId });
+      }
+    }
+
+    logger.info('Codebase context document created/updated', {
+      linearId: input.linearId,
+      documentId,
+      documentUrl,
+      chunksCount: input.chunks.length,
+    });
+
+    return { documentId, documentUrl };
+  } catch (error) {
+    logger.error('Failed to create codebase context document', error as Error, { linearId: input.linearId });
+    throw error;
+  }
+}
+
+/**
+ * Save Documentation Context as a Linear Document linked to the issue
+ * Created in Phase 1 (Refinement), reused in Phases 2 and 3
+ *
+ * Contains project configuration, technical stack, and relevant documentation
+ */
+export async function saveDocumentationContextDocument(input: {
+  projectId: string;
+  linearId: string;
+  context: AnalyzeProjectContextOutput;
+  taskContext?: {
+    title: string;
+  };
+}): Promise<{ documentId: string; documentUrl: string }> {
+  logger.info('Creating documentation context document for Linear issue', {
+    linearId: input.linearId,
+    language: input.context.projectStructure.language,
+    framework: input.context.projectStructure.framework,
+  });
+
+  // Resolve Linear API key via OAuth
+  const apiKey = await resolveLinearApiKey(input.projectId);
+
+  try {
+    const client = createLinearClient(apiKey);
+
+    // Get issue to get its identifier for document title
+    const issue = await client.getIssue(input.linearId);
+
+    // Format content as standalone document
+    const content = formatDocumentationContextDocument({
+      projectStructure: input.context.projectStructure,
+      dependencies: input.context.dependencies,
+      documentation: input.context.documentation,
+      relevantDocs: input.context.relevantDocs,
+      taskContext: input.taskContext,
+    });
+    const title = `${issue.identifier} - Documentation Context`;
+
+    // Find task by linearId to check if document already exists
+    const task = await prisma.task.findFirst({
+      where: { linearId: input.linearId },
+      select: { id: true, documentationContextDocumentId: true },
+    });
+
+    let documentId: string;
+    let documentUrl: string;
+
+    if (task?.documentationContextDocumentId) {
+      // Update existing document
+      logger.info('Updating existing documentation context document', {
+        linearId: input.linearId,
+        documentId: task.documentationContextDocumentId,
+      });
+
+      await client.updateDocument(task.documentationContextDocumentId, content);
+      const doc = await client.getDocument(task.documentationContextDocumentId);
+      documentId = task.documentationContextDocumentId;
+      documentUrl = doc?.url || '';
+    } else {
+      // Create new document linked to issue
+      logger.info('Creating new documentation context document', { linearId: input.linearId });
+
+      const doc = await client.createIssueDocument({
+        issueId: input.linearId,
+        title,
+        content,
+      });
+
+      documentId = doc.id;
+      documentUrl = doc.url;
+
+      // Store document ID in Task if task exists
+      if (task) {
+        await prisma.task.update({
+          where: { id: task.id },
+          data: { documentationContextDocumentId: documentId },
+        });
+        logger.info('Stored documentation context document ID in Task', { taskId: task.id, documentId });
+      }
+    }
+
+    logger.info('Documentation context document created/updated', {
+      linearId: input.linearId,
+      documentId,
+      documentUrl,
+      language: input.context.projectStructure.language,
+      framework: input.context.projectStructure.framework,
+    });
+
+    return { documentId, documentUrl };
+  } catch (error) {
+    logger.error('Failed to create documentation context document', error as Error, { linearId: input.linearId });
     throw error;
   }
 }

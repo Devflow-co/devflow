@@ -9,7 +9,7 @@ export * from './vcs';
 export * from './ci';
 
 // Linear Client
-export { LinearClient, createLinearClient, type LinearCustomField, type LinearComment } from './linear/linear.client';
+export { LinearClient, createLinearClient, type LinearCustomField, type LinearComment, type LinearDocument } from './linear/linear.client';
 export {
   LinearIntegrationService,
   createLinearIntegrationService,
@@ -43,8 +43,22 @@ export {
   formatRefinementContent,
   formatUserStoryContent,
   formatTechnicalPlanContent,
+  // Standalone document formatters (for Linear Documents)
+  formatUserStoryDocument,
+  formatTechnicalPlanDocument,
+  formatBestPracticesDocument,
+  formatCodebaseContextDocument,
+  formatDocumentationContextDocument,
+  // External context document formatters (Figma, Sentry, GitHub Issue)
+  formatFigmaContextDocument,
+  formatSentryContextDocument,
+  formatGitHubIssueContextDocument,
   type ParsedDevFlowDescription,
   type DevFlowDescriptionParts,
+  type DocumentationContextInput,
+  type FigmaContextDocumentInput,
+  type SentryContextDocumentInput,
+  type GitHubIssueContextDocumentInput,
 } from './linear/spec-formatter';
 export {
   LinearSyncService,

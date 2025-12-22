@@ -41,6 +41,8 @@ export interface GenerateTechnicalPlanInput {
     totalChunks: number;
   };
   bestPractices?: FetchBestPracticesOutput;
+  /** Documentation context markdown (from Phase 1 document) */
+  documentationContext?: string;
 }
 
 export interface GenerateTechnicalPlanOutput {
@@ -91,25 +93,21 @@ export async function fetchBestPractices(
       throw new Error('OPENROUTER_API_KEY not configured');
     }
 
-    // Build context-aware query for Perplexity
-    let query = `What are the best practices for: ${input.task.title}`;
+    // Build concise context-aware query for Perplexity
+    const techStack = input.context
+      ? [input.context.language, input.context.framework].filter(Boolean).join(' / ')
+      : '';
 
-    if (input.context) {
-      if (input.context.language) {
-        query += `\nLanguage: ${input.context.language}`;
-      }
-      if (input.context.framework) {
-        query += `\nFramework: ${input.context.framework}`;
-      }
-    }
+    const query = `Best practices for implementing: "${input.task.title}"${techStack ? ` (${techStack})` : ''}
 
-    query += `\n\nTask description: ${input.task.description}`;
-    query += `\n\nPlease provide:
-1. Industry best practices for this type of task
-2. Common pitfalls to avoid
-3. Recommended patterns and approaches
-4. Security considerations if applicable
-5. Performance optimization tips`;
+Context: ${input.task.description.slice(0, 500)}${input.task.description.length > 500 ? '...' : ''}
+
+Provide a concise summary (max 500 words) with:
+- Key implementation patterns
+- Common pitfalls to avoid
+- Security/performance tips if relevant
+
+Be specific and actionable. Skip generic advice.`;
 
     // Call Perplexity via OpenRouter
     const response = await axios.post(
@@ -235,7 +233,14 @@ export async function generateTechnicalPlan(
       usingRAG,
     });
 
-    // Step 3: Load prompts with user story, context, and best practices
+    // Step 3: Build combined context (documentation + codebase)
+    let combinedContext = '';
+    if (input.documentationContext) {
+      combinedContext += input.documentationContext + '\n\n---\n\n';
+    }
+    combinedContext += formatContextForAI(codebaseContext);
+
+    // Step 4: Load prompts with user story, context, and best practices
     const prompts = await loadPrompts('technical-plan', {
       userStoryActor: input.userStory.userStory.actor,
       userStoryGoal: input.userStory.userStory.goal,
@@ -246,11 +251,11 @@ export async function generateTechnicalPlan(
       projectLanguage: specContext.language,
       projectFramework: specContext.framework || 'Not specified',
       projectDependencies: specContext.dependencies.join(', '),
-      codebaseContext: formatContextForAI(codebaseContext),
+      codebaseContext: combinedContext,
       bestPractices: input.bestPractices?.bestPractices || 'No best practices available',
     });
 
-    // Step 4: Generate with AI (council or single model)
+    // Step 5: Generate with AI (council or single model)
     const useCouncil = process.env.ENABLE_COUNCIL === 'true';
 
     let plan: TechnicalPlanGenerationOutput;

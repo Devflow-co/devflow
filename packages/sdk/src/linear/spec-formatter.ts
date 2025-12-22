@@ -522,6 +522,16 @@ export interface DevFlowDescriptionParts {
       perplexityModel: string;
     };
   };
+  /**
+   * Links to Linear Documents for each phase
+   * Used when phases are stored as separate documents linked to the issue
+   */
+  documentLinks?: {
+    codebaseContext?: string;
+    userStory?: string;
+    technicalPlan?: string;
+    bestPractices?: string;
+  };
 }
 
 /**
@@ -599,7 +609,13 @@ function extractPhaseContent(
 }
 
 /**
- * Format the complete DevFlow description with progress summary and collapsible sections
+ * Format the complete DevFlow description with progress summary and document links
+ *
+ * New architecture (v2.3.0):
+ * - Refinement (Phase 1) stays in the issue description
+ * - User Story (Phase 2) is stored in a separate Linear Document (linked via issueId)
+ * - Technical Plan (Phase 3) is stored in a separate Linear Document (linked via issueId)
+ * - Document links are added to the description for quick navigation
  */
 export function formatDevFlowDescription(parts: DevFlowDescriptionParts): string {
   const sections: string[] = [];
@@ -616,11 +632,14 @@ export function formatDevFlowDescription(parts: DevFlowDescriptionParts): string
   sections.push(DEVFLOW_MARKER);
   sections.push('');
 
-  // Part 3: Progress summary
+  // Part 3: Progress summary - check documents OR inline content
+  const hasUserStory = !!parts.userStory || !!parts.documentLinks?.userStory;
+  const hasTechnicalPlan = !!parts.technicalPlan || !!parts.documentLinks?.technicalPlan;
+
   const phases = [
     { name: 'Refinement', exists: !!parts.refinement, num: '1️⃣' },
-    { name: 'User Story', exists: !!parts.userStory, num: '2️⃣' },
-    { name: 'Technical Plan', exists: !!parts.technicalPlan, num: '3️⃣' },
+    { name: 'User Story', exists: hasUserStory, num: '2️⃣' },
+    { name: 'Technical Plan', exists: hasTechnicalPlan, num: '3️⃣' },
   ];
 
   sections.push('**Progress:** ' + phases.map((p) => {
@@ -631,7 +650,27 @@ export function formatDevFlowDescription(parts: DevFlowDescriptionParts): string
   }).join(' → '));
   sections.push('');
 
-  // Part 4: Phase 1 - Refinement
+  // Part 4: Document links section (if documents exist)
+  if (parts.documentLinks?.codebaseContext || parts.documentLinks?.userStory || parts.documentLinks?.technicalPlan || parts.documentLinks?.bestPractices) {
+    sections.push('');
+    sections.push('## 📄 Documents');
+    sections.push('');
+    if (parts.documentLinks.codebaseContext) {
+      sections.push(`- [📂 Codebase Context](${parts.documentLinks.codebaseContext})`);
+    }
+    if (parts.documentLinks.userStory) {
+      sections.push(`- [📝 User Story](${parts.documentLinks.userStory})`);
+    }
+    if (parts.documentLinks.bestPractices) {
+      sections.push(`- [💡 Best Practices](${parts.documentLinks.bestPractices})`);
+    }
+    if (parts.documentLinks.technicalPlan) {
+      sections.push(`- [🔧 Technical Plan](${parts.documentLinks.technicalPlan})`);
+    }
+    sections.push('');
+  }
+
+  // Part 5: Phase 1 - Refinement (always in description)
   if (parts.refinement) {
     sections.push('');
     sections.push(PHASE_MARKERS.refinement.start);
@@ -646,8 +685,9 @@ export function formatDevFlowDescription(parts: DevFlowDescriptionParts): string
     sections.push('');
   }
 
-  // Part 5: Phase 2 - User Story
-  if (parts.userStory) {
+  // Part 6: Phase 2 - User Story (legacy: inline content when not using documents)
+  // Only include if content is provided AND no document link exists
+  if (parts.userStory && !parts.documentLinks?.userStory) {
     sections.push(PHASE_MARKERS.userStory.start);
     sections.push('');
     sections.push(parts.userStory.content);
@@ -660,8 +700,9 @@ export function formatDevFlowDescription(parts: DevFlowDescriptionParts): string
     sections.push('');
   }
 
-  // Part 6: Phase 3 - Technical Plan
-  if (parts.technicalPlan) {
+  // Part 7: Phase 3 - Technical Plan (legacy: inline content when not using documents)
+  // Only include if content is provided AND no document link exists
+  if (parts.technicalPlan && !parts.documentLinks?.technicalPlan) {
     sections.push(PHASE_MARKERS.technicalPlan.start);
     sections.push('');
     sections.push(parts.technicalPlan.content);
@@ -963,6 +1004,1028 @@ export function formatTechnicalPlanContent(plan: TechnicalPlanGenerationOutput):
     }
     sections.push('');
   }
+
+  return sections.join('\n');
+}
+
+// ============================================
+// Standalone Document Formatters
+// For Linear Documents linked to issues via issueId
+// ============================================
+
+/**
+ * Format User Story as a standalone Linear Document
+ * Used when storing User Story in a separate document linked to the issue
+ * Phase 2 output
+ */
+export function formatUserStoryDocument(
+  userStory: UserStoryGenerationOutput,
+  council?: CouncilSummary
+): string {
+  const sections: string[] = [];
+
+  // Header with DevFlow branding
+  sections.push('# User Story');
+  sections.push('');
+  sections.push('> Generated by DevFlow - Phase 2: User Story');
+  sections.push('');
+  sections.push('---');
+  sections.push('');
+
+  // User Story Format
+  sections.push('## Story');
+  sections.push('');
+  sections.push(`**As a** ${userStory.userStory.actor},`);
+  sections.push(`**I want** ${userStory.userStory.goal},`);
+  sections.push(`**So that** ${userStory.userStory.benefit}.`);
+  sections.push('');
+
+  // Business Value
+  if (userStory.businessValue) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## Business Value');
+    sections.push('');
+    sections.push(userStory.businessValue);
+    sections.push('');
+  }
+
+  // Acceptance Criteria
+  if (userStory.acceptanceCriteria && userStory.acceptanceCriteria.length > 0) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## Acceptance Criteria');
+    sections.push('');
+    userStory.acceptanceCriteria.forEach((criterion, i) => {
+      sections.push(`${i + 1}. ${criterion}`);
+    });
+    sections.push('');
+  }
+
+  // Definition of Done
+  if (userStory.definitionOfDone && userStory.definitionOfDone.length > 0) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## Definition of Done');
+    sections.push('');
+    userStory.definitionOfDone.forEach((item) => {
+      sections.push(`- [ ] ${item}`);
+    });
+    sections.push('');
+  }
+
+  // Story Points
+  sections.push('---');
+  sections.push('');
+  sections.push('## Estimated Complexity');
+  sections.push('');
+  sections.push(`**Story Points:** ${userStory.storyPoints} (Fibonacci scale)`);
+  sections.push('');
+
+  // Council Summary if provided
+  if (council) {
+    sections.push('---');
+    sections.push('');
+    sections.push(formatCouncilSummaryAsMarkdown(council));
+  }
+
+  // Footer timestamp
+  sections.push('---');
+  sections.push('');
+  sections.push(`*Generated at: ${new Date().toISOString()}*`);
+
+  return sections.join('\n');
+}
+
+/**
+ * Format Technical Plan as a standalone Linear Document
+ * Used when storing Technical Plan in a separate document linked to the issue
+ * Phase 3 output
+ */
+export function formatTechnicalPlanDocument(
+  plan: TechnicalPlanGenerationOutput,
+  contextUsed?: {
+    language: string;
+    framework?: string;
+    dependencies: number;
+    conventions: number;
+    filesAnalyzed: string[];
+    usingRAG: boolean;
+  },
+  council?: CouncilSummary,
+  bestPractices?: {
+    bestPractices: string;
+    perplexityModel: string;
+  }
+): string {
+  const sections: string[] = [];
+
+  // Header with DevFlow branding
+  sections.push('# Technical Plan');
+  sections.push('');
+  sections.push('> Generated by DevFlow - Phase 3: Technical Plan');
+  sections.push('');
+  sections.push('---');
+  sections.push('');
+
+  // Architecture Decisions
+  if (plan.architecture && plan.architecture.length > 0) {
+    sections.push('## Architecture Decisions');
+    sections.push('');
+    plan.architecture.forEach((decision, i) => {
+      sections.push(`${i + 1}. ${decision}`);
+    });
+    sections.push('');
+  }
+
+  // Files Affected
+  if (plan.filesAffected && plan.filesAffected.length > 0) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## Files to Modify');
+    sections.push('');
+    plan.filesAffected.forEach((file) => {
+      sections.push(`- \`${file}\``);
+    });
+    sections.push('');
+  }
+
+  // Implementation Steps
+  if (plan.implementationSteps && plan.implementationSteps.length > 0) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## Implementation Steps');
+    sections.push('');
+    plan.implementationSteps.forEach((step, i) => {
+      sections.push(`${i + 1}. ${step}`);
+    });
+    sections.push('');
+  }
+
+  // Technical Decisions
+  if (plan.technicalDecisions && plan.technicalDecisions.length > 0) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## Technical Decisions');
+    sections.push('');
+    plan.technicalDecisions.forEach((decision) => {
+      sections.push(`- ${decision}`);
+    });
+    sections.push('');
+  }
+
+  // Dependencies
+  if (plan.dependencies && plan.dependencies.length > 0) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## Dependencies');
+    sections.push('');
+    plan.dependencies.forEach((dep) => {
+      sections.push(`- ${dep}`);
+    });
+    sections.push('');
+  }
+
+  // Testing Strategy
+  if (plan.testingStrategy) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## Testing Strategy');
+    sections.push('');
+    sections.push(plan.testingStrategy);
+    sections.push('');
+  }
+
+  // Risks & Considerations
+  if (plan.risks && plan.risks.length > 0) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## Risks & Considerations');
+    sections.push('');
+    plan.risks.forEach((risk) => {
+      sections.push(`- ⚠️ ${risk}`);
+    });
+    sections.push('');
+  }
+
+  // Estimated Time
+  if (plan.estimatedTime) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## Estimated Time');
+    sections.push('');
+    const hours = Math.floor(plan.estimatedTime / 60);
+    const minutes = plan.estimatedTime % 60;
+    if (hours > 0) {
+      sections.push(`~${hours}h ${minutes > 0 ? `${minutes}m` : ''}`);
+    } else {
+      sections.push(`~${minutes}m`);
+    }
+    sections.push('');
+  }
+
+  // Best Practices section if provided
+  if (bestPractices && bestPractices.bestPractices && bestPractices.bestPractices !== 'Unable to fetch best practices at this time.') {
+    sections.push('---');
+    sections.push('');
+    sections.push('## 🌐 Best Practices (Perplexity)');
+    sections.push('');
+    sections.push(`> Source: ${bestPractices.perplexityModel}`);
+    sections.push('');
+    sections.push(bestPractices.bestPractices);
+    sections.push('');
+  }
+
+  // Context Used section if provided
+  if (contextUsed) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## 📊 Context Used');
+    sections.push('');
+    sections.push(`- **Language:** ${contextUsed.language}`);
+    if (contextUsed.framework) {
+      sections.push(`- **Framework:** ${contextUsed.framework}`);
+    }
+    sections.push(`- **Dependencies analyzed:** ${contextUsed.dependencies}`);
+    sections.push(`- **Conventions found:** ${contextUsed.conventions}`);
+    sections.push(`- **Files Analyzed:** ${contextUsed.filesAnalyzed?.length || 0}`);
+    sections.push(`- **Using RAG:** ${contextUsed.usingRAG ? 'Yes' : 'No'}`);
+
+    if (contextUsed.filesAnalyzed && contextUsed.filesAnalyzed.length > 0) {
+      sections.push('');
+      sections.push('**Referenced files:**');
+      contextUsed.filesAnalyzed.slice(0, 15).forEach((file) => {
+        sections.push(`- \`${file}\``);
+      });
+      if (contextUsed.filesAnalyzed.length > 15) {
+        sections.push(`- ... and ${contextUsed.filesAnalyzed.length - 15} more`);
+      }
+    }
+    sections.push('');
+  }
+
+  // Council Summary if provided
+  if (council) {
+    sections.push('---');
+    sections.push('');
+    sections.push(formatCouncilSummaryAsMarkdown(council));
+  }
+
+  // Footer timestamp
+  sections.push('---');
+  sections.push('');
+  sections.push(`*Generated at: ${new Date().toISOString()}*`);
+
+  return sections.join('\n');
+}
+
+/**
+ * Format Best Practices as a standalone Linear Document
+ * Used when storing Best Practices from Perplexity in a separate document linked to the issue
+ * Fetched before Phase 3 (Technical Plan)
+ */
+export function formatBestPracticesDocument(
+  bestPractices: {
+    bestPractices: string;
+    perplexityModel: string;
+    sources?: string[];
+  },
+  taskContext?: {
+    title: string;
+    language?: string;
+    framework?: string;
+  }
+): string {
+  const sections: string[] = [];
+
+  // Header with DevFlow branding
+  sections.push('# Best Practices');
+  sections.push('');
+  sections.push('> Generated by DevFlow using Perplexity AI');
+  sections.push('');
+  sections.push('---');
+  sections.push('');
+
+  // Task context if provided
+  if (taskContext) {
+    sections.push('## Context');
+    sections.push('');
+    sections.push(`**Task:** ${taskContext.title}`);
+    if (taskContext.language) {
+      sections.push(`**Language:** ${taskContext.language}`);
+    }
+    if (taskContext.framework) {
+      sections.push(`**Framework:** ${taskContext.framework}`);
+    }
+    sections.push('');
+    sections.push('---');
+    sections.push('');
+  }
+
+  // Best Practices content
+  sections.push('## Recommendations');
+  sections.push('');
+  sections.push(bestPractices.bestPractices);
+  sections.push('');
+
+  // Sources if provided
+  if (bestPractices.sources && bestPractices.sources.length > 0) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## Sources');
+    sections.push('');
+    bestPractices.sources.forEach((source, i) => {
+      sections.push(`${i + 1}. ${source}`);
+    });
+    sections.push('');
+  }
+
+  // Footer with model info
+  sections.push('---');
+  sections.push('');
+  sections.push(`*Model: ${bestPractices.perplexityModel}*`);
+  sections.push(`*Generated at: ${new Date().toISOString()}*`);
+
+  return sections.join('\n');
+}
+
+/**
+ * Format Codebase Context as a standalone Linear Document
+ * Contains top K RAG chunks with full code content
+ * Created in Phase 1 (Refinement), reused in Phases 2 and 3
+ */
+export function formatCodebaseContextDocument(
+  chunks: Array<{
+    filePath: string;
+    content: string;
+    score: number;
+    language: string;
+    startLine?: number;
+    endLine?: number;
+    chunkType?: string;
+  }>,
+  taskContext?: {
+    title: string;
+    query: string;
+  }
+): string {
+  const sections: string[] = [];
+
+  // Header with DevFlow branding
+  sections.push('# Codebase Context');
+  sections.push('');
+  sections.push('> Generated by DevFlow using RAG retrieval');
+  sections.push('');
+  sections.push('---');
+  sections.push('');
+
+  // Task context if provided
+  if (taskContext) {
+    sections.push('## Query');
+    sections.push('');
+    sections.push(`**Task:** ${taskContext.title}`);
+    sections.push('');
+    sections.push('---');
+    sections.push('');
+  }
+
+  // Relevant Code sections
+  sections.push('## Relevant Code');
+  sections.push('');
+  sections.push(`Found ${chunks.length} relevant code sections:`);
+  sections.push('');
+
+  chunks.forEach((chunk, i) => {
+    sections.push(`### ${i + 1}. \`${chunk.filePath}\``);
+    sections.push('');
+
+    // Metadata line
+    const metaParts = [`**Score:** ${(chunk.score * 100).toFixed(1)}%`, `**Language:** ${chunk.language}`];
+    if (chunk.startLine && chunk.endLine) {
+      metaParts.push(`**Lines:** ${chunk.startLine}-${chunk.endLine}`);
+    }
+    if (chunk.chunkType) {
+      metaParts.push(`**Type:** ${chunk.chunkType}`);
+    }
+    sections.push(metaParts.join(' | '));
+    sections.push('');
+
+    // Code block
+    sections.push('```' + chunk.language);
+    sections.push(chunk.content);
+    sections.push('```');
+    sections.push('');
+  });
+
+  // Footer timestamp
+  sections.push('---');
+  sections.push('');
+  sections.push(`*Retrieved at: ${new Date().toISOString()}*`);
+
+  return sections.join('\n');
+}
+
+/**
+ * Input type for documentation context document
+ */
+export interface DocumentationContextInput {
+  projectStructure: {
+    framework?: string;
+    language: string;
+    packageManager?: string;
+    directories: string[];
+    mainPaths: {
+      src?: string;
+      tests?: string;
+      docs?: string;
+      config?: string;
+    };
+  };
+  dependencies: {
+    production: Record<string, string>;
+    dev: Record<string, string>;
+    mainLibraries: string[];
+  };
+  documentation: {
+    readme?: string;
+    conventions: string[];
+    patterns: string[];
+  };
+  relevantDocs?: Array<{
+    filePath: string;
+    content: string;
+    score: number;
+  }>;
+  taskContext?: {
+    title: string;
+  };
+}
+
+/**
+ * Format Documentation Context as a standalone Linear Document
+ * Contains project configuration, technical stack, and relevant documentation
+ * Created in Phase 1 (Refinement), reused in Phases 2 and 3
+ */
+export function formatDocumentationContextDocument(input: DocumentationContextInput): string {
+  const sections: string[] = [];
+
+  // Header with DevFlow branding
+  sections.push('# Documentation Context');
+  sections.push('');
+  sections.push('> Generated by DevFlow - Project Analysis');
+  sections.push('');
+  sections.push('---');
+  sections.push('');
+
+  // Task context if provided
+  if (input.taskContext) {
+    sections.push(`**Task:** ${input.taskContext.title}`);
+    sections.push('');
+    sections.push('---');
+    sections.push('');
+  }
+
+  // Project Configuration
+  sections.push('## 🏗️ Project Configuration');
+  sections.push('');
+
+  if (input.projectStructure.framework) {
+    sections.push(`**Framework:** ${input.projectStructure.framework}`);
+  }
+  sections.push(`**Language:** ${input.projectStructure.language}`);
+  if (input.projectStructure.packageManager) {
+    sections.push(`**Package Manager:** ${input.projectStructure.packageManager}`);
+  }
+  sections.push('');
+
+  // Main Paths
+  const paths = input.projectStructure.mainPaths;
+  if (paths.src || paths.tests || paths.docs || paths.config) {
+    sections.push('### Main Paths');
+    sections.push('');
+    if (paths.src) sections.push(`- **Source:** ${paths.src}`);
+    if (paths.tests) sections.push(`- **Tests:** ${paths.tests}`);
+    if (paths.docs) sections.push(`- **Docs:** ${paths.docs}`);
+    if (paths.config) sections.push(`- **Config:** ${paths.config}`);
+    sections.push('');
+  }
+
+  // Directories
+  if (input.projectStructure.directories.length > 0) {
+    sections.push('### Project Structure');
+    sections.push('');
+    input.projectStructure.directories.slice(0, 15).forEach((dir) => {
+      sections.push(`- \`${dir}\``);
+    });
+    if (input.projectStructure.directories.length > 15) {
+      sections.push(`- ... and ${input.projectStructure.directories.length - 15} more`);
+    }
+    sections.push('');
+  }
+
+  sections.push('---');
+  sections.push('');
+
+  // Technical Stack
+  sections.push('## 📦 Technical Stack');
+  sections.push('');
+
+  // Main Libraries summary
+  if (input.dependencies.mainLibraries.length > 0) {
+    sections.push(`**Main Libraries:** ${input.dependencies.mainLibraries.join(', ')}`);
+    sections.push('');
+  }
+
+  // Production Dependencies
+  const prodDeps = Object.entries(input.dependencies.production);
+  if (prodDeps.length > 0) {
+    sections.push('### Production Dependencies');
+    sections.push('');
+    prodDeps.slice(0, 20).forEach(([name, version]) => {
+      sections.push(`- \`${name}\`: ${version}`);
+    });
+    if (prodDeps.length > 20) {
+      sections.push(`- ... and ${prodDeps.length - 20} more`);
+    }
+    sections.push('');
+  }
+
+  // Dev Dependencies
+  const devDeps = Object.entries(input.dependencies.dev);
+  if (devDeps.length > 0) {
+    sections.push('### Dev Dependencies');
+    sections.push('');
+    devDeps.slice(0, 10).forEach(([name, version]) => {
+      sections.push(`- \`${name}\`: ${version}`);
+    });
+    if (devDeps.length > 10) {
+      sections.push(`- ... and ${devDeps.length - 10} more`);
+    }
+    sections.push('');
+  }
+
+  sections.push('---');
+  sections.push('');
+
+  // Documentation section
+  sections.push('## 📖 Relevant Documentation');
+  sections.push('');
+
+  // README excerpt
+  if (input.documentation.readme) {
+    sections.push('### From README');
+    sections.push('');
+    // Truncate long READMEs
+    const readmeExcerpt = input.documentation.readme.length > 1000
+      ? input.documentation.readme.substring(0, 1000) + '...'
+      : input.documentation.readme;
+    sections.push('> ' + readmeExcerpt.split('\n').join('\n> '));
+    sections.push('');
+  }
+
+  // Conventions
+  if (input.documentation.conventions.length > 0) {
+    sections.push('### Conventions');
+    sections.push('');
+    input.documentation.conventions.forEach((convention) => {
+      sections.push(`- ${convention}`);
+    });
+    sections.push('');
+  }
+
+  // Patterns
+  if (input.documentation.patterns.length > 0) {
+    sections.push('### Architectural Patterns');
+    sections.push('');
+    input.documentation.patterns.forEach((pattern) => {
+      sections.push(`- ${pattern}`);
+    });
+    sections.push('');
+  }
+
+  // Relevant Docs from RAG
+  if (input.relevantDocs && input.relevantDocs.length > 0) {
+    sections.push('### Related Docs (RAG)');
+    sections.push('');
+    input.relevantDocs.forEach((doc, i) => {
+      sections.push(`#### ${i + 1}. \`${doc.filePath}\` (score: ${(doc.score * 100).toFixed(0)}%)`);
+      sections.push('');
+      // Truncate long content
+      const excerpt = doc.content.length > 500
+        ? doc.content.substring(0, 500) + '...'
+        : doc.content;
+      sections.push('> ' + excerpt.split('\n').join('\n> '));
+      sections.push('');
+    });
+  }
+
+  // Footer timestamp
+  sections.push('---');
+  sections.push('');
+  sections.push(`*Generated at: ${new Date().toISOString()}*`);
+
+  return sections.join('\n');
+}
+
+// ============================================
+// External Context Document Formatters
+// For Figma, Sentry, and GitHub Issue contexts
+// ============================================
+
+/**
+ * Input type for Figma context document
+ */
+export interface FigmaContextDocumentInput {
+  fileKey: string;
+  fileName: string;
+  lastModified?: string;
+  thumbnailUrl?: string;
+  comments?: Array<{
+    id: string;
+    message: string;
+    user: { handle: string };
+    created_at: string;
+    resolved_at?: string;
+  }>;
+  screenshots?: Array<{
+    nodeId: string;
+    nodeName: string;
+    imageUrl?: string;
+    visionAnalysis?: string;
+  }>;
+  taskContext?: { title: string; identifier: string };
+}
+
+/**
+ * Format Figma context as a standalone Linear Document
+ * Contains file metadata, design comments, and AI-analyzed screenshots
+ * Created in Phase 1 (Refinement)
+ */
+export function formatFigmaContextDocument(input: FigmaContextDocumentInput): string {
+  const sections: string[] = [];
+
+  // Header with DevFlow branding
+  sections.push('# 🎨 Figma Design Context');
+  sections.push('');
+  sections.push('> Generated by DevFlow - Design Analysis');
+  sections.push('');
+  sections.push('---');
+  sections.push('');
+
+  // Task context if provided
+  if (input.taskContext) {
+    sections.push(`**Issue:** ${input.taskContext.identifier} - ${input.taskContext.title}`);
+    sections.push('');
+    sections.push('---');
+    sections.push('');
+  }
+
+  // File metadata
+  sections.push('## 📄 File Information');
+  sections.push('');
+  sections.push(`**File:** ${input.fileName}`);
+  sections.push(`**File Key:** \`${input.fileKey}\``);
+  if (input.lastModified) {
+    sections.push(`**Last Modified:** ${input.lastModified}`);
+  }
+  if (input.thumbnailUrl) {
+    sections.push(`**Thumbnail:** [View](${input.thumbnailUrl})`);
+  }
+  sections.push('');
+
+  // Design comments
+  if (input.comments && input.comments.length > 0) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## 💬 Design Comments');
+    sections.push('');
+
+    input.comments.forEach((comment, idx) => {
+      const status = comment.resolved_at ? '✅ Resolved' : '💬 Open';
+      sections.push(`### ${idx + 1}. ${status}`);
+      sections.push('');
+      sections.push(`**Author:** ${comment.user.handle}`);
+      sections.push(`**Date:** ${comment.created_at}`);
+      sections.push('');
+      sections.push(`> ${comment.message}`);
+      sections.push('');
+    });
+  }
+
+  // Screenshots with analysis
+  if (input.screenshots && input.screenshots.length > 0) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## 📸 Screenshots & Analysis');
+    sections.push('');
+
+    input.screenshots.forEach((screenshot, idx) => {
+      sections.push(`### ${idx + 1}. ${screenshot.nodeName}`);
+      sections.push('');
+      sections.push(`**Node ID:** \`${screenshot.nodeId}\``);
+      if (screenshot.imageUrl) {
+        sections.push(`**Image:** [View](${screenshot.imageUrl})`);
+      }
+      if (screenshot.visionAnalysis) {
+        sections.push('');
+        sections.push('**AI Design Analysis:**');
+        sections.push('');
+        sections.push(screenshot.visionAnalysis);
+      }
+      sections.push('');
+    });
+  }
+
+  // Footer timestamp
+  sections.push('---');
+  sections.push('');
+  sections.push(`*Generated at: ${new Date().toISOString()}*`);
+
+  return sections.join('\n');
+}
+
+/**
+ * Input type for Sentry context document
+ */
+export interface SentryContextDocumentInput {
+  issueId: string;
+  shortId: string;
+  title: string;
+  culprit?: string;
+  level: string;
+  status: string;
+  platform?: string;
+  count: number;
+  userCount: number;
+  firstSeen?: string;
+  lastSeen?: string;
+  project?: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+  errorType?: string;
+  errorMessage?: string;
+  stacktrace?: {
+    frames: Array<{
+      filename: string;
+      function: string;
+      lineNo: number;
+      colNo?: number;
+      context?: string[];
+    }>;
+  };
+  tags?: Array<{ key: string; value: string }>;
+  taskContext?: { title: string; identifier: string };
+}
+
+/**
+ * Format Sentry context as a standalone Linear Document
+ * Contains issue details, stacktrace, and error information
+ * Created in Phase 1 (Refinement)
+ */
+export function formatSentryContextDocument(input: SentryContextDocumentInput): string {
+  const sections: string[] = [];
+
+  // Header with DevFlow branding
+  sections.push('# 🐛 Sentry Error Context');
+  sections.push('');
+  sections.push('> Generated by DevFlow - Error Analysis');
+  sections.push('');
+  sections.push('---');
+  sections.push('');
+
+  // Task context if provided
+  if (input.taskContext) {
+    sections.push(`**Issue:** ${input.taskContext.identifier} - ${input.taskContext.title}`);
+    sections.push('');
+    sections.push('---');
+    sections.push('');
+  }
+
+  // Issue overview
+  sections.push('## 📊 Issue Overview');
+  sections.push('');
+  sections.push(`**Sentry Issue:** ${input.shortId} - ${input.title}`);
+
+  const levelEmoji: Record<string, string> = {
+    fatal: '💀',
+    error: '❌',
+    warning: '⚠️',
+    info: 'ℹ️',
+    debug: '🔍',
+  };
+
+  sections.push(`**Level:** ${levelEmoji[input.level] || '❓'} ${input.level.toUpperCase()} | **Status:** ${input.status}`);
+
+  if (input.platform) {
+    sections.push(`**Platform:** ${input.platform}`);
+  }
+  if (input.project) {
+    sections.push(`**Project:** ${input.project.name} (\`${input.project.slug}\`)`);
+  }
+
+  sections.push(`**Occurrences:** ${input.count.toLocaleString()} | **Users Affected:** ${input.userCount.toLocaleString()}`);
+
+  if (input.firstSeen) {
+    sections.push(`**First Seen:** ${input.firstSeen}`);
+  }
+  if (input.lastSeen) {
+    sections.push(`**Last Seen:** ${input.lastSeen}`);
+  }
+  sections.push('');
+
+  // Error details
+  if (input.errorType || input.errorMessage || input.culprit) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## ❌ Error Details');
+    sections.push('');
+    if (input.errorType) {
+      sections.push(`**Type:** \`${input.errorType}\``);
+    }
+    if (input.errorMessage) {
+      sections.push(`**Message:** ${input.errorMessage}`);
+    }
+    if (input.culprit) {
+      sections.push(`**Culprit:** \`${input.culprit}\``);
+    }
+    sections.push('');
+  }
+
+  // Stacktrace
+  if (input.stacktrace && input.stacktrace.frames.length > 0) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## 📚 Stacktrace');
+    sections.push('');
+    sections.push('```');
+
+    // Show top 15 frames (most relevant)
+    input.stacktrace.frames.slice(0, 15).forEach((frame) => {
+      const location = frame.colNo
+        ? `${frame.filename}:${frame.lineNo}:${frame.colNo}`
+        : `${frame.filename}:${frame.lineNo}`;
+      sections.push(`at ${frame.function} (${location})`);
+    });
+
+    if (input.stacktrace.frames.length > 15) {
+      sections.push(`... and ${input.stacktrace.frames.length - 15} more frames`);
+    }
+
+    sections.push('```');
+    sections.push('');
+  }
+
+  // Tags
+  if (input.tags && input.tags.length > 0) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## 🏷️ Tags');
+    sections.push('');
+    sections.push('| Key | Value |');
+    sections.push('|-----|-------|');
+
+    input.tags.slice(0, 15).forEach((tag) => {
+      // Escape pipe characters in values
+      const safeValue = tag.value.replace(/\|/g, '\\|');
+      sections.push(`| ${tag.key} | ${safeValue} |`);
+    });
+
+    if (input.tags.length > 15) {
+      sections.push('');
+      sections.push(`*... and ${input.tags.length - 15} more tags*`);
+    }
+    sections.push('');
+  }
+
+  // Footer timestamp
+  sections.push('---');
+  sections.push('');
+  sections.push(`*Generated at: ${new Date().toISOString()}*`);
+
+  return sections.join('\n');
+}
+
+/**
+ * Input type for GitHub Issue context document
+ */
+export interface GitHubIssueContextDocumentInput {
+  id: string;
+  number: number;
+  title: string;
+  state: string;
+  body?: string;
+  author: string;
+  url: string;
+  labels?: string[];
+  assignees?: string[];
+  createdAt: string;
+  updatedAt?: string;
+  closedAt?: string;
+  comments?: Array<{
+    id: string;
+    author: string;
+    body: string;
+    createdAt: string;
+  }>;
+  taskContext?: { title: string; identifier: string };
+}
+
+/**
+ * Format GitHub Issue context as a standalone Linear Document
+ * Contains issue details, body, labels, and discussion
+ * Created in Phase 1 (Refinement)
+ */
+export function formatGitHubIssueContextDocument(input: GitHubIssueContextDocumentInput): string {
+  const sections: string[] = [];
+
+  // Header with DevFlow branding
+  sections.push('# 📋 GitHub Issue Context');
+  sections.push('');
+  sections.push('> Generated by DevFlow - Issue Analysis');
+  sections.push('');
+  sections.push('---');
+  sections.push('');
+
+  // Task context if provided
+  if (input.taskContext) {
+    sections.push(`**Linear Issue:** ${input.taskContext.identifier} - ${input.taskContext.title}`);
+    sections.push('');
+    sections.push('---');
+    sections.push('');
+  }
+
+  // Issue metadata
+  sections.push('## 📄 Issue Information');
+  sections.push('');
+  sections.push(`**Issue:** [#${input.number} - ${input.title}](${input.url})`);
+
+  const stateEmoji = input.state === 'open' ? '🟢' : '🔴';
+  sections.push(`**State:** ${stateEmoji} ${input.state.charAt(0).toUpperCase() + input.state.slice(1)}`);
+  sections.push(`**Author:** @${input.author}`);
+  sections.push(`**Created:** ${input.createdAt}`);
+
+  if (input.updatedAt) {
+    sections.push(`**Updated:** ${input.updatedAt}`);
+  }
+  if (input.closedAt) {
+    sections.push(`**Closed:** ${input.closedAt}`);
+  }
+  sections.push('');
+
+  // Labels
+  if (input.labels && input.labels.length > 0) {
+    sections.push(`**Labels:** ${input.labels.map(l => `\`${l}\``).join(', ')}`);
+    sections.push('');
+  }
+
+  // Assignees
+  if (input.assignees && input.assignees.length > 0) {
+    sections.push(`**Assignees:** ${input.assignees.map(a => `@${a}`).join(', ')}`);
+    sections.push('');
+  }
+
+  // Issue body
+  if (input.body && input.body.trim()) {
+    sections.push('---');
+    sections.push('');
+    sections.push('## 📝 Issue Description');
+    sections.push('');
+    sections.push(input.body);
+    sections.push('');
+  }
+
+  // Comments
+  if (input.comments && input.comments.length > 0) {
+    sections.push('---');
+    sections.push('');
+    sections.push(`## 💬 Discussion (${input.comments.length} comments)`);
+    sections.push('');
+
+    // Show first 10 comments
+    input.comments.slice(0, 10).forEach((comment, idx) => {
+      sections.push(`### Comment ${idx + 1} - @${comment.author}`);
+      sections.push(`*${comment.createdAt}*`);
+      sections.push('');
+      // Truncate very long comments
+      const commentBody = comment.body.length > 1000
+        ? comment.body.substring(0, 1000) + '...'
+        : comment.body;
+      sections.push(commentBody);
+      sections.push('');
+    });
+
+    if (input.comments.length > 10) {
+      sections.push(`*... and ${input.comments.length - 10} more comments*`);
+      sections.push('');
+    }
+  }
+
+  // Footer timestamp
+  sections.push('---');
+  sections.push('');
+  sections.push(`*Generated at: ${new Date().toISOString()}*`);
 
   return sections.join('\n');
 }

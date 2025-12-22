@@ -1,8 +1,38 @@
 # 📚 DevFlow - Documentation Complète
 
-**Version:** 2.3.0
+**Version:** 2.4.0
 **Dernière mise à jour:** 21 décembre 2025
-**Statut:** Production Ready (Three-Phase Agile + Parent-Child Cascade/Rollup + LLM Council)
+**Statut:** Production Ready (Three-Phase Agile + Context Documents + Parent-Child Cascade/Rollup + LLM Council)
+
+---
+
+## 🆕 Changelog v2.4.0 (21 décembre 2025)
+
+### Context Documents System
+Phase 1 (Refinement) crée maintenant **deux documents Linear** pour chaque issue, permettant un meilleur contexte pour les phases suivantes:
+
+- **📂 Codebase Context Document**: Code source pertinent via RAG
+  - Stocké comme document Linear (pas dans le prompt refinement)
+  - Chargé et passé à l'IA dans Phases 2 & 3
+
+- **📚 Documentation Context Document**: Configuration projet + documentation
+  - Framework, langage, package manager, paths
+  - Dépendances production/dev, librairies principales
+  - Conventions et patterns du projet
+  - Documentation RAG filtrée (*.md, docs/, README)
+  - **Inclus dans le prompt refinement** + chargé dans Phases 2 & 3
+
+### New Activities
+- `analyzeProjectContext` - Analyse complète du projet (structure, deps, docs)
+- `saveDocumentationContextDocument` - Sauvegarde contexte doc comme document Linear
+- `getPhaseDocumentContent` - Supporte maintenant `documentation_context`
+
+### New SDK Exports
+- `formatDocumentationContextDocument` - Formatage markdown du contexte documentation
+- `DocumentationContextInput` - Type pour le contexte documentation
+
+### Database Schema
+- Nouveau champ `documentationContextDocumentId` sur le modèle Task
 
 ---
 

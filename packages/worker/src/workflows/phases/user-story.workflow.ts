@@ -18,6 +18,8 @@ const {
   appendUserStoryToLinearIssue,
   createLinearSubtasks,
   addCommentToLinearIssue,
+  // Document retrieval
+  getPhaseDocumentContent,
 } = proxyActivities<typeof activities>({
   startToCloseTimeout: '5 minutes',
   retry: {
@@ -62,6 +64,8 @@ type ComplexityEstimate = 'XS' | 'S' | 'M' | 'L' | 'XL';
 /** Parsed refinement from description */
 interface ParsedRefinement {
   taskType: TaskType;
+  suggestedTitle: string;
+  reformulatedDescription: string;
   businessContext: string;
   objectives: string[];
   preliminaryAcceptanceCriteria: string[];
@@ -95,6 +99,8 @@ function extractRefinementFromDescription(description: string): ParsedRefinement
     // If no refinement found, return minimal refinement object
     return {
       taskType: 'feature' as TaskType,
+      suggestedTitle: '', // Will use existing title
+      reformulatedDescription: description, // Will use existing description
       businessContext: description,
       objectives: [],
       preliminaryAcceptanceCriteria: [],
@@ -143,6 +149,8 @@ function extractRefinementFromDescription(description: string): ParsedRefinement
 
   return {
     taskType,
+    suggestedTitle: '', // Already applied in Phase 1, not parsed from markdown
+    reformulatedDescription: '', // Already applied in Phase 1, not parsed from markdown
     businessContext,
     objectives,
     preliminaryAcceptanceCriteria,
@@ -322,6 +330,32 @@ export async function userStoryWorkflow(
     // Step 3: Extract refinement from Linear description
     const refinement = extractRefinementFromDescription(task.description);
 
+    // Step 3.3: Load Codebase Context document (created in Phase 1)
+    const codebaseContextDoc = await getPhaseDocumentContent({
+      projectId: input.projectId,
+      linearId: task.linearId,
+      phase: 'codebase_context',
+    });
+
+    if (codebaseContextDoc.content) {
+      console.log('[userStoryWorkflow] Codebase context loaded from document');
+    } else {
+      console.log('[userStoryWorkflow] No codebase context document found');
+    }
+
+    // Step 3.4: Load Documentation Context document (created in Phase 1)
+    const documentationContextDoc = await getPhaseDocumentContent({
+      projectId: input.projectId,
+      linearId: task.linearId,
+      phase: 'documentation_context',
+    });
+
+    if (documentationContextDoc.content) {
+      console.log('[userStoryWorkflow] Documentation context loaded from document');
+    } else {
+      console.log('[userStoryWorkflow] No documentation context document found');
+    }
+
     // Step 3.5: Check if task should be split
     if (refinement.suggestedSplit && refinement.suggestedSplit.proposedStories.length > 0) {
       // Create sub-issues instead of generating user story
@@ -365,14 +399,15 @@ export async function userStoryWorkflow(
       },
       refinement,
       projectId: input.projectId,
+      codebaseContext: codebaseContextDoc.content || undefined,
+      documentationContext: documentationContextDoc.content || undefined,
     });
 
-    // Step 5: Append user story to Linear issue (with council summary if enabled)
+    // Step 5: Append user story to Linear issue
     await appendUserStoryToLinearIssue({
       projectId: input.projectId,
       linearId: task.linearId,
       userStory: result.userStory,
-      council: result.council,
     });
 
     // Step 6: Update status to UserStory Ready

@@ -20,6 +20,14 @@ const {
   addTaskTypeLabel,
   postQuestionsAsComments,
   getPOAnswersForTask,
+  // RAG context retrieval
+  retrieveContext,
+  saveCodebaseContextDocument,
+  // Documentation context analysis
+  analyzeProjectContext,
+  saveDocumentationContextDocument,
+  // External context documents (Figma, Sentry, GitHub Issue)
+  saveExternalContextDocuments,
 } = proxyActivities<typeof activities>({
   startToCloseTimeout: '5 minutes',
   retry: {
@@ -81,7 +89,53 @@ export async function refinementWorkflow(
       projectId: input.projectId,
     });
 
-    // Step 3: Generate refinement (with external context and PO answers if available)
+    // Step 2.6: Retrieve RAG context for codebase analysis
+    const ragContext = await retrieveContext({
+      projectId: input.projectId,
+      query: `${task.title}\n${task.description}`,
+      topK: 10,
+      useReranking: true,
+    });
+
+    // Step 2.7: Save top 5 RAG chunks as Codebase Context document
+    // This document will be reused in Phases 2 and 3
+    if (ragContext?.chunks?.length > 0) {
+      const topChunks = ragContext.chunks.slice(0, 5);
+      await saveCodebaseContextDocument({
+        projectId: input.projectId,
+        linearId: task.linearId,
+        chunks: topChunks,
+        taskContext: {
+          title: task.title,
+          query: `${task.title}\n${task.description}`,
+        },
+      });
+      console.log('[refinementWorkflow] Codebase context document created with', topChunks.length, 'chunks');
+    }
+
+    // Step 2.8: Analyze project context (structure, dependencies, documentation)
+    // This document will be reused in Phases 2 and 3, and included in refinement prompt
+    let documentationContext: Awaited<ReturnType<typeof analyzeProjectContext>> | undefined;
+    try {
+      documentationContext = await analyzeProjectContext({
+        projectId: input.projectId,
+        taskQuery: `${task.title}\n${task.description}`,
+      });
+
+      // Save documentation context as Linear document
+      await saveDocumentationContextDocument({
+        projectId: input.projectId,
+        linearId: task.linearId,
+        context: documentationContext,
+        taskContext: { title: task.title },
+      });
+      console.log('[refinementWorkflow] Documentation context document created');
+    } catch (docContextError) {
+      // Non-blocking: Log warning but continue workflow
+      console.warn('[refinementWorkflow] Failed to analyze project context:', docContextError);
+    }
+
+    // Step 3: Generate refinement (with external context, PO answers, RAG file names, and documentation context)
     const result = await generateRefinement({
       task: {
         title: task.title,
@@ -92,6 +146,8 @@ export async function refinementWorkflow(
       projectId: input.projectId,
       externalLinks: task.externalLinks,
       poAnswers: poAnswersResult.answers.length > 0 ? poAnswersResult.answers : undefined,
+      ragContext: ragContext, // Pass RAG context for file name references
+      documentationContext: documentationContext, // Pass documentation context for project info
     });
 
     // Step 3.5: Add task type label based on detected type (non-blocking)
@@ -105,12 +161,54 @@ export async function refinementWorkflow(
       });
     }
 
-    // Step 4: Append refinement to Linear issue (with council summary if enabled)
+    // Step 3.55: Save external context as Linear Documents (non-blocking)
+    // Creates separate documents for Figma, Sentry, GitHub Issue contexts
+    if (result.externalContext) {
+      const hasAnyExternalContext =
+        result.externalContext.figma ||
+        result.externalContext.sentry ||
+        result.externalContext.githubIssue;
+
+      if (hasAnyExternalContext) {
+        try {
+          const externalDocs = await saveExternalContextDocuments({
+            projectId: input.projectId,
+            linearId: task.linearId,
+            context: result.externalContext,
+            taskContext: { title: task.title, identifier: task.identifier },
+          });
+
+          console.log('[refinementWorkflow] External context documents created', {
+            figma: !!externalDocs.figmaDocumentId,
+            sentry: !!externalDocs.sentryDocumentId,
+            githubIssue: !!externalDocs.githubIssueDocumentId,
+          });
+        } catch (externalContextError) {
+          // Non-blocking: Log warning but continue workflow
+          console.warn('[refinementWorkflow] Failed to save external context documents:', externalContextError);
+        }
+      }
+    }
+
+    // Step 3.6: Update title and description with reformulated versions (in English)
+    // The reformulated description becomes the new base, and refinement markdown will be appended
+    if (result.refinement.suggestedTitle || result.refinement.reformulatedDescription) {
+      await updateLinearTask({
+        projectId: input.projectId,
+        linearId: task.linearId,
+        updates: {
+          title: result.refinement.suggestedTitle || undefined,
+          description: result.refinement.reformulatedDescription || undefined,
+        },
+      });
+      console.log('[refinementWorkflow] Title and description updated with English versions');
+    }
+
+    // Step 4: Append refinement to Linear issue
     await appendRefinementToLinearIssue({
       projectId: input.projectId,
       linearId: task.linearId,
       refinement: result.refinement,
-      council: result.council,
     });
 
     // Step 4.5: Create sub-issues if complexity L or XL (BLOCKING)

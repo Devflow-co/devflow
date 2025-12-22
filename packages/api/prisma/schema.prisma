@@ -102,6 +102,18 @@ model Task {
   // PO Questions tracking
   awaitingPOAnswers Boolean @default(false) @map("awaiting_po_answers")
 
+  // Linear Document IDs for each phase
+  userStoryDocumentId              String?   @map("user_story_document_id")              // Linear Document ID for User Story (Phase 2)
+  technicalPlanDocumentId          String?   @map("technical_plan_document_id")          // Linear Document ID for Technical Plan (Phase 3)
+  bestPracticesDocumentId          String?   @map("best_practices_document_id")          // Linear Document ID for Best Practices (Perplexity)
+  codebaseContextDocumentId        String?   @map("codebase_context_document_id")        // Linear Document ID for Codebase Context (RAG - Phase 1)
+  documentationContextDocumentId   String?   @map("documentation_context_document_id")   // Linear Document ID for Documentation Context (Phase 1)
+
+  // External Context Documents (Phase 1 - Figma, Sentry, GitHub Issues)
+  figmaContextDocumentId           String?   @map("figma_context_document_id")           // Linear Document ID for Figma Context
+  sentryContextDocumentId          String?   @map("sentry_context_document_id")          // Linear Document ID for Sentry Context
+  githubIssueContextDocumentId     String?   @map("github_issue_context_document_id")    // Linear Document ID for GitHub Issue Context
+
   // Relations
   project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   workflows   Workflow[]

@@ -53,8 +53,11 @@ export {
   formatExternalContextAsMarkdown,
   parseExternalLinksFromDescription,
   hasAnyLink,
+  saveExternalContextDocuments,
   type ExternalContextLinks,
   type ExternalContext,
   type ExtractContextInput,
   type ExtractContextOutput,
+  type SaveExternalContextDocumentsInput,
+  type SaveExternalContextDocumentsOutput,
 } from '@/activities/context-extraction.activities';

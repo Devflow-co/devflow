@@ -6,8 +6,8 @@
  */
 
 import { createLogger } from '@devflow/common';
-import type { RefinementOutput, AgentImage, CouncilSummary } from '@devflow/common';
-import { createCodeAgentDriver, loadPrompts, createCouncilService } from '@devflow/sdk';
+import type { RefinementOutput, AgentImage } from '@devflow/common';
+import { createCodeAgentDriver, loadPrompts } from '@devflow/sdk';
 import { detectTaskType } from './helpers/task-type-detector';
 import {
   extractExternalContext,
@@ -30,11 +30,57 @@ export interface GenerateRefinementInput {
   externalLinks?: ExternalContextLinks;
   /** Previous PO answers (from re-run after questions were answered) */
   poAnswers?: Array<{ question: string; answer: string }>;
+  /** RAG context from codebase analysis (top chunks) */
+  ragContext?: {
+    chunks: Array<{
+      filePath: string;
+      content: string;
+      score: number;
+      language: string;
+    }>;
+    retrievalTimeMs: number;
+    totalChunks: number;
+  };
+  /** Documentation context (project structure, dependencies, conventions) */
+  documentationContext?: {
+    projectStructure: {
+      framework?: string;
+      language: string;
+      packageManager?: string;
+      directories: string[];
+      mainPaths: {
+        src?: string;
+        tests?: string;
+        docs?: string;
+        config?: string;
+      };
+    };
+    dependencies: {
+      production: Record<string, string>;
+      dev: Record<string, string>;
+      mainLibraries: string[];
+    };
+    documentation: {
+      readme?: string;
+      conventions: string[];
+      patterns: string[];
+    };
+    relevantDocs: Array<{
+      filePath: string;
+      content: string;
+      score: number;
+    }>;
+  };
 }
 
 export interface GenerateRefinementOutput {
   refinement: RefinementOutput;
-  council?: CouncilSummary;
+  /** Extracted external context (Figma, Sentry, GitHub Issue) - to be saved as documents */
+  externalContext?: {
+    figma?: import('@devflow/sdk').FigmaDesignContext;
+    sentry?: import('@devflow/sdk').SentryIssueContext;
+    githubIssue?: import('@devflow/sdk').GitHubIssueContext;
+  };
 }
 
 /**
@@ -59,6 +105,7 @@ export async function generateRefinement(
     // Step 1.5: Extract external context if links provided
     let externalContextMarkdown = '';
     let figmaImages: AgentImage[] = [];
+    let extractedExternalContext: GenerateRefinementOutput['externalContext'];
 
     if (input.externalLinks && hasAnyLink(input.externalLinks)) {
       logger.info('Extracting external context', { links: input.externalLinks });
@@ -71,6 +118,9 @@ export async function generateRefinement(
       if (errors.length > 0) {
         logger.warn('Some external context extractions failed', { errors });
       }
+
+      // Store the extracted context for returning later
+      extractedExternalContext = context;
 
       externalContextMarkdown = formatExternalContextAsMarkdown(context);
 
@@ -121,83 +171,129 @@ Le Product Owner a répondu aux questions précédentes. **Vous DEVEZ intégrer 
       logger.info('PO answers included in context', { count: input.poAnswers.length });
     }
 
+    // Step 1.7: Format Documentation Context (project structure, dependencies, conventions)
+    let documentationContextMarkdown = '';
+    if (input.documentationContext) {
+      const { projectStructure, dependencies, documentation, relevantDocs } = input.documentationContext;
+
+      documentationContextMarkdown = `
+
+---
+
+## 🏗️ Contexte Projet
+
+`;
+
+      // Project structure
+      if (projectStructure.framework) {
+        documentationContextMarkdown += `**Framework:** ${projectStructure.framework}\n`;
+      }
+      documentationContextMarkdown += `**Langage:** ${projectStructure.language}\n`;
+      if (projectStructure.packageManager) {
+        documentationContextMarkdown += `**Package Manager:** ${projectStructure.packageManager}\n`;
+      }
+      documentationContextMarkdown += '\n';
+
+      // Main libraries
+      if (dependencies.mainLibraries.length > 0) {
+        documentationContextMarkdown += `**Librairies principales:** ${dependencies.mainLibraries.join(', ')}\n\n`;
+      }
+
+      // Conventions
+      if (documentation.conventions.length > 0) {
+        documentationContextMarkdown += '### Conventions du projet\n\n';
+        documentation.conventions.forEach((conv) => {
+          documentationContextMarkdown += `- ${conv}\n`;
+        });
+        documentationContextMarkdown += '\n';
+      }
+
+      // Patterns
+      if (documentation.patterns.length > 0) {
+        documentationContextMarkdown += '### Patterns architecturaux\n\n';
+        documentation.patterns.forEach((pattern) => {
+          documentationContextMarkdown += `- ${pattern}\n`;
+        });
+        documentationContextMarkdown += '\n';
+      }
+
+      // Relevant docs from RAG
+      if (relevantDocs && relevantDocs.length > 0) {
+        documentationContextMarkdown += '### Documentation pertinente\n\n';
+        relevantDocs.slice(0, 3).forEach((doc, i) => {
+          const excerpt = doc.content.length > 300 ? doc.content.substring(0, 300) + '...' : doc.content;
+          documentationContextMarkdown += `**${i + 1}. \`${doc.filePath}\`** (score: ${(doc.score * 100).toFixed(0)}%)\n`;
+          documentationContextMarkdown += `> ${excerpt.split('\n').join('\n> ')}\n\n`;
+        });
+      }
+
+      documentationContextMarkdown += '> Utilisez ce contexte pour proposer une solution cohérente avec l\'architecture et les conventions du projet.\n\n';
+
+      logger.info('Documentation context included', {
+        framework: projectStructure.framework,
+        language: projectStructure.language,
+        conventions: documentation.conventions.length,
+        patterns: documentation.patterns.length,
+      });
+    }
+
+    // Step 1.8: Format RAG context (file names only - NOT full code)
+    // Full code is stored in Codebase Context document for Phases 2 & 3
+    let codebaseFilesMarkdown = '';
+    if (input.ragContext?.chunks && input.ragContext.chunks.length > 0) {
+      const uniqueFiles = [...new Set(input.ragContext.chunks.map((c) => c.filePath))];
+
+      codebaseFilesMarkdown = `
+
+---
+
+## 📂 Fichiers potentiellement concernés
+
+L'analyse sémantique a identifié ${uniqueFiles.length} fichiers pertinents pour cette tâche:
+
+${uniqueFiles.map((f) => `- \`${f}\``).join('\n')}
+
+> Le code complet est disponible dans le document "Codebase Context" pour les phases suivantes.
+
+`;
+      logger.info('Codebase file names included', { filesCount: uniqueFiles.length });
+    }
+
     // Step 2: Load prompts from markdown files
     const prompts = await loadPrompts('refinement', {
       taskTitle: input.task.title,
       taskDescription: input.task.description || 'No description provided',
       taskPriority: input.task.priority,
-      externalContext: externalContextMarkdown + poAnswersContext,
+      externalContext: externalContextMarkdown + poAnswersContext + documentationContextMarkdown + codebaseFilesMarkdown,
     });
 
-    // Step 3: Generate refinement with AI
-    const useCouncil = process.env.ENABLE_COUNCIL === 'true';
+    // Step 3: Generate refinement with AI (single model - council only for Phase 3)
+    logger.info('Generating refinement with single model');
 
-    if (useCouncil) {
-      logger.info('Using LLM Council for refinement');
+    const agent = createCodeAgentDriver({
+      provider: 'openrouter',
+      apiKey: process.env.OPENROUTER_API_KEY || '',
+      model: process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4',
+    });
 
-      const councilModels = process.env.COUNCIL_MODELS
-        ? process.env.COUNCIL_MODELS.split(',').map((m) => m.trim())
-        : ['anthropic/claude-sonnet-4', 'openai/gpt-4o', 'google/gemini-2.0-flash-exp'];
+    const response = await agent.generate({
+      ...prompts,
+      images: figmaImages.length > 0 ? figmaImages : undefined,
+    });
+    const refinement = parseRefinementResponse(response.content);
 
-      const council = createCouncilService(
-        process.env.OPENROUTER_API_KEY || '',
-        {
-          enabled: true,
-          models: councilModels,
-          chairmanModel: process.env.COUNCIL_CHAIRMAN_MODEL || 'anthropic/claude-sonnet-4',
-          timeout: parseInt(process.env.COUNCIL_TIMEOUT || '120000'),
-        }
-      );
+    logger.info('Refinement generated successfully', {
+      model: process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4',
+      hasImages: figmaImages.length > 0,
+    });
 
-      const result = await council.deliberate<Omit<RefinementOutput, 'taskType'>>(
-        {
-          ...prompts,
-          images: figmaImages.length > 0 ? figmaImages : undefined,
-        },
-        parseRefinementResponse
-      );
-
-      logger.info('Council refinement complete', {
-        topRankedModel: result.summary.topRankedModel,
-        agreementLevel: result.summary.agreementLevel,
-        councilModels: result.summary.councilModels,
-      });
-
-      return {
-        refinement: {
-          ...result.finalOutput,
-          taskType,
-        },
-        council: result.summary,
-      };
-    } else {
-      // Single model generation
-      logger.info('Using single model generation for refinement');
-
-      const agent = createCodeAgentDriver({
-        provider: 'openrouter',
-        apiKey: process.env.OPENROUTER_API_KEY || '',
-        model: process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4',
-      });
-
-      const response = await agent.generate({
-        ...prompts,
-        images: figmaImages.length > 0 ? figmaImages : undefined,
-      });
-      const refinement = parseRefinementResponse(response.content);
-
-      logger.info('Refinement generated successfully', {
-        model: process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4',
-        hasImages: figmaImages.length > 0,
-      });
-
-      return {
-        refinement: {
-          ...refinement,
-          taskType,
-        },
-      };
-    }
+    return {
+      refinement: {
+        ...refinement,
+        taskType,
+      },
+      externalContext: extractedExternalContext,
+    };
   } catch (error) {
     logger.error('Failed to generate refinement', error);
     throw error;
@@ -218,6 +314,8 @@ function parseRefinementResponse(
     const parsed = JSON.parse(jsonString);
 
     return {
+      suggestedTitle: parsed.suggestedTitle || '',
+      reformulatedDescription: parsed.reformulatedDescription || '',
       businessContext: parsed.businessContext || '',
       objectives: parsed.objectives || [],
       questionsForPO: parsed.questionsForPO,

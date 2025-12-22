@@ -9,9 +9,8 @@ import { createLogger } from '@devflow/common';
 import type {
   RefinementOutput,
   UserStoryGenerationOutput,
-  CouncilSummary,
 } from '@devflow/common';
-import { createCodeAgentDriver, loadPrompts, createCouncilService } from '@devflow/sdk';
+import { createCodeAgentDriver, loadPrompts } from '@devflow/sdk';
 
 const logger = createLogger('UserStoryActivities');
 
@@ -23,11 +22,14 @@ export interface GenerateUserStoryInput {
   };
   refinement: RefinementOutput;
   projectId: string;
+  /** Codebase context markdown (from Phase 1 document) */
+  codebaseContext?: string;
+  /** Documentation context markdown (from Phase 1 document) */
+  documentationContext?: string;
 }
 
 export interface GenerateUserStoryOutput {
   userStory: UserStoryGenerationOutput;
-  council?: CouncilSummary;
 }
 
 /**
@@ -39,68 +41,47 @@ export async function generateUserStory(
   logger.info('Generating user story', {
     taskTitle: input.task.title,
     projectId: input.projectId,
+    hasCodebaseContext: !!input.codebaseContext,
+    hasDocumentationContext: !!input.documentationContext,
   });
 
   try {
-    // Load prompts with refinement context
+    // Build combined context (documentation + codebase)
+    let combinedContext = '';
+    if (input.documentationContext) {
+      combinedContext += input.documentationContext + '\n\n---\n\n';
+    }
+    if (input.codebaseContext) {
+      combinedContext += input.codebaseContext;
+    }
+    if (!combinedContext) {
+      combinedContext = 'No context available';
+    }
+
+    // Load prompts with refinement context and combined context
     const prompts = await loadPrompts('user-story', {
       taskTitle: input.task.title,
       taskPriority: input.task.priority,
       refinementContext: input.refinement.businessContext,
       refinementObjectives: input.refinement.objectives.join('\n- '),
+      codebaseContext: combinedContext,
     });
 
-    // Generate with AI (council or single model)
-    const useCouncil = process.env.ENABLE_COUNCIL === 'true';
+    // Generate with AI (single model - council only for Phase 3)
+    logger.info('Generating user story with single model');
 
-    if (useCouncil) {
-      logger.info('Using LLM Council for user story');
+    const agent = createCodeAgentDriver({
+      provider: 'openrouter',
+      apiKey: process.env.OPENROUTER_API_KEY || '',
+      model: process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4',
+    });
 
-      const councilModels = process.env.COUNCIL_MODELS
-        ? process.env.COUNCIL_MODELS.split(',').map((m) => m.trim())
-        : ['anthropic/claude-sonnet-4', 'openai/gpt-4o', 'google/gemini-2.0-flash-exp'];
+    const response = await agent.generate(prompts);
+    const userStory = parseUserStoryResponse(response.content);
 
-      const council = createCouncilService(
-        process.env.OPENROUTER_API_KEY || '',
-        {
-          enabled: true,
-          models: councilModels,
-          chairmanModel: process.env.COUNCIL_CHAIRMAN_MODEL || 'anthropic/claude-sonnet-4',
-          timeout: parseInt(process.env.COUNCIL_TIMEOUT || '120000'),
-        }
-      );
+    logger.info('User story generated successfully');
 
-      const result = await council.deliberate<UserStoryGenerationOutput>(
-        prompts,
-        parseUserStoryResponse
-      );
-
-      logger.info('Council user story generation complete', {
-        topRankedModel: result.summary.topRankedModel,
-        agreementLevel: result.summary.agreementLevel,
-      });
-
-      return {
-        userStory: result.finalOutput,
-        council: result.summary,
-      };
-    } else {
-      // Single model generation
-      logger.info('Using single model generation for user story');
-
-      const agent = createCodeAgentDriver({
-        provider: 'openrouter',
-        apiKey: process.env.OPENROUTER_API_KEY || '',
-        model: process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4',
-      });
-
-      const response = await agent.generate(prompts);
-      const userStory = parseUserStoryResponse(response.content);
-
-      logger.info('User story generated successfully');
-
-      return { userStory };
-    }
+    return { userStory };
   } catch (error) {
     logger.error('Failed to generate user story', error);
     throw error;

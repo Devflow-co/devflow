@@ -1,8 +1,8 @@
 # CLAUDE.md - DevFlow
 
-**Version:** 2.3.0
+**Version:** 2.4.0
 **Mise à jour:** 21 décembre 2025
-**Statut:** Three-Phase Agile System + Parent-Child Cascade/Rollup + LLM Council - Production Ready
+**Statut:** Three-Phase Agile System + Context Documents + Parent-Child Cascade/Rollup + LLM Council - Production Ready
 
 ## Rappel agents (Claude + Cursor)
 - Finir chaque tâche par une étape Documentation (code, infra, CI, scripts, data, tests).
@@ -51,6 +51,49 @@ DevFlow implémente un workflow Agile en trois phases distinctes pour une meille
 6. Identifier les risques techniques
 
 **Output:** Plan technique détaillé dans Linear
+
+### Context Documents (v2.4.0)
+
+Phase 1 (Refinement) crée deux documents Linear attachés à chaque issue pour fournir du contexte aux phases suivantes:
+
+#### 📂 Codebase Context Document
+**Contenu:** Code source pertinent extrait via RAG (Retrieval-Augmented Generation)
+- Fichiers et fonctions similaires à la tâche
+- Score de pertinence pour chaque chunk
+- Langage et type de code (class, function, etc.)
+
+**Utilisation:**
+| Phase | Comportement |
+|-------|-------------|
+| Phase 1 | Document **créé** (stocké), seuls les **noms de fichiers** dans le prompt |
+| Phase 2 | Document **chargé**, contenu complet passé à l'IA |
+| Phase 3 | Document **chargé**, contenu complet passé à l'IA |
+
+#### 📚 Documentation Context Document
+**Contenu:** Configuration projet et documentation pertinente
+- **Project Configuration:** Framework, langage, package manager, paths principaux
+- **Technical Stack:** Dépendances production/dev, librairies principales
+- **Documentation:** Conventions, patterns architecturaux, extraits README/CLAUDE.md
+- **Relevant Docs:** Documentation RAG filtrée (*.md, docs/, README, ARCHITECTURE)
+
+**Utilisation:**
+| Phase | Comportement |
+|-------|-------------|
+| Phase 1 | Document **créé** + contenu **inclus** dans le prompt IA |
+| Phase 2 | Document **chargé**, contenu complet passé à l'IA |
+| Phase 3 | Document **chargé**, contenu complet passé à l'IA |
+
+#### Linear Issue Structure
+```
+Linear Issue (STU-54)
+├── Description: Requête originale + Refinement
+└── Documents:
+    ├── 📂 STU-54 - Codebase Context       (Phase 1) - Code pertinent
+    ├── 📚 STU-54 - Documentation Context  (Phase 1) - Stack & Docs
+    ├── 📄 STU-54 - User Story             (Phase 2)
+    ├── 📄 STU-54 - Best Practices         (Phase 3)
+    └── 📄 STU-54 - Technical Plan         (Phase 3)
+```
 
 ### Workflow Features (conservées pour référence future)
 - Génération de code (frontend + backend)
@@ -104,6 +147,11 @@ devflow/
   - `generateRefinement`, `appendRefinementToLinearIssue`, **postQuestionsToLinear** (v2.3.0)
   - `generateUserStory`, `appendUserStoryToLinearIssue`, **createLinearSubtasks** (v2.3.0)
   - `generateTechnicalPlan`, `appendTechnicalPlanToLinearIssue`
+- **Activities Context Documents** (v2.4.0):
+  - `analyzeProjectContext` - Analyse structure projet, dépendances, documentation
+  - `saveCodebaseContextDocument` - Sauvegarde le contexte code comme document Linear
+  - `saveDocumentationContextDocument` - Sauvegarde le contexte documentation comme document Linear
+  - `getPhaseDocumentContent` - Charge un document de phase (codebase_context, documentation_context, user_story, etc.)
 - **Activities génériques** : `syncLinearTask`, `updateLinearTask`, `retrieveContext`, `sendNotification`, **addCommentToLinearIssue** (v2.3.0)
 - **Activities legacy** (conservées) : `generateSpecification`, `generateCode`, `generateTests`, `createBranch`, `commitFiles`, `createPullRequest`, `waitForCI`, `runTests`, `analyzeTestFailures`, `mergePullRequest`
 
@@ -116,6 +164,7 @@ devflow/
 - **AI** : AnthropicProvider, OpenAIProvider, OpenRouterProvider, Cursor (non implémenté).
 - **LLM Council** (Nouveau - v2.2.0): `CouncilService` - 3-stage deliberation system with peer ranking and chairman synthesis. See LLM Council section below.
 - **Codebase analysis** : `structure-analyzer.ts`, `dependency-analyzer.ts`, `code-similarity.service.ts`, `documentation-scanner.ts`.
+- **Linear Spec Formatter** (v2.4.0): `formatCodebaseContextDocument`, `formatDocumentationContextDocument` - Formatage markdown des documents de contexte.
 - **Gouvernance/Sécurité** : `policy.guard.ts`, `auto-merge.engine.ts`, `audit.logger.ts`, `security.scanner.ts`.
 - **Integration Services Pattern** (Nouveau - v2.1.0):
   - **GitHubIntegrationService** : getRepository, getIssue, getIssueComments, extractIssueContext - OAuth avec auto token refresh
@@ -650,19 +699,21 @@ Chairman (claude-sonnet-4) synthesized insights from 3 council members.
 
 ### Usage
 
-Council is used automatically in all three phases when `ENABLE_COUNCIL=true`:
-- Phase 1: Refinement
-- Phase 2: User Story
-- Phase 3: Technical Plan
+Council is used **only in Phase 3 (Technical Plan)** when `ENABLE_COUNCIL=true`:
+- Phase 1: Refinement → Single model (faster, less expensive)
+- Phase 2: User Story → Single model (faster, less expensive)
+- Phase 3: Technical Plan → **LLM Council** (better quality for critical technical decisions)
 
 ### Cost Considerations
 
-Council mode makes 3x API calls per phase (Stage 1) + 3x ranking calls (Stage 2) + 1x synthesis call (Stage 3) = **7 API calls per phase**.
+Council mode (Phase 3 only) makes 3x API calls (Stage 1) + 3x ranking calls (Stage 2) + 1x synthesis call (Stage 3) = **7 API calls for Technical Plan**.
 
-| Mode | API Calls/Phase | Cost | Quality |
-|------|----------------|------|---------|
-| Single Model | 1 | $ | ⭐⭐⭐ |
-| Council (3 models) | 7 | $$$$ | ⭐⭐⭐⭐⭐ |
+| Phase | Mode | API Calls | Cost |
+|-------|------|-----------|------|
+| Phase 1: Refinement | Single Model | 1 | $ |
+| Phase 2: User Story | Single Model | 1 | $ |
+| Phase 3: Technical Plan | Council (3 models) | 7 | $$$$ |
+| **Total per workflow** | | **9** | **$$$$** |
 
 ### Key Files
 
@@ -808,7 +859,8 @@ Scripts de test end-to-end qui valident le système complet via la CLI:
 - `packages/api/src/linear/linear-sync-api.service.ts` - Linear sync avec cascade/rollup (v2.3.0)
 - `packages/api/src/integrations/` - Integration controllers & services (Nouveau v2.1.0)
 - `packages/common/src/types/workflow-config.types.ts` - Configuration centralisée des statuts (v2.3.0)
-- `packages/api/prisma/schema.prisma` - Schéma complet (TaskQuestion model v2.3.0)
+- `packages/api/prisma/schema.prisma` - Schéma complet (TaskQuestion model v2.3.0, documentationContextDocumentId v2.4.0)
+- `packages/sdk/src/linear/spec-formatter.ts` - Formatage des documents Linear (Codebase Context, Documentation Context)
 
 ### Tests & validation
 - `packages/sdk/src/__manual_tests__/` - Tests SDK des intégrations (Nouveau v2.1.0)

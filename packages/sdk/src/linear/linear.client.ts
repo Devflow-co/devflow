@@ -140,6 +140,21 @@ export class LinearClient {
   // ============================================
 
   /**
+   * Update issue title
+   */
+  async updateTitle(issueId: string, title: string): Promise<void> {
+    this.logger.info('Updating issue title', { issueId });
+
+    try {
+      await this.client.updateIssue(issueId, { title });
+      this.logger.info('Title updated', { issueId });
+    } catch (error) {
+      this.logger.error('Failed to update title', error as Error, { issueId });
+      throw error;
+    }
+  }
+
+  /**
    * Update issue description (replace)
    */
   async updateDescription(issueId: string, description: string): Promise<void> {
@@ -150,6 +165,21 @@ export class LinearClient {
       this.logger.info('Description updated', { issueId });
     } catch (error) {
       this.logger.error('Failed to update description', error as Error, { issueId });
+      throw error;
+    }
+  }
+
+  /**
+   * Update issue title and description in a single API call
+   */
+  async updateTitleAndDescription(issueId: string, title: string, description: string): Promise<void> {
+    this.logger.info('Updating issue title and description', { issueId });
+
+    try {
+      await this.client.updateIssue(issueId, { title, description });
+      this.logger.info('Title and description updated', { issueId });
+    } catch (error) {
+      this.logger.error('Failed to update title and description', error as Error, { issueId });
       throw error;
     }
   }
@@ -732,6 +762,103 @@ export class LinearClient {
 
     return results;
   }
+
+  // ============================================
+  // Document Operations
+  // ============================================
+
+  /**
+   * Create a document linked to an issue
+   * Note: issueId is not in SDK types but is supported by the API
+   */
+  async createIssueDocument(input: {
+    issueId: string;
+    title: string;
+    content: string;
+  }): Promise<{ id: string; url: string }> {
+    this.logger.info('Creating document for issue', { issueId: input.issueId, title: input.title });
+
+    try {
+      const result = await this.client.createDocument({
+        title: input.title,
+        content: input.content,
+        issueId: input.issueId,
+      } as any); // issueId not in SDK types but supported by API
+
+      if (!result.success) {
+        throw new Error('Failed to create document');
+      }
+
+      const doc = await result.document;
+
+      if (!doc) {
+        throw new Error('Document creation returned null');
+      }
+
+      this.logger.info('Document created', { documentId: doc.id, url: doc.url });
+
+      return { id: doc.id, url: doc.url };
+    } catch (error) {
+      this.logger.error('Failed to create document', error as Error, { issueId: input.issueId });
+      throw error;
+    }
+  }
+
+  /**
+   * Update document content
+   */
+  async updateDocument(documentId: string, content: string): Promise<void> {
+    this.logger.info('Updating document', { documentId });
+
+    try {
+      const result = await this.client.updateDocument(documentId, { content });
+
+      if (!result.success) {
+        throw new Error('Failed to update document');
+      }
+
+      this.logger.info('Document updated', { documentId });
+    } catch (error) {
+      this.logger.error('Failed to update document', error as Error, { documentId });
+      throw error;
+    }
+  }
+
+  /**
+   * Get document by ID
+   */
+  async getDocument(documentId: string): Promise<LinearDocument | null> {
+    this.logger.info('Getting document', { documentId });
+
+    try {
+      const doc = await this.client.document(documentId);
+
+      return {
+        id: doc.id,
+        title: doc.title,
+        content: doc.content || '',
+        url: doc.url,
+      };
+    } catch (error) {
+      this.logger.error('Failed to get document', error as Error, { documentId });
+      return null;
+    }
+  }
+
+  /**
+   * Delete a document
+   */
+  async deleteDocument(documentId: string): Promise<void> {
+    this.logger.info('Deleting document', { documentId });
+
+    try {
+      await this.client.deleteDocument(documentId);
+      this.logger.info('Document deleted', { documentId });
+    } catch (error) {
+      this.logger.error('Failed to delete document', error as Error, { documentId });
+      throw error;
+    }
+  }
 }
 
 // ============================================
@@ -753,6 +880,13 @@ export interface LinearComment {
   authorEmail?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface LinearDocument {
+  id: string;
+  title: string;
+  content: string;
+  url: string;
 }
 
 /**

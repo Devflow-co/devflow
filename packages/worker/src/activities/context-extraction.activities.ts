@@ -11,11 +11,16 @@ import {
   createSentryClient,
   GitHubProvider,
   createCodeAgentDriver,
+  createLinearClient,
+  formatFigmaContextDocument,
+  formatSentryContextDocument,
+  formatGitHubIssueContextDocument,
   type FigmaDesignContext,
   type FigmaScreenshot,
   type SentryIssueContext,
   type GitHubIssueContext,
 } from '@devflow/sdk';
+import { PrismaClient } from '@prisma/client';
 import { oauthResolver } from '@/services/oauth-context';
 
 const logger = createLogger('ContextExtractionActivities');
@@ -512,4 +517,196 @@ export function formatExternalContextAsMarkdown(context: ExternalContext): strin
   }
 
   return `# External Context\n\nThe following external context has been gathered to help with refinement:\n\n${sections.join('\n---\n\n')}`;
+}
+
+// ============================================
+// Save External Context as Linear Documents
+// ============================================
+
+const prisma = new PrismaClient();
+
+export interface SaveExternalContextDocumentsInput {
+  projectId: string;
+  linearId: string;
+  context: ExternalContext;
+  taskContext?: {
+    title: string;
+    identifier: string;
+  };
+}
+
+export interface SaveExternalContextDocumentsOutput {
+  figmaDocumentId?: string;
+  sentryDocumentId?: string;
+  githubIssueDocumentId?: string;
+}
+
+/**
+ * Save external context as separate Linear Documents linked to the issue
+ * Creates documents for each available context type (Figma, Sentry, GitHub Issue)
+ * and updates the Task record with the document IDs
+ */
+export async function saveExternalContextDocuments(
+  input: SaveExternalContextDocumentsInput,
+): Promise<SaveExternalContextDocumentsOutput> {
+  logger.info('Saving external context documents', {
+    projectId: input.projectId,
+    linearId: input.linearId,
+    hasFigma: !!input.context.figma,
+    hasSentry: !!input.context.sentry,
+    hasGitHubIssue: !!input.context.githubIssue,
+  });
+
+  const result: SaveExternalContextDocumentsOutput = {};
+
+  // Get Linear token for creating documents
+  const linearToken = await oauthResolver.resolveLinearToken(input.projectId);
+  const linearClient = createLinearClient(linearToken);
+
+  // Save Figma context document
+  if (input.context.figma) {
+    try {
+      const content = formatFigmaContextDocument({
+        fileKey: input.context.figma.fileKey,
+        fileName: input.context.figma.fileName,
+        lastModified: input.context.figma.lastModified,
+        thumbnailUrl: input.context.figma.thumbnailUrl,
+        comments: input.context.figma.comments,
+        screenshots: input.context.figma.screenshots,
+        taskContext: input.taskContext,
+      });
+
+      const title = input.taskContext
+        ? `${input.taskContext.identifier} - Figma Context`
+        : 'Figma Context';
+
+      const document = await linearClient.createIssueDocument({
+        issueId: input.linearId,
+        title,
+        content,
+      });
+
+      result.figmaDocumentId = document.id;
+
+      // Update Task in database
+      await prisma.task.update({
+        where: { linearId: input.linearId },
+        data: { figmaContextDocumentId: document.id },
+      });
+
+      logger.info('Figma context document created', {
+        documentId: document.id,
+        title,
+      });
+    } catch (error) {
+      logger.error('Failed to create Figma context document', error);
+    }
+  }
+
+  // Save Sentry context document
+  if (input.context.sentry) {
+    try {
+      const content = formatSentryContextDocument({
+        issueId: input.context.sentry.issueId,
+        shortId: input.context.sentry.shortId,
+        title: input.context.sentry.title,
+        culprit: input.context.sentry.culprit,
+        level: input.context.sentry.level,
+        status: input.context.sentry.status,
+        platform: input.context.sentry.platform,
+        count: input.context.sentry.count,
+        userCount: input.context.sentry.userCount,
+        firstSeen: input.context.sentry.firstSeen,
+        lastSeen: input.context.sentry.lastSeen,
+        project: input.context.sentry.project,
+        errorType: input.context.sentry.errorType,
+        errorMessage: input.context.sentry.errorMessage,
+        stacktrace: input.context.sentry.stacktrace,
+        tags: input.context.sentry.tags,
+        taskContext: input.taskContext,
+      });
+
+      const title = input.taskContext
+        ? `${input.taskContext.identifier} - Sentry Context`
+        : 'Sentry Context';
+
+      const document = await linearClient.createIssueDocument({
+        issueId: input.linearId,
+        title,
+        content,
+      });
+
+      result.sentryDocumentId = document.id;
+
+      // Update Task in database
+      await prisma.task.update({
+        where: { linearId: input.linearId },
+        data: { sentryContextDocumentId: document.id },
+      });
+
+      logger.info('Sentry context document created', {
+        documentId: document.id,
+        title,
+      });
+    } catch (error) {
+      logger.error('Failed to create Sentry context document', error);
+    }
+  }
+
+  // Save GitHub Issue context document
+  if (input.context.githubIssue) {
+    try {
+      const content = formatGitHubIssueContextDocument({
+        id: input.context.githubIssue.id,
+        number: input.context.githubIssue.number,
+        title: input.context.githubIssue.title,
+        state: input.context.githubIssue.state,
+        body: input.context.githubIssue.body,
+        author: input.context.githubIssue.author,
+        url: input.context.githubIssue.url,
+        labels: input.context.githubIssue.labels,
+        assignees: input.context.githubIssue.assignees,
+        createdAt: input.context.githubIssue.createdAt,
+        updatedAt: input.context.githubIssue.updatedAt,
+        closedAt: input.context.githubIssue.closedAt,
+        comments: input.context.githubIssue.comments,
+        taskContext: input.taskContext,
+      });
+
+      const title = input.taskContext
+        ? `${input.taskContext.identifier} - GitHub Issue Context`
+        : 'GitHub Issue Context';
+
+      const document = await linearClient.createIssueDocument({
+        issueId: input.linearId,
+        title,
+        content,
+      });
+
+      result.githubIssueDocumentId = document.id;
+
+      // Update Task in database
+      await prisma.task.update({
+        where: { linearId: input.linearId },
+        data: { githubIssueContextDocumentId: document.id },
+      });
+
+      logger.info('GitHub Issue context document created', {
+        documentId: document.id,
+        title,
+      });
+    } catch (error) {
+      logger.error('Failed to create GitHub Issue context document', error);
+    }
+  }
+
+  const createdCount = Object.keys(result).length;
+  logger.info('External context documents saved', {
+    createdCount,
+    figma: !!result.figmaDocumentId,
+    sentry: !!result.sentryDocumentId,
+    githubIssue: !!result.githubIssueDocumentId,
+  });
+
+  return result;
 }
