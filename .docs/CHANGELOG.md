@@ -1,5 +1,22 @@
 # CHANGELOG - DevFlow
 
+## [2.5.1] - 2025-12-28
+### Changed
+- **Documentation Reorganization** - Complete restructure of project documentation
+  - Slimmed down `CLAUDE.md` from 914 to ~210 lines (optimized for AI agents)
+  - Created `.docs/README.md` as documentation index
+  - Created `.docs/ENV_VARIABLES.md` consolidating all environment variables
+  - Created `.docs/guides/` directory with:
+    - `GETTING_STARTED.md` - Quick setup guide
+    - `WORKFLOW_GUIDE.md` - Three-phase workflow details
+    - `TROUBLESHOOTING.md` - Common issues and solutions
+    - `TESTING.md` - Testing strategies and commands
+  - Moved OAuth docs to `.docs/integrations/`
+  - Moved RAG PHASE docs to `.docs/rag/`
+  - Created `.docs/rag/README.md` as RAG system overview
+  - All documentation now in English
+  - Removed redundant `DOCUMENTATION.md` (content distributed to specific guides)
+
 ## [1.14.0] - 2025-12-13
 ### Added
 - **Comment Synchronization** - Sync Linear comments to database
