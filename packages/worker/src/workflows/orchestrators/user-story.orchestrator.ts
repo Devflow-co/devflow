@@ -1,48 +1,53 @@
 /**
- * User Story Workflow - Phase 2 of Three-Phase Agile Workflow
+ * User Story Orchestrator - Phase 2 of Three-Phase Agile Workflow
  *
- * Generates formal user stories from refined requirements.
- * Focus: User story format, acceptance criteria, definition of done, story points
+ * Coordinates all user story step workflows:
+ * 1. Sync task from Linear
+ * 2. Update status to In Progress (conditional)
+ * 3. Extract refinement from description (local function)
+ * 4. Get codebase context document (conditional)
+ * 5. Get documentation context document (conditional)
+ * 6. Check for task split (conditional)
+ *    6a. Create split subtasks
+ *    6b. Add split comment
+ * 7. Generate user story (AI)
+ * 8. Append user story to issue
+ * 9. Update status to Ready (conditional)
  */
 
-import { proxyActivities, ApplicationFailure } from '@temporalio/workflow';
-import type { WorkflowConfig, AutomationConfig, UserStoryPhaseConfig } from '@devflow/common';
+import { executeChild, ApplicationFailure } from '@temporalio/workflow';
+import type { WorkflowConfig, UserStoryPhaseConfig } from '@devflow/common';
 import { DEFAULT_WORKFLOW_CONFIG, DEFAULT_AUTOMATION_CONFIG } from '@devflow/common';
-import type * as activities from '@/activities';
 
-// Proxy activities with 5-minute timeout
-const {
-  syncLinearTask,
-  updateLinearTask,
-  generateUserStory,
-  appendUserStoryToLinearIssue,
-  createLinearSubtasks,
-  addCommentToLinearIssue,
-  // Document retrieval
-  getPhaseDocumentContent,
-} = proxyActivities<typeof activities>({
-  startToCloseTimeout: '5 minutes',
-  retry: {
-    maximumAttempts: 3,
-  },
-});
+// Import step workflows
+import { syncLinearTaskWorkflow } from '../steps/common/sync-linear-task.workflow';
+import { updateLinearStatusWorkflow } from '../steps/common/update-linear-status.workflow';
+import { getPhaseDocumentWorkflow } from '../steps/common/get-phase-document.workflow';
+import { generateUserStoryWorkflow } from '../steps/user-story/generate-user-story.workflow';
+import { appendUserStoryWorkflow } from '../steps/user-story/append-user-story.workflow';
+import { createSplitSubtasksWorkflow } from '../steps/user-story/create-split-subtasks.workflow';
+import { addSplitCommentWorkflow } from '../steps/user-story/add-split-comment.workflow';
 
-export interface UserStoryWorkflowInput {
+export interface UserStoryOrchestratorInput {
   taskId: string;
   projectId: string;
   config?: WorkflowConfig;
 }
 
-export interface UserStoryWorkflowResult {
+export interface UserStoryOrchestratorResult {
   success: boolean;
   phase: 'user_story';
   message: string;
   userStory?: any;
-  /** True if task was split into sub-issues */
   split?: boolean;
-  /** Created sub-issues (when split) */
   subIssuesCreated?: Array<{ index: number; issueId: string; identifier: string; title: string }>;
 }
+
+/** Valid task types */
+type TaskType = 'feature' | 'bug' | 'enhancement' | 'chore';
+
+/** Valid complexity estimates */
+type ComplexityEstimate = 'XS' | 'S' | 'M' | 'L' | 'XL';
 
 /** Parsed suggested split from refinement */
 interface ParsedSuggestedSplit {
@@ -54,12 +59,6 @@ interface ParsedSuggestedSplit {
     acceptanceCriteria?: string[];
   }>;
 }
-
-/** Valid task types */
-type TaskType = 'feature' | 'bug' | 'enhancement' | 'chore';
-
-/** Valid complexity estimates */
-type ComplexityEstimate = 'XS' | 'S' | 'M' | 'L' | 'XL';
 
 /** Parsed refinement from description */
 interface ParsedRefinement {
@@ -75,11 +74,8 @@ interface ParsedRefinement {
 
 /**
  * Extract refinement from Linear issue description
- * Parses markdown to extract all refinement fields including suggestedSplit
  */
 function extractRefinementFromDescription(description: string): ParsedRefinement {
-  // The refinement can be in collapsible section or H1 format
-  // Try collapsible format first: <details><summary>📋 Backlog Refinement</summary>
   let refinementText = '';
 
   const collapsibleMatch = description.match(
@@ -88,7 +84,6 @@ function extractRefinementFromDescription(description: string): ParsedRefinement
   if (collapsibleMatch) {
     refinementText = collapsibleMatch[1];
   } else {
-    // Fallback to H1 format
     const h1Match = description.match(/# Backlog Refinement[\s\S]*?(?=\n# |$)/);
     if (h1Match) {
       refinementText = h1Match[0];
@@ -96,11 +91,10 @@ function extractRefinementFromDescription(description: string): ParsedRefinement
   }
 
   if (!refinementText) {
-    // If no refinement found, return minimal refinement object
     return {
       taskType: 'feature' as TaskType,
-      suggestedTitle: '', // Will use existing title
-      reformulatedDescription: description, // Will use existing description
+      suggestedTitle: '',
+      reformulatedDescription: description,
       businessContext: description,
       objectives: [],
       preliminaryAcceptanceCriteria: [],
@@ -108,7 +102,6 @@ function extractRefinementFromDescription(description: string): ParsedRefinement
     };
   }
 
-  // Extract task type
   const taskTypeMatch = refinementText.match(/\*\*Type:\*\* [^\s]+ (\w+)/);
   const rawTaskType = taskTypeMatch ? taskTypeMatch[1].toLowerCase() : 'feature';
   const validTaskTypes: TaskType[] = ['feature', 'bug', 'enhancement', 'chore'];
@@ -116,11 +109,9 @@ function extractRefinementFromDescription(description: string): ParsedRefinement
     ? (rawTaskType as TaskType)
     : 'feature';
 
-  // Extract business context (### Business Context in collapsible, ## Business Context in H1)
   const contextMatch = refinementText.match(/###?\s*Business Context\n\n?([\s\S]*?)(?=\n###? |$)/);
   const businessContext = contextMatch ? contextMatch[1].trim() : '';
 
-  // Extract objectives
   const objectivesMatch = refinementText.match(/###?\s*Objectives\n\n?([\s\S]*?)(?=\n###? |$)/);
   const objectives = objectivesMatch
     ? objectivesMatch[1]
@@ -129,8 +120,9 @@ function extractRefinementFromDescription(description: string): ParsedRefinement
         .map((line) => line.replace(/^\d+\.\s*/, '').trim())
     : [];
 
-  // Extract preliminary acceptance criteria
-  const criteriaMatch = refinementText.match(/###?\s*Preliminary Acceptance Criteria\n\n?([\s\S]*?)(?=\n###? |$)/);
+  const criteriaMatch = refinementText.match(
+    /###?\s*Preliminary Acceptance Criteria\n\n?([\s\S]*?)(?=\n###? |$)/
+  );
   const preliminaryAcceptanceCriteria = criteriaMatch
     ? criteriaMatch[1]
         .split('\n')
@@ -138,19 +130,17 @@ function extractRefinementFromDescription(description: string): ParsedRefinement
         .map((line) => line.replace(/^\d+\.\s*/, '').trim())
     : [];
 
-  // Extract complexity estimate
   const complexityMatch = refinementText.match(/\*\*(XS|S|M|L|XL)\*\*/);
   const complexityEstimate: ComplexityEstimate = complexityMatch
     ? (complexityMatch[1] as ComplexityEstimate)
     : 'M';
 
-  // Extract suggested split
   const suggestedSplit = extractSuggestedSplit(refinementText);
 
   return {
     taskType,
-    suggestedTitle: '', // Already applied in Phase 1, not parsed from markdown
-    reformulatedDescription: '', // Already applied in Phase 1, not parsed from markdown
+    suggestedTitle: '',
+    reformulatedDescription: '',
     businessContext,
     objectives,
     preliminaryAcceptanceCriteria,
@@ -161,24 +151,17 @@ function extractRefinementFromDescription(description: string): ParsedRefinement
 
 /**
  * Extract suggested split from refinement markdown
- * Format:
- * ### 🔀 Suggested Split
- * **Reason:** {reason}
- * **Proposed Stories:**
- * #### 1. {title}
- * {description}
- * **Dependencies:** - Depends on: {title}
- * **Acceptance Criteria:** 1. {criterion}
  */
 function extractSuggestedSplit(refinementText: string): ParsedSuggestedSplit | undefined {
-  const splitMatch = refinementText.match(/###?\s*🔀 Suggested Split\n\n?([\s\S]*?)(?=\n###?\s*Complexity Estimate|$)/);
+  const splitMatch = refinementText.match(
+    /###?\s*🔀 Suggested Split\n\n?([\s\S]*?)(?=\n###?\s*Complexity Estimate|$)/
+  );
   if (!splitMatch) {
     return undefined;
   }
 
   const splitText = splitMatch[1];
 
-  // Extract reason
   const reasonMatch = splitText.match(/\*\*Reason:\*\*\s*(.+?)(?:\n|$)/);
   const reason = reasonMatch ? reasonMatch[1].trim() : '';
 
@@ -186,37 +169,31 @@ function extractSuggestedSplit(refinementText: string): ParsedSuggestedSplit | u
     return undefined;
   }
 
-  // Extract proposed stories
   const proposedStories: ParsedSuggestedSplit['proposedStories'] = [];
 
-  // Split by story headers (#### 1. Title, #### 2. Title, etc.)
   const storyBlocks = splitText.split(/####\s*\d+\.\s*/);
 
-  // First block is the "Proposed Stories:" text, skip it
   for (let i = 1; i < storyBlocks.length; i++) {
     const block = storyBlocks[i].trim();
     if (!block) continue;
 
-    // First line is the title
     const lines = block.split('\n');
     const title = lines[0].trim();
 
-    // Extract description (everything before **Dependencies:** or **Acceptance Criteria:**)
-    const descMatch = block.match(/^[^\n]+\n\n?([\s\S]*?)(?=\n\*\*Dependencies:\*\*|\n\*\*Acceptance Criteria:\*\*|$)/);
+    const descMatch = block.match(
+      /^[^\n]+\n\n?([\s\S]*?)(?=\n\*\*Dependencies:\*\*|\n\*\*Acceptance Criteria:\*\*|$)/
+    );
     const description = descMatch ? descMatch[1].trim() : '';
 
-    // Extract dependencies
     const dependencies: number[] = [];
     const depsMatch = block.match(/\*\*Dependencies:\*\*([\s\S]*?)(?=\n\*\*Acceptance Criteria:\*\*|$)/);
     if (depsMatch) {
-      // Parse "- Depends on: Title" lines and match to indices
       const depLines = depsMatch[1].match(/- Depends on:\s*(.+)/g);
       if (depLines) {
         depLines.forEach((depLine) => {
           const depTitleMatch = depLine.match(/- Depends on:\s*(.+)/);
           if (depTitleMatch) {
             const depTitle = depTitleMatch[1].trim();
-            // Find the index of the story with this title
             const depIndex = proposedStories.findIndex((s) => s.title === depTitle);
             if (depIndex >= 0) {
               dependencies.push(depIndex);
@@ -226,7 +203,6 @@ function extractSuggestedSplit(refinementText: string): ParsedSuggestedSplit | u
       }
     }
 
-    // Extract acceptance criteria
     const acceptanceCriteria: string[] = [];
     const acMatch = block.match(/\*\*Acceptance Criteria:\*\*([\s\S]*?)$/);
     if (acMatch) {
@@ -301,108 +277,122 @@ function formatSplitComment(
   return lines.join('\n');
 }
 
-/**
- * User Story Workflow
- * Phase 2: Transform refined requirements into formal user story
- *
- * If refinement contains a suggestedSplit, creates sub-issues instead of generating user story
- */
-export async function userStoryWorkflow(
-  input: UserStoryWorkflowInput
-): Promise<UserStoryWorkflowResult> {
+export async function userStoryOrchestrator(
+  input: UserStoryOrchestratorInput
+): Promise<UserStoryOrchestratorResult> {
   const config = input.config || DEFAULT_WORKFLOW_CONFIG;
   const LINEAR_STATUSES = config.linear.statuses;
 
   // Get automation config with defaults
-  const automation: UserStoryPhaseConfig = config.automation?.phases?.userStory ||
-    DEFAULT_AUTOMATION_CONFIG.phases.userStory;
+  const automation: UserStoryPhaseConfig =
+    config.automation?.phases?.userStory || DEFAULT_AUTOMATION_CONFIG.phases.userStory;
   const features = automation.features;
 
   try {
     // Step 1: Sync task from Linear
-    const task = await syncLinearTask({
-      taskId: input.taskId,
-      projectId: input.projectId,
+    const task = await executeChild(syncLinearTaskWorkflow, {
+      workflowId: `sync-task-${input.taskId}-${Date.now()}`,
+      args: [{ taskId: input.taskId, projectId: input.projectId }],
     });
 
     // Step 2: Update status to UserStory In Progress (conditional)
     if (features.enableAutoStatusUpdate) {
-      await updateLinearTask({
-        projectId: input.projectId,
-        linearId: task.linearId,
-        updates: { status: LINEAR_STATUSES.userStoryInProgress },
+      await executeChild(updateLinearStatusWorkflow, {
+        workflowId: `status-in-progress-${input.taskId}-${Date.now()}`,
+        args: [
+          {
+            projectId: input.projectId,
+            linearId: task.linearId,
+            status: LINEAR_STATUSES.userStoryInProgress,
+          },
+        ],
       });
     }
 
-    // Step 3: Extract refinement from Linear description
+    // Step 3: Extract refinement from description (local function)
     const refinement = extractRefinementFromDescription(task.description);
 
-    // Step 3.3: Load Codebase Context document (created in Phase 1) - conditional
+    // Step 4: Get codebase context document (conditional)
     let codebaseContext: string | undefined;
     if (features.reuseCodebaseContext) {
-      const codebaseContextDoc = await getPhaseDocumentContent({
-        projectId: input.projectId,
-        linearId: task.linearId,
-        phase: 'codebase_context',
+      const codebaseContextDoc = await executeChild(getPhaseDocumentWorkflow, {
+        workflowId: `get-codebase-${input.taskId}-${Date.now()}`,
+        args: [
+          {
+            projectId: input.projectId,
+            linearId: task.linearId,
+            phase: 'codebase_context' as const,
+          },
+        ],
       });
 
       if (codebaseContextDoc.content) {
-        console.log('[userStoryWorkflow] Codebase context loaded from document');
         codebaseContext = codebaseContextDoc.content;
-      } else {
-        console.log('[userStoryWorkflow] No codebase context document found');
       }
-    } else {
-      console.log('[userStoryWorkflow] Codebase context reuse disabled');
     }
 
-    // Step 3.4: Load Documentation Context document (created in Phase 1) - conditional
+    // Step 5: Get documentation context document (conditional)
     let documentationContext: string | undefined;
     if (features.reuseDocumentationContext) {
-      const documentationContextDoc = await getPhaseDocumentContent({
-        projectId: input.projectId,
-        linearId: task.linearId,
-        phase: 'documentation_context',
+      const documentationContextDoc = await executeChild(getPhaseDocumentWorkflow, {
+        workflowId: `get-docs-${input.taskId}-${Date.now()}`,
+        args: [
+          {
+            projectId: input.projectId,
+            linearId: task.linearId,
+            phase: 'documentation_context' as const,
+          },
+        ],
       });
 
       if (documentationContextDoc.content) {
-        console.log('[userStoryWorkflow] Documentation context loaded from document');
         documentationContext = documentationContextDoc.content;
-      } else {
-        console.log('[userStoryWorkflow] No documentation context document found');
       }
-    } else {
-      console.log('[userStoryWorkflow] Documentation context reuse disabled');
     }
 
-    // Step 3.5: Check if task should be split (conditional)
+    // Step 6: Check for task split (conditional)
     if (
       features.enableTaskSplitting &&
       refinement.suggestedSplit &&
       refinement.suggestedSplit.proposedStories.length > 0
     ) {
-      // Create sub-issues instead of generating user story
-      const subIssuesResult = await createLinearSubtasks({
-        projectId: input.projectId,
-        parentIssueId: task.linearId,
-        proposedStories: refinement.suggestedSplit.proposedStories,
-        initialStatus: LINEAR_STATUSES.toRefinement,
+      // Step 6a: Create split subtasks
+      const subIssuesResult = await executeChild(createSplitSubtasksWorkflow, {
+        workflowId: `create-split-${input.taskId}-${Date.now()}`,
+        args: [
+          {
+            projectId: input.projectId,
+            parentIssueId: task.linearId,
+            proposedStories: refinement.suggestedSplit.proposedStories,
+            initialStatus: LINEAR_STATUSES.toRefinement,
+          },
+        ],
       });
 
-      // Add comment explaining the split
+      // Step 6b: Add split comment
       const splitComment = formatSplitComment(refinement.suggestedSplit, subIssuesResult);
-      await addCommentToLinearIssue({
-        projectId: input.projectId,
-        linearId: task.linearId,
-        body: splitComment,
+      await executeChild(addSplitCommentWorkflow, {
+        workflowId: `add-split-comment-${input.taskId}-${Date.now()}`,
+        args: [
+          {
+            projectId: input.projectId,
+            linearId: task.linearId,
+            body: splitComment,
+          },
+        ],
       });
 
-      // Update parent status to UserStory Ready (parent stays as epic) - conditional
+      // Update status to Ready (conditional)
       if (features.enableAutoStatusUpdate) {
-        await updateLinearTask({
-          projectId: input.projectId,
-          linearId: task.linearId,
-          updates: { status: LINEAR_STATUSES.userStoryReady },
+        await executeChild(updateLinearStatusWorkflow, {
+          workflowId: `status-ready-${input.taskId}-${Date.now()}`,
+          args: [
+            {
+              projectId: input.projectId,
+              linearId: task.linearId,
+              status: LINEAR_STATUSES.userStoryReady,
+            },
+          ],
         });
       }
 
@@ -415,34 +405,48 @@ export async function userStoryWorkflow(
       };
     }
 
-    // Step 4: Generate user story (no split)
-    // Pass aiModel from automation config
-    const result = await generateUserStory({
-      task: {
-        title: task.title,
-        description: task.description,
-        priority: task.priority,
-      },
-      refinement,
-      projectId: input.projectId,
-      codebaseContext,
-      documentationContext,
-      aiModel: automation.aiModel,
+    // Step 7: Generate user story (AI)
+    const result = await executeChild(generateUserStoryWorkflow, {
+      workflowId: `generate-user-story-${input.taskId}-${Date.now()}`,
+      args: [
+        {
+          task: {
+            title: task.title,
+            description: task.description,
+            priority: task.priority,
+          },
+          refinement,
+          projectId: input.projectId,
+          codebaseContext,
+          documentationContext,
+          aiModel: automation.aiModel,
+        },
+      ],
     });
 
-    // Step 5: Append user story to Linear issue
-    await appendUserStoryToLinearIssue({
-      projectId: input.projectId,
-      linearId: task.linearId,
-      userStory: result.userStory,
+    // Step 8: Append user story to issue
+    await executeChild(appendUserStoryWorkflow, {
+      workflowId: `append-user-story-${input.taskId}-${Date.now()}`,
+      args: [
+        {
+          projectId: input.projectId,
+          linearId: task.linearId,
+          userStory: result.userStory,
+        },
+      ],
     });
 
-    // Step 6: Update status to UserStory Ready (conditional)
+    // Step 9: Update status to Ready (conditional)
     if (features.enableAutoStatusUpdate) {
-      await updateLinearTask({
-        projectId: input.projectId,
-        linearId: task.linearId,
-        updates: { status: LINEAR_STATUSES.userStoryReady },
+      await executeChild(updateLinearStatusWorkflow, {
+        workflowId: `status-ready-${input.taskId}-${Date.now()}`,
+        args: [
+          {
+            projectId: input.projectId,
+            linearId: task.linearId,
+            status: LINEAR_STATUSES.userStoryReady,
+          },
+        ],
       });
     }
 
@@ -453,29 +457,32 @@ export async function userStoryWorkflow(
       userStory: result.userStory,
     };
   } catch (error) {
-    // Update status to UserStory Failed (conditional)
+    // Update status to Failed (conditional)
     if (features.enableAutoStatusUpdate) {
       try {
-        const task = await syncLinearTask({
-          taskId: input.taskId,
-          projectId: input.projectId,
+        const task = await executeChild(syncLinearTaskWorkflow, {
+          workflowId: `sync-task-error-${input.taskId}-${Date.now()}`,
+          args: [{ taskId: input.taskId, projectId: input.projectId }],
         });
 
-        await updateLinearTask({
-          projectId: input.projectId,
-          linearId: task.linearId,
-          updates: { status: LINEAR_STATUSES.userStoryFailed },
+        await executeChild(updateLinearStatusWorkflow, {
+          workflowId: `status-failed-${input.taskId}-${Date.now()}`,
+          args: [
+            {
+              projectId: input.projectId,
+              linearId: task.linearId,
+              status: LINEAR_STATUSES.userStoryFailed,
+            },
+          ],
         });
       } catch (updateError) {
-        // Log but don't throw - original error is more important
-        console.error('Failed to update status to userStoryFailed:', updateError);
+        console.error('[userStoryOrchestrator] Failed to update status to Failed:', updateError);
       }
     }
 
-    // Throw original error
     throw ApplicationFailure.create({
-      message: `User story workflow failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      type: 'UserStoryWorkflowFailure',
+      message: `User story orchestrator failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      type: 'UserStoryOrchestratorFailure',
       cause: error instanceof Error ? error : undefined,
     });
   }

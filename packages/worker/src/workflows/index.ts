@@ -1,11 +1,28 @@
 /**
  * Temporal Workflows
+ *
+ * Atomic Workflow Architecture:
+ * - Orchestrators: Main entry points that coordinate step workflows
+ * - Steps: Individual atomic workflows for each operation
  */
 
 export * from './devflow.workflow';
 export * from './spec-generation.workflow';
 
-// Phase workflows (called as child workflows from devflowWorkflow)
-export * from './phases/refinement.workflow';
-export * from './phases/user-story.workflow';
-export * from './phases/technical-plan.workflow';
+// Orchestrators (replace old phase workflows)
+export * from './orchestrators';
+
+// Step workflows (common)
+export * from './steps/common';
+
+// Step workflows (refinement)
+export * from './steps/refinement';
+
+// Step workflows (user-story)
+export * from './steps/user-story';
+
+// Step workflows (technical-plan)
+export * from './steps/technical-plan';
+
+// Type definitions
+export * from './types';

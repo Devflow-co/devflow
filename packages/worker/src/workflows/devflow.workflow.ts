@@ -1,25 +1,28 @@
 /**
  * Main DevFlow Orchestration Workflow - Three-Phase Agile Router
  *
- * Routes to appropriate sub-workflow based on Linear task status:
- * - To Refinement → Refinement Workflow (Phase 1)
- * - To User Story / Refinement Ready → User Story Workflow (Phase 2)
- * - To Plan / UserStory Ready → Technical Plan Workflow (Phase 3)
+ * Routes to appropriate orchestrator based on Linear task status:
+ * - To Refinement → Refinement Orchestrator (Phase 1)
+ * - To User Story / Refinement Ready → User Story Orchestrator (Phase 2)
+ * - To Plan / UserStory Ready → Technical Plan Orchestrator (Phase 3)
+ *
+ * Uses atomic workflow architecture where each orchestrator coordinates
+ * multiple step workflows for better observability and retry isolation.
  */
 
 import { executeChild, proxyActivities, ApplicationFailure } from '@temporalio/workflow';
 import type { WorkflowInput, WorkflowResult } from '@devflow/common';
 import { DEFAULT_WORKFLOW_CONFIG } from '@devflow/common';
 
-// Import sub-workflows
-import { refinementWorkflow } from './phases/refinement.workflow';
-import { userStoryWorkflow } from './phases/user-story.workflow';
-import { technicalPlanWorkflow } from './phases/technical-plan.workflow';
+// Import orchestrators (replace old phase workflows)
+import { refinementOrchestrator } from './orchestrators/refinement.orchestrator';
+import { userStoryOrchestrator } from './orchestrators/user-story.orchestrator';
+import { technicalPlanOrchestrator } from './orchestrators/technical-plan.orchestrator';
 
 // Import activity types
 import type * as activities from '@/activities';
 
-// Simple activity proxy for syncing Linear tasks
+// Simple activity proxy for syncing Linear tasks (used for routing decision)
 const { syncLinearTask } = proxyActivities<typeof activities>({
   startToCloseTimeout: '5 minutes',
   retry: {
@@ -47,13 +50,13 @@ export async function devflowWorkflow(input: WorkflowInput): Promise<WorkflowRes
     console.log('[devflowWorkflow] Expected toRefinement:', LINEAR_STATUSES.toRefinement);
     console.log('[devflowWorkflow] Status match:', task.status === LINEAR_STATUSES.toRefinement);
 
-    // Route to appropriate sub-workflow based on status
+    // Route to appropriate orchestrator based on status
     // Phase 1: Refinement (also accepts "In Progress" for PO answer re-triggers)
     if (
       task.status === LINEAR_STATUSES.toRefinement ||
       task.status === LINEAR_STATUSES.refinementInProgress
     ) {
-      const result = await executeChild(refinementWorkflow, {
+      const result = await executeChild(refinementOrchestrator, {
         workflowId: `refinement-${input.taskId}-${Date.now()}`,
         args: [
           {
@@ -77,7 +80,7 @@ export async function devflowWorkflow(input: WorkflowInput): Promise<WorkflowRes
       task.status === LINEAR_STATUSES.toUserStory ||
       task.status === LINEAR_STATUSES.userStoryInProgress
     ) {
-      const result = await executeChild(userStoryWorkflow, {
+      const result = await executeChild(userStoryOrchestrator, {
         workflowId: `user-story-${input.taskId}-${Date.now()}`,
         args: [
           {
@@ -101,7 +104,7 @@ export async function devflowWorkflow(input: WorkflowInput): Promise<WorkflowRes
       task.status === LINEAR_STATUSES.toPlan ||
       task.status === LINEAR_STATUSES.planInProgress
     ) {
-      const result = await executeChild(technicalPlanWorkflow, {
+      const result = await executeChild(technicalPlanOrchestrator, {
         workflowId: `technical-plan-${input.taskId}-${Date.now()}`,
         args: [
           {
