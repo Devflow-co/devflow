@@ -25,7 +25,7 @@ export class ProjectsService {
 
   async findAll() {
     this.logger.info('Finding all projects');
-    
+
     return this.prisma.project.findMany({
       where: { isActive: true },
       orderBy: { createdAt: 'desc' },
@@ -35,6 +35,59 @@ export class ProjectsService {
         },
       },
     });
+  }
+
+  /**
+   * Find projects accessible by a user (via organizations)
+   */
+  async findByUserId(userId: string) {
+    this.logger.info('Finding projects for user', { userId });
+
+    return this.prisma.project.findMany({
+      where: {
+        isActive: true,
+        organizations: {
+          some: {
+            organization: {
+              members: {
+                some: { userId },
+              },
+            },
+          },
+        },
+      },
+      include: {
+        integration: true,
+        oauthConnections: {
+          where: { isActive: true },
+        },
+        _count: {
+          select: { tasks: true, workflows: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Check if a user has access to a project (via organizations)
+   */
+  async userHasAccess(projectId: string, userId: string): Promise<boolean> {
+    const count = await this.prisma.project.count({
+      where: {
+        id: projectId,
+        organizations: {
+          some: {
+            organization: {
+              members: {
+                some: { userId },
+              },
+            },
+          },
+        },
+      },
+    });
+    return count > 0;
   }
 
   async findOne(id: string) {
@@ -84,6 +137,53 @@ export class ProjectsService {
         config: config as any, // Cast to any for Prisma JSON type compatibility
       },
     });
+  }
+
+  /**
+   * Create a project and link it to the user's organization
+   */
+  async createForUser(dto: CreateProjectDto, userId: string) {
+    this.logger.info('Creating project for user', { name: dto.name, userId });
+
+    // Find user's personal organization (where they are OWNER)
+    const orgMember = await this.prisma.organizationMember.findFirst({
+      where: { userId, role: 'OWNER' },
+      include: { organization: true },
+    });
+
+    if (!orgMember) {
+      this.logger.error(`No organization found for user: ${userId}`);
+      throw new NotFoundException('No organization found for user. Please contact support.');
+    }
+
+    // Initialize with DEFAULT_WORKFLOW_CONFIG if no config provided
+    const config = dto.config || DEFAULT_WORKFLOW_CONFIG;
+
+    // Create project
+    const project = await this.prisma.project.create({
+      data: {
+        name: dto.name,
+        description: dto.description || '',
+        repository: dto.repository || '',
+        workspacePath: dto.workspacePath,
+        config: config as any,
+      },
+    });
+
+    // Link project to organization
+    await this.prisma.organizationProject.create({
+      data: {
+        organizationId: orgMember.organizationId,
+        projectId: project.id,
+      },
+    });
+
+    this.logger.info('Project created and linked to organization', {
+      projectId: project.id,
+      organizationId: orgMember.organizationId,
+    });
+
+    return project;
   }
 
   async update(id: string, dto: UpdateProjectDto) {

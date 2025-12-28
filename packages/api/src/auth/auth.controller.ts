@@ -9,12 +9,17 @@ import {
   HttpStatus,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
   Logger,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { OAuthProvider } from '@prisma/client';
+import { OAuthProvider, User } from '@prisma/client';
 import { OAuthService } from '@/auth/services/oauth.service';
+import { AuthGuard } from '@/user-auth/guards/auth.guard';
+import { CurrentUser } from '@/user-auth/decorators/current-user.decorator';
+import { ProjectsService } from '@/projects/projects.service';
 
 // Supported OAuth providers
 const SUPPORTED_PROVIDERS = ['GITHUB', 'LINEAR', 'SENTRY', 'FIGMA', 'GITHUB_ISSUES'] as const;
@@ -26,10 +31,14 @@ const AUTH_CODE_PROVIDERS = ['LINEAR', 'SENTRY', 'FIGMA', 'GITHUB'] as const;
  * Handles OAuth Device Flow and Authorization Code Flow endpoints
  */
 @Controller('auth')
+@UseGuards(AuthGuard) // Protect all OAuth endpoints
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
 
-  constructor(private readonly oauthService: OAuthService) {}
+  constructor(
+    private readonly oauthService: OAuthService,
+    private readonly projectsService: ProjectsService,
+  ) {}
 
   /**
    * Initiate Device Flow OAuth
@@ -137,12 +146,15 @@ export class AuthController {
    */
   @Post('linear/authorize')
   @HttpCode(HttpStatus.OK)
-  async initiateLinearAuth(@Body('projectId') projectId: string) {
+  async initiateLinearAuth(@Body('projectId') projectId: string, @CurrentUser() user: User) {
     this.logger.log(`Initiating Linear OAuth for project ${projectId}`);
 
     if (!projectId) {
       throw new BadRequestException('projectId is required');
     }
+
+    // Verify user has access to project
+    await this.verifyProjectAccess(projectId, user.id);
 
     try {
       const result = await this.oauthService.initiateAuthorizationCodeFlow(
@@ -209,12 +221,15 @@ export class AuthController {
    */
   @Post('sentry/authorize')
   @HttpCode(HttpStatus.OK)
-  async initiateSentryAuth(@Body('projectId') projectId: string) {
+  async initiateSentryAuth(@Body('projectId') projectId: string, @CurrentUser() user: User) {
     this.logger.log(`Initiating Sentry OAuth for project ${projectId}`);
 
     if (!projectId) {
       throw new BadRequestException('projectId is required');
     }
+
+    // Verify user has access to project
+    await this.verifyProjectAccess(projectId, user.id);
 
     try {
       const result = await this.oauthService.initiateAuthorizationCodeFlow(
@@ -281,12 +296,15 @@ export class AuthController {
    */
   @Post('figma/authorize')
   @HttpCode(HttpStatus.OK)
-  async initiateFigmaAuth(@Body('projectId') projectId: string) {
+  async initiateFigmaAuth(@Body('projectId') projectId: string, @CurrentUser() user: User) {
     this.logger.log(`Initiating Figma OAuth for project ${projectId}`);
 
     if (!projectId) {
       throw new BadRequestException('projectId is required');
     }
+
+    // Verify user has access to project
+    await this.verifyProjectAccess(projectId, user.id);
 
     try {
       const result = await this.oauthService.initiateAuthorizationCodeFlow(
@@ -353,12 +371,15 @@ export class AuthController {
    */
   @Post('github/authorize')
   @HttpCode(HttpStatus.OK)
-  async initiateGitHubAuth(@Body('projectId') projectId: string) {
+  async initiateGitHubAuth(@Body('projectId') projectId: string, @CurrentUser() user: User) {
     this.logger.log(`Initiating GitHub OAuth for project ${projectId}`);
 
     if (!projectId) {
       throw new BadRequestException('projectId is required');
     }
+
+    // Verify user has access to project
+    await this.verifyProjectAccess(projectId, user.id);
 
     try {
       const result = await this.oauthService.initiateAuthorizationCodeFlow(
@@ -423,10 +444,13 @@ export class AuthController {
    * Returns: OAuthConnection[] (sanitized)
    */
   @Get('connections')
-  async getConnections(@Query('project') projectId: string) {
+  async getConnections(@Query('project') projectId: string, @CurrentUser() user: User) {
     if (!projectId) {
       throw new BadRequestException('project query parameter is required');
     }
+
+    // Verify user has access to project
+    await this.verifyProjectAccess(projectId, user.id);
 
     const connections = await this.oauthService.getConnections(projectId);
 
@@ -460,12 +484,16 @@ export class AuthController {
   async disconnect(
     @Param('provider') provider: string,
     @Body('projectId') projectId: string,
+    @CurrentUser() user: User,
   ) {
     this.logger.log(`Disconnecting ${provider} for project ${projectId}`);
 
     if (!projectId) {
       throw new BadRequestException('projectId is required');
     }
+
+    // Verify user has access to project
+    await this.verifyProjectAccess(projectId, user.id);
 
     const upperProvider = provider.toUpperCase() as OAuthProvider;
     if (!SUPPORTED_PROVIDERS.includes(upperProvider as typeof SUPPORTED_PROVIDERS[number])) {
@@ -497,12 +525,16 @@ export class AuthController {
   async refreshToken(
     @Param('provider') provider: string,
     @Body('projectId') projectId: string,
+    @CurrentUser() user: User,
   ) {
     this.logger.log(`Forcing token refresh for ${provider} on project ${projectId}`);
 
     if (!projectId) {
       throw new BadRequestException('projectId is required');
     }
+
+    // Verify user has access to project
+    await this.verifyProjectAccess(projectId, user.id);
 
     const upperProvider = provider.toUpperCase() as OAuthProvider;
     if (!SUPPORTED_PROVIDERS.includes(upperProvider as typeof SUPPORTED_PROVIDERS[number])) {
@@ -548,6 +580,7 @@ export class AuthController {
     @Body('flowType') flowType: string,
     @Body('name') name?: string,
     @Body('description') description?: string,
+    @CurrentUser() user?: User,
   ) {
     this.logger.log(
       `Registering OAuth app for ${provider} on project ${projectId}`,
@@ -566,6 +599,9 @@ export class AuthController {
         'projectId, provider, clientId, clientSecret, redirectUri, scopes, and flowType are required',
       );
     }
+
+    // Verify user has access to project
+    await this.verifyProjectAccess(projectId, user.id);
 
     const upperProvider = provider.toUpperCase() as OAuthProvider;
     if (!SUPPORTED_PROVIDERS.includes(upperProvider as typeof SUPPORTED_PROVIDERS[number])) {
@@ -610,10 +646,13 @@ export class AuthController {
    * GET /auth/apps?project={projectId}
    */
   @Get('apps')
-  async getOAuthApps(@Query('project') projectId: string) {
+  async getOAuthApps(@Query('project') projectId: string, @CurrentUser() user: User) {
     if (!projectId) {
       throw new BadRequestException('project query parameter is required');
     }
+
+    // Verify user has access to project
+    await this.verifyProjectAccess(projectId, user.id);
 
     try {
       const apps = await this.oauthService.getOAuthApps(projectId);
@@ -633,6 +672,7 @@ export class AuthController {
   async deleteOAuthApp(
     @Param('provider') provider: string,
     @Body('projectId') projectId: string,
+    @CurrentUser() user: User,
   ) {
     this.logger.log(
       `Deleting OAuth app for ${provider} on project ${projectId}`,
@@ -641,6 +681,9 @@ export class AuthController {
     if (!projectId) {
       throw new BadRequestException('projectId is required');
     }
+
+    // Verify user has access to project
+    await this.verifyProjectAccess(projectId, user.id);
 
     const upperProvider = provider.toUpperCase() as OAuthProvider;
     if (!SUPPORTED_PROVIDERS.includes(upperProvider as typeof SUPPORTED_PROVIDERS[number])) {
@@ -658,6 +701,17 @@ export class AuthController {
       }
       this.logger.error(`Failed to delete OAuth app`, error);
       throw new BadRequestException(error.message);
+    }
+  }
+
+  /**
+   * Verify user has access to project via organization membership
+   * @private
+   */
+  private async verifyProjectAccess(projectId: string, userId: string): Promise<void> {
+    const hasAccess = await this.projectsService.userHasAccess(projectId, userId);
+    if (!hasAccess) {
+      throw new ForbiddenException('Access denied to this project');
     }
   }
 

@@ -64,6 +64,9 @@ export class UserAuthService {
       },
     });
 
+    // Create personal organization for the user
+    await this.createPersonalOrganization(user);
+
     // Create session
     const { sessionToken, expiresAt } = await this.sessionService.createSession(
       user.id,
@@ -314,7 +317,7 @@ export class UserAuthService {
     }
 
     // Create new user
-    return this.prisma.user.create({
+    const newUser = await this.prisma.user.create({
       data: {
         email: email.toLowerCase(),
         name,
@@ -326,6 +329,11 @@ export class UserAuthService {
         lastLoginAt: new Date(),
       },
     });
+
+    // Create personal organization for new SSO user
+    await this.createPersonalOrganization(newUser);
+
+    return newUser;
   }
 
   async createSSOSession(
@@ -340,5 +348,37 @@ export class UserAuthService {
     );
 
     return { user, sessionToken, expiresAt };
+  }
+
+  // ============ Organization Management ============
+
+  /**
+   * Creates a personal organization for a user
+   * Called automatically during signup/SSO user creation
+   */
+  private async createPersonalOrganization(user: User): Promise<void> {
+    const orgName = user.name ? `${user.name}'s Organization` : `${user.email}'s Organization`;
+    const orgSlug = `${user.id}-personal`;
+
+    try {
+      await this.prisma.organization.create({
+        data: {
+          name: orgName,
+          slug: orgSlug,
+          members: {
+            create: {
+              userId: user.id,
+              role: 'OWNER',
+            },
+          },
+        },
+      });
+
+      this.logger.log(`Created personal organization for user ${user.email}`);
+    } catch (error) {
+      this.logger.error(`Failed to create personal organization for user ${user.email}:`, error);
+      // Don't fail user creation if organization creation fails
+      // Organization can be created later if needed
+    }
   }
 }
