@@ -11,6 +11,7 @@ Welcome to the DevFlow documentation. This index helps you navigate to the right
 | **AI Agent Context** | [CLAUDE.md](../CLAUDE.md) |
 | **Architecture Deep Dive** | [ARCHITECTURE.md](./ARCHITECTURE.md) |
 | **Getting Started** | [guides/GETTING_STARTED.md](./guides/GETTING_STARTED.md) |
+| **Web Interface Guide** | [WEB_INTERFACE.md](./WEB_INTERFACE.md) |
 | **Environment Variables** | [ENV_VARIABLES.md](./ENV_VARIABLES.md) |
 
 ---
@@ -23,6 +24,7 @@ Welcome to the DevFlow documentation. This index helps you navigate to the right
 |------|-------------|
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Architecture decisions, NestJS boundaries, module design, OAuth architecture |
 | [ARCHITECTURE_QUICK_REFERENCE.md](./ARCHITECTURE_QUICK_REFERENCE.md) | Quick decision trees for architecture choices |
+| [WEB_INTERFACE.md](./WEB_INTERFACE.md) | Web frontend (Nuxt 3) - authentication, project management, OAuth integrations |
 | [ENV_VARIABLES.md](./ENV_VARIABLES.md) | All environment variables with descriptions |
 | [CHANGELOG.md](./CHANGELOG.md) | Version history and release notes |
 
@@ -67,7 +69,8 @@ Start with [CLAUDE.md](../CLAUDE.md) - concise reference for AI context.
 ### For Developers
 1. [guides/GETTING_STARTED.md](./guides/GETTING_STARTED.md) - Setup your environment
 2. [ARCHITECTURE.md](./ARCHITECTURE.md) - Understand the codebase
-3. [guides/WORKFLOW_GUIDE.md](./guides/WORKFLOW_GUIDE.md) - Learn the three-phase workflow
+3. [WEB_INTERFACE.md](./WEB_INTERFACE.md) - Web frontend development
+4. [guides/WORKFLOW_GUIDE.md](./guides/WORKFLOW_GUIDE.md) - Learn the three-phase workflow
 
 ### For DevOps
 1. [ENV_VARIABLES.md](./ENV_VARIABLES.md) - Configure the application

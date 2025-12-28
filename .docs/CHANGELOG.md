@@ -1,5 +1,16 @@
 # CHANGELOG - DevFlow
 
+## [Unreleased]
+### Added
+- **User Authentication Module** - Complete authentication system with email verification
+  - UserAuthModule for handling authentication processes
+  - Email verification and password reset functionalities
+  - Session management with secure token generation
+  - DTOs for user signup, login, and password management
+  - Google and GitHub OAuth services for third-party authentication
+  - Comprehensive unit and integration tests for authentication features
+  - Docker and environment configurations for email service integration
+
 ## [2.5.1] - 2025-12-28
 ### Changed
 - **Documentation Reorganization** - Complete restructure of project documentation
@@ -16,6 +27,134 @@
   - Created `.docs/rag/README.md` as RAG system overview
   - All documentation now in English
   - Removed redundant `DOCUMENTATION.md` (content distributed to specific guides)
+
+## [2.5.0] - 2025-12-22
+### Added
+- **Linear Document Integration** - Create and link Linear documents
+  - Document creation and issue linking support
+  - Test utilities for document operations
+  - SDK with document management capabilities
+  - Manual tests for French issue creation and Perplexity integration
+  - Updated worker activities for better context extraction and refinement
+
+## [2.4.0] - 2025-12-21
+### Fixed
+- **Workflow Phase Continuation** - All phases can now continue after PO answers
+  - Extended "In Progress" status acceptance to all phases (not just Refinement)
+  - Phase 1 accepts: "To Refinement" or "Refinement In Progress"
+  - Phase 2 accepts: "To User Story" or "UserStory In Progress"
+  - Phase 3 accepts: "To Plan" or "Plan In Progress"
+  - Fixes PO questions flow where answering all questions re-triggers workflow with answers
+
+### Added
+- **E2E Test Scripts** for PO questions feature
+  - `answer-questions.ts` - Simulates PO answering questions via Linear API
+  - `check-questions.ts` - Checks TaskQuestion database state
+  - `simulate-answer-webhooks.ts` - Simulates Linear comment webhooks locally
+
+## [2.3.0] - 2025-12-21
+### Added
+- **Parent-Child Issue Management** - Cascade and rollup support
+  - Cascade: parent status automatically cascades to children ("To User Story" or "To Plan")
+  - Rollup: parent status reflects minimum (least progressed) child status
+  - Skip parent workflow when cascading (only children need processing)
+- **Sub-Issue Creation from Refinement**
+  - Parse `suggestedSplit` from refinement output in user-story workflow
+  - Create sub-issues in Linear with dependencies preserved
+  - Update parent to "UserStory Ready" as epic container
+  - Add comment explaining split with sub-issue links
+- **PO Questions Tracking**
+  - TaskQuestion model to track questions posted to Linear
+  - Detect PO answers via comment webhook (reply to question comment)
+  - Mark questions as answered and track answer text
+  - Re-trigger workflow when all questions answered
+  - `awaitingPOAnswers` flag added to Task model
+- **Centralized Status Configuration**
+  - `statusOrder` in WorkflowConfig for status hierarchy (13 statuses)
+  - `workflow` config with `triggerStatuses`, `cascadeStatuses`, `rollupStatuses`
+  - Helper functions: `getStatusRank()`, `isTriggerStatus()`, `isCascadeStatus()`, `isRollupStatus()`, `getStatusAtRank()`
+- **Linear Client Enhancements**
+  - `getIssueChildren()` to fetch child issues
+  - `updateMultipleIssuesStatus()` for parallel updates
+  - `createSubIssue()` for sub-issue creation with parent reference
+- **E2E Testing**
+  - `test-refinement-workflow.sh/ts` for automated E2E testing
+  - Updated `tests/e2e/README.md` with new test documentation
+
+### Changed
+- Removed hardcoded STATUS_HIERARCHY from linear-sync-api.service.ts
+- Removed hardcoded status arrays from webhooks.service.ts
+
+## [2.2.0] - 2025-12-19
+### Added
+- **LLM Council 3-Stage Deliberation System**
+  - CouncilService with 3-stage deliberation (collect → rank → synthesize)
+  - Ranking parser for anonymous label creation and aggregate rankings
+  - Council types and configuration to @devflow/common
+  - `formatCouncilSummaryAsMarkdown` for Linear output
+  - Comprehensive unit tests (36 tests) for council service
+- **New Environment Variables**
+  - `ENABLE_COUNCIL=true` - enables council deliberation
+  - `COUNCIL_MODELS` - comma-separated list of models
+  - `COUNCIL_CHAIRMAN_MODEL` - chairman for synthesis
+
+### Changed
+- Updated refinement, user-story, and technical-plan activities to use council
+- Replaced existing ENABLE_MULTI_LLM scoring approach with peer-ranking model
+
+### Removed
+- Deprecated spec-multi-llm.activities.ts
+
+### Fixed
+- Pre-existing test failures in SDK package
+
+## [2.1.0] - 2025-12-15
+### Added
+- **Enhanced Figma Integration** - Validation, error handling, and configurable vision analysis
+  - `getUserInfo()` method for OAuth connection testing
+  - File key validation with clear error messages (20-30 alphanumeric chars)
+  - Improved error handling for all API methods (404, 401, 403, 429)
+  - `handleApiError()` helper for consistent error messages
+- **Flexible Figma Configuration**
+  - FigmaConfig schema with vision analysis settings
+  - Configurable vision analysis (enable/disable, model selection, limits)
+  - Environment variables: `FIGMA_VISION_ENABLED`, `FIGMA_VISION_MODEL`, `FIGMA_VISION_MAX_SCREENSHOTS`, `FIGMA_VISION_TIMEOUT`
+  - Load and use configuration in context extraction activities
+- **Comprehensive FIGMA_CONFIGURATION.md** guide (75+ pages)
+- **Enhanced OAuth Integration Testing**
+  - IntegrationsTestService for testing OAuth connections
+  - New CLI commands for testing integrations
+  - Manual tests for GitHub, Linear, Figma, and Sentry integrations
+
+### Changed
+- Updated `.env.example` with new Sentry and Figma OAuth integration details
+- Enhanced `CLAUDE.md` with Figma configuration section
+
+## [2.0.0] - 2025-12-14
+### Added
+- **Unified Integration Services Pattern** - Consistent external API interactions
+  - New Figma, Sentry, and GitHub integration services
+  - Better testability, reusability, and consistency across services
+- **OAuth Security & Scalability Guide**
+  - Cryptographically secure state generation
+  - Timing-safe state comparison to mitigate CSRF and timing attacks
+  - Production recommendations and best practices
+- **Best Practices Integration**
+  - Fetch and integrate best practices into technical plan generation
+
+### Changed
+- Architecture documentation updated to reflect version 1.1.0
+  - New sections: Architecture Validation, OAuth Architecture, Configuration Management
+  - Integration Services Pattern documentation
+- Enhanced OAuth service with improved security
+- Updated API and CLI modules with new integration services
+- Enhanced project creation and Linear configuration commands
+- Enhanced workflow configuration and agent imports
+
+### Security
+- Cryptographically secure state generation for OAuth
+- Timing-safe state comparison to prevent timing attacks
+- Improved OAuth token management
 
 ## [1.14.0] - 2025-12-13
 ### Added

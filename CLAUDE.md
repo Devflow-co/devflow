@@ -75,8 +75,14 @@ devflow/
 - Workflow: `workflow:start`, `workflow:status`
 
 ### @devflow/web
-- Pages: `/login`, `/signup`, `/dashboard`, `/forgot-password`
-- Composables: `useAuth()`, `useApi()`
+- **Framework:** Nuxt 4, Vue 3, Pinia, Tailwind CSS
+- **Authentication:** Session-based with httpOnly cookies, SSO (Google, GitHub)
+- **Pages:** `/login`, `/signup`, `/dashboard`, `/projects`, `/projects/{id}`, `/forgot-password`, `/reset-password`, `/verify-email`
+- **Features:** Project management, OAuth integration management (connect/test/disconnect), real-time stats
+- **OAuth Flow:** Automatic popup with 1s polling (60s timeout)
+- **State:** Pinia stores for projects and integrations with localStorage persistence
+
+**Details:** [.docs/WEB_INTERFACE.md](.docs/WEB_INTERFACE.md)
 
 ### @devflow/common
 - Types: `WorkflowInput`, `WorkflowConfig`
