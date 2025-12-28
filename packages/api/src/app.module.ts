@@ -13,6 +13,7 @@ import { WebhooksModule } from '@/webhooks/webhooks.module';
 import { HealthModule } from '@/health/health.module';
 import { AuthModule } from '@/auth/auth.module';
 import { IntegrationsModule } from '@/integrations/integrations.module';
+import { UserAuthModule } from '@/user-auth/user-auth.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { IntegrationsModule } from '@/integrations/integrations.module';
     // Feature modules
     HealthModule,
     AuthModule,
+    UserAuthModule,
     IntegrationsModule,
     ProjectsModule,
     TasksModule,

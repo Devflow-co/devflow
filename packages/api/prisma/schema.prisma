@@ -622,23 +622,31 @@ model User {
   email         String   @unique
   name          String?
   avatar        String?
-  
+
+  // Authentication
+  passwordHash    String?  @map("password_hash")
+  emailVerified   Boolean  @default(false) @map("email_verified")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+
   // SSO (Phase 9)
   ssoProvider   String?  @map("sso_provider") // google, github, okta, azure, auth0
   ssoId         String?  @map("sso_id")
-  
+
   // Compliance
   gdprConsent   Boolean  @default(false) @map("gdpr_consent")
   gdprConsentAt DateTime? @map("gdpr_consent_at")
-  
+
   createdAt     DateTime @default(now()) @map("created_at")
   lastLoginAt   DateTime? @map("last_login_at")
-  
+
   // Relations
-  organizations OrganizationMember[]
-  apiKeys       OrganizationApiKey[]
-  dataExports   DataExport[]
-  
+  organizations             OrganizationMember[]
+  apiKeys                   OrganizationApiKey[]
+  dataExports               DataExport[]
+  sessions                  UserSession[]
+  emailVerificationTokens   EmailVerificationToken[]
+  passwordResetTokens       PasswordResetToken[]
+
   @@map("users")
   @@index([email])
   @@index([ssoProvider, ssoId])
@@ -1261,5 +1269,57 @@ model ProjectIntegration {
 
   @@map("project_integrations")
   @@index([projectId])
+}
+
+// ============================================
+// User Authentication (Sessions & Tokens)
+// ============================================
+
+model UserSession {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  sessionToken String   @unique @map("session_token")
+  userAgent    String?  @map("user_agent")
+  ipAddress    String?  @map("ip_address")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  lastActiveAt DateTime @default(now()) @map("last_active_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+  @@index([sessionToken])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_verification_tokens")
+  @@index([token])
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+  @@index([token])
+  @@index([userId])
 }
 

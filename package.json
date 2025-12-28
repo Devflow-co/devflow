@@ -21,7 +21,9 @@
   "scripts": {
     "dev": "pnpm --filter @devflow/api dev",
     "dev:worker": "pnpm --filter @devflow/worker dev",
+    "dev:web": "pnpm --filter @devflow/web dev",
     "build": "pnpm -r build",
+    "build:web": "pnpm --filter @devflow/web build",
     "build:api": "pnpm --filter @devflow/api build",
     "build:worker": "pnpm --filter @devflow/worker build",
     "build:sdk": "pnpm --filter @devflow/sdk build",
@@ -37,8 +39,9 @@
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
-    "db:migrate": "pnpm --filter @devflow/api db:migrate",
-    "db:seed": "pnpm --filter @devflow/api db:seed"
+    "db:migrate": "pnpm --filter @devflow/api prisma:migrate",
+    "db:push": "pnpm --filter @devflow/api db:push",
+    "db:seed": "pnpm --filter @devflow/api prisma:seed"
   },
   "devDependencies": {
     "@linear/sdk": "^29.0.0",

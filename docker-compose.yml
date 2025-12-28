@@ -111,6 +111,11 @@ services:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - TEMPORAL_ADDRESS=temporal:7233
+      # Email (Mailpit)
+      - SMTP_HOST=mailpit
+      - SMTP_PORT=1025
+      - SMTP_FROM=noreply@devflow.local
+      - SMTP_SECURE=false
     depends_on:
       postgres:
         condition: service_healthy
@@ -120,6 +125,8 @@ services:
         condition: service_healthy
       temporal:
         condition: service_started
+      mailpit:
+        condition: service_healthy
     # volumes:
     #   - ./packages/api:/app/packages/api
     #   - ./packages/common:/app/packages/common
@@ -173,6 +180,42 @@ services:
     #   - ./packages/sdk:/app/packages/sdk
     #   - /app/node_modules
     #   - /app/packages/worker/node_modules
+
+  # DevFlow Web (Nuxt.js Frontend)
+  web:
+    build:
+      context: ./packages/web
+      dockerfile: Dockerfile.dev
+    container_name: devflow-web
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=development
+      - NUXT_PUBLIC_API_BASE=http://localhost:3001/api/v1
+    volumes:
+      - ./packages/web:/app
+      - /app/node_modules
+      - /app/.nuxt
+    depends_on:
+      - api
+
+  # Mailpit - Email testing (development only)
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: devflow-mailpit
+    restart: unless-stopped
+    ports:
+      - '8025:8025'   # Web UI
+      - '1025:1025'   # SMTP
+    environment:
+      - MP_SMTP_AUTH_ACCEPT_ANY=true
+      - MP_SMTP_AUTH_ALLOW_INSECURE=true
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:8025/api/v1/info']
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Ngrok tunnel for webhooks (development only)
   ngrok:

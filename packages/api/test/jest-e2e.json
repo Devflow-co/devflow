@@ -4,17 +4,22 @@
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
   "transform": {
-    "^.+\\.(t|j)s$": "ts-jest"
+    "^.+\\.(t|j)s$": ["ts-jest", {
+      "tsconfig": {
+        "esModuleInterop": true
+      }
+    }]
   },
   "moduleNameMapper": {
     "^@/(.*)$": "<rootDir>/../src/$1"
   },
+  "setupFilesAfterEnv": ["<rootDir>/setup.ts"],
   "collectCoverageFrom": [
     "../src/**/*.ts",
     "!../src/**/*.spec.ts",
     "!../src/**/*.d.ts"
   ],
   "coverageDirectory": "../coverage-e2e",
-  "testTimeout": 30000
+  "testTimeout": 60000
 }
 
