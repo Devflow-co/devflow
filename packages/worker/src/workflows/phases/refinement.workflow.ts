@@ -6,8 +6,8 @@
  */
 
 import { proxyActivities, ApplicationFailure } from '@temporalio/workflow';
-import type { WorkflowConfig } from '@devflow/common';
-import { DEFAULT_WORKFLOW_CONFIG } from '@devflow/common';
+import type { WorkflowConfig, AutomationConfig, RefinementPhaseConfig } from '@devflow/common';
+import { DEFAULT_WORKFLOW_CONFIG, DEFAULT_AUTOMATION_CONFIG } from '@devflow/common';
 import type * as activities from '@/activities';
 
 // Proxy activities with 5-minute timeout
@@ -69,6 +69,11 @@ export async function refinementWorkflow(
   const config = input.config || DEFAULT_WORKFLOW_CONFIG;
   const LINEAR_STATUSES = config.linear.statuses;
 
+  // Get automation config with defaults
+  const automation: RefinementPhaseConfig = config.automation?.phases?.refinement ||
+    DEFAULT_AUTOMATION_CONFIG.phases.refinement;
+  const features = automation.features;
+
   try {
     // Step 1: Sync task from Linear
     const task = await syncLinearTask({
@@ -76,12 +81,14 @@ export async function refinementWorkflow(
       projectId: input.projectId,
     });
 
-    // Step 2: Update status to Refinement In Progress
-    await updateLinearTask({
-      projectId: input.projectId,
-      linearId: task.linearId,
-      updates: { status: LINEAR_STATUSES.refinementInProgress },
-    });
+    // Step 2: Update status to Refinement In Progress (conditional)
+    if (features.enableAutoStatusUpdate) {
+      await updateLinearTask({
+        projectId: input.projectId,
+        linearId: task.linearId,
+        updates: { status: LINEAR_STATUSES.refinementInProgress },
+      });
+    }
 
     // Step 2.5: Get any existing PO answers (from previous workflow runs)
     const poAnswersResult = await getPOAnswersForTask({
@@ -89,53 +96,65 @@ export async function refinementWorkflow(
       projectId: input.projectId,
     });
 
-    // Step 2.6: Retrieve RAG context for codebase analysis
-    const ragContext = await retrieveContext({
-      projectId: input.projectId,
-      query: `${task.title}\n${task.description}`,
-      topK: 10,
-      useReranking: true,
-    });
-
-    // Step 2.7: Save top 5 RAG chunks as Codebase Context document
-    // This document will be reused in Phases 2 and 3
-    if (ragContext?.chunks?.length > 0) {
-      const topChunks = ragContext.chunks.slice(0, 5);
-      await saveCodebaseContextDocument({
+    // Step 2.6: Retrieve RAG context for codebase analysis (conditional)
+    let ragContext: Awaited<ReturnType<typeof retrieveContext>> | null = null;
+    if (features.enableRagContext) {
+      ragContext = await retrieveContext({
         projectId: input.projectId,
-        linearId: task.linearId,
-        chunks: topChunks,
-        taskContext: {
-          title: task.title,
-          query: `${task.title}\n${task.description}`,
-        },
+        query: `${task.title}\n${task.description}`,
+        topK: 10,
+        useReranking: true,
       });
-      console.log('[refinementWorkflow] Codebase context document created with', topChunks.length, 'chunks');
+
+      // Step 2.7: Save top 5 RAG chunks as Codebase Context document
+      // This document will be reused in Phases 2 and 3
+      if (features.enableContextDocuments && ragContext?.chunks?.length > 0) {
+        const topChunks = ragContext.chunks.slice(0, 5);
+        await saveCodebaseContextDocument({
+          projectId: input.projectId,
+          linearId: task.linearId,
+          chunks: topChunks,
+          taskContext: {
+            title: task.title,
+            query: `${task.title}\n${task.description}`,
+          },
+        });
+        console.log('[refinementWorkflow] Codebase context document created with', topChunks.length, 'chunks');
+      }
+    } else {
+      console.log('[refinementWorkflow] RAG context retrieval disabled');
     }
 
-    // Step 2.8: Analyze project context (structure, dependencies, documentation)
+    // Step 2.8: Analyze project context (structure, dependencies, documentation) (conditional)
     // This document will be reused in Phases 2 and 3, and included in refinement prompt
     let documentationContext: Awaited<ReturnType<typeof analyzeProjectContext>> | undefined;
-    try {
-      documentationContext = await analyzeProjectContext({
-        projectId: input.projectId,
-        taskQuery: `${task.title}\n${task.description}`,
-      });
+    if (features.enableDocumentationAnalysis) {
+      try {
+        documentationContext = await analyzeProjectContext({
+          projectId: input.projectId,
+          taskQuery: `${task.title}\n${task.description}`,
+        });
 
-      // Save documentation context as Linear document
-      await saveDocumentationContextDocument({
-        projectId: input.projectId,
-        linearId: task.linearId,
-        context: documentationContext,
-        taskContext: { title: task.title },
-      });
-      console.log('[refinementWorkflow] Documentation context document created');
-    } catch (docContextError) {
-      // Non-blocking: Log warning but continue workflow
-      console.warn('[refinementWorkflow] Failed to analyze project context:', docContextError);
+        // Save documentation context as Linear document (if enabled)
+        if (features.enableContextDocuments) {
+          await saveDocumentationContextDocument({
+            projectId: input.projectId,
+            linearId: task.linearId,
+            context: documentationContext,
+            taskContext: { title: task.title },
+          });
+          console.log('[refinementWorkflow] Documentation context document created');
+        }
+      } catch (docContextError) {
+        // Non-blocking: Log warning but continue workflow
+        console.warn('[refinementWorkflow] Failed to analyze project context:', docContextError);
+      }
+    } else {
+      console.log('[refinementWorkflow] Documentation analysis disabled');
     }
 
     // Step 3: Generate refinement (with external context, PO answers, RAG file names, and documentation context)
+    // Pass aiModel from automation config
     const result = await generateRefinement({
       task: {
         title: task.title,
@@ -148,6 +167,11 @@ export async function refinementWorkflow(
       poAnswers: poAnswersResult.answers.length > 0 ? poAnswersResult.answers : undefined,
       ragContext: ragContext, // Pass RAG context for file name references
       documentationContext: documentationContext, // Pass documentation context for project info
+      aiModel: automation.aiModel, // AI model from automation config
+      // Feature flags for external context extraction
+      enableFigmaContext: features.enableFigmaContext,
+      enableSentryContext: features.enableSentryContext,
+      enableGitHubIssueContext: features.enableGitHubIssueContext,
     });
 
     // Step 3.5: Add task type label based on detected type (non-blocking)
@@ -163,18 +187,23 @@ export async function refinementWorkflow(
 
     // Step 3.55: Save external context as Linear Documents (non-blocking)
     // Creates separate documents for Figma, Sentry, GitHub Issue contexts
-    if (result.externalContext) {
-      const hasAnyExternalContext =
-        result.externalContext.figma ||
-        result.externalContext.sentry ||
-        result.externalContext.githubIssue;
+    // Only save if context documents feature is enabled
+    if (features.enableContextDocuments && result.externalContext) {
+      // Check which external contexts should be saved based on feature flags
+      const shouldSaveFigma = features.enableFigmaContext && result.externalContext.figma;
+      const shouldSaveSentry = features.enableSentryContext && result.externalContext.sentry;
+      const shouldSaveGitHub = features.enableGitHubIssueContext && result.externalContext.githubIssue;
 
-      if (hasAnyExternalContext) {
+      if (shouldSaveFigma || shouldSaveSentry || shouldSaveGitHub) {
         try {
           const externalDocs = await saveExternalContextDocuments({
             projectId: input.projectId,
             linearId: task.linearId,
-            context: result.externalContext,
+            context: {
+              figma: shouldSaveFigma ? result.externalContext.figma : undefined,
+              sentry: shouldSaveSentry ? result.externalContext.sentry : undefined,
+              githubIssue: shouldSaveGitHub ? result.externalContext.githubIssue : undefined,
+            },
             taskContext: { title: task.title, identifier: task.identifier },
           });
 
@@ -212,8 +241,9 @@ export async function refinementWorkflow(
     });
 
     // Step 4.5: Create sub-issues if complexity L or XL (BLOCKING)
+    // Use automation config feature flag (fallback to legacy config)
     let subtasksCreated: { total: number; created: number; failed: number } | undefined;
-    const enableSubtasks = config.linear.features?.enableSubtaskCreation ?? true;
+    const enableSubtasks = features.enableSubtaskCreation ?? config.linear.features?.enableSubtaskCreation ?? true;
 
     if (
       enableSubtasks &&
@@ -240,14 +270,15 @@ export async function refinementWorkflow(
       };
     }
 
-    // Step 4.6: Check for questions requiring PO answers
+    // Step 4.6: Check for questions requiring PO answers (conditional)
     const questions = result.refinement.questionsForPO || [];
     const hasNewQuestions = questions.length > 0;
     const previouslyAnsweredCount = poAnswersResult.answers.length;
 
     // If there are new questions and we haven't gotten all answers yet
     // (new questions may appear even after some answers were provided)
-    if (hasNewQuestions) {
+    // Only post questions if PO questions feature is enabled
+    if (features.enablePOQuestions && hasNewQuestions) {
       // Post questions as individual comments in Linear
       await postQuestionsAsComments({
         taskId: task.id,
@@ -271,12 +302,14 @@ export async function refinementWorkflow(
     }
 
     // No questions (or all answered) - proceed to Refinement Ready
-    // Step 5: Update status to Refinement Ready
-    await updateLinearTask({
-      projectId: input.projectId,
-      linearId: task.linearId,
-      updates: { status: LINEAR_STATUSES.refinementReady },
-    });
+    // Step 5: Update status to Refinement Ready (conditional)
+    if (features.enableAutoStatusUpdate) {
+      await updateLinearTask({
+        projectId: input.projectId,
+        linearId: task.linearId,
+        updates: { status: LINEAR_STATUSES.refinementReady },
+      });
+    }
 
     return {
       success: true,
@@ -288,21 +321,23 @@ export async function refinementWorkflow(
       subtasksCreated,
     };
   } catch (error) {
-    // Update status to Refinement Failed
-    try {
-      const task = await syncLinearTask({
-        taskId: input.taskId,
-        projectId: input.projectId,
-      });
+    // Update status to Refinement Failed (conditional)
+    if (features.enableAutoStatusUpdate) {
+      try {
+        const task = await syncLinearTask({
+          taskId: input.taskId,
+          projectId: input.projectId,
+        });
 
-      await updateLinearTask({
-        projectId: input.projectId,
-        linearId: task.linearId,
-        updates: { status: LINEAR_STATUSES.refinementFailed },
-      });
-    } catch (updateError) {
-      // Log but don't throw - original error is more important
-      console.error('Failed to update status to refinementFailed:', updateError);
+        await updateLinearTask({
+          projectId: input.projectId,
+          linearId: task.linearId,
+          updates: { status: LINEAR_STATUSES.refinementFailed },
+        });
+      } catch (updateError) {
+        // Log but don't throw - original error is more important
+        console.error('Failed to update status to refinementFailed:', updateError);
+      }
     }
 
     // Throw original error

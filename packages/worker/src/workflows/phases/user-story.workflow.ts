@@ -6,8 +6,8 @@
  */
 
 import { proxyActivities, ApplicationFailure } from '@temporalio/workflow';
-import type { WorkflowConfig } from '@devflow/common';
-import { DEFAULT_WORKFLOW_CONFIG } from '@devflow/common';
+import type { WorkflowConfig, AutomationConfig, UserStoryPhaseConfig } from '@devflow/common';
+import { DEFAULT_WORKFLOW_CONFIG, DEFAULT_AUTOMATION_CONFIG } from '@devflow/common';
 import type * as activities from '@/activities';
 
 // Proxy activities with 5-minute timeout
@@ -313,6 +313,11 @@ export async function userStoryWorkflow(
   const config = input.config || DEFAULT_WORKFLOW_CONFIG;
   const LINEAR_STATUSES = config.linear.statuses;
 
+  // Get automation config with defaults
+  const automation: UserStoryPhaseConfig = config.automation?.phases?.userStory ||
+    DEFAULT_AUTOMATION_CONFIG.phases.userStory;
+  const features = automation.features;
+
   try {
     // Step 1: Sync task from Linear
     const task = await syncLinearTask({
@@ -320,44 +325,62 @@ export async function userStoryWorkflow(
       projectId: input.projectId,
     });
 
-    // Step 2: Update status to UserStory In Progress
-    await updateLinearTask({
-      projectId: input.projectId,
-      linearId: task.linearId,
-      updates: { status: LINEAR_STATUSES.userStoryInProgress },
-    });
+    // Step 2: Update status to UserStory In Progress (conditional)
+    if (features.enableAutoStatusUpdate) {
+      await updateLinearTask({
+        projectId: input.projectId,
+        linearId: task.linearId,
+        updates: { status: LINEAR_STATUSES.userStoryInProgress },
+      });
+    }
 
     // Step 3: Extract refinement from Linear description
     const refinement = extractRefinementFromDescription(task.description);
 
-    // Step 3.3: Load Codebase Context document (created in Phase 1)
-    const codebaseContextDoc = await getPhaseDocumentContent({
-      projectId: input.projectId,
-      linearId: task.linearId,
-      phase: 'codebase_context',
-    });
+    // Step 3.3: Load Codebase Context document (created in Phase 1) - conditional
+    let codebaseContext: string | undefined;
+    if (features.reuseCodebaseContext) {
+      const codebaseContextDoc = await getPhaseDocumentContent({
+        projectId: input.projectId,
+        linearId: task.linearId,
+        phase: 'codebase_context',
+      });
 
-    if (codebaseContextDoc.content) {
-      console.log('[userStoryWorkflow] Codebase context loaded from document');
+      if (codebaseContextDoc.content) {
+        console.log('[userStoryWorkflow] Codebase context loaded from document');
+        codebaseContext = codebaseContextDoc.content;
+      } else {
+        console.log('[userStoryWorkflow] No codebase context document found');
+      }
     } else {
-      console.log('[userStoryWorkflow] No codebase context document found');
+      console.log('[userStoryWorkflow] Codebase context reuse disabled');
     }
 
-    // Step 3.4: Load Documentation Context document (created in Phase 1)
-    const documentationContextDoc = await getPhaseDocumentContent({
-      projectId: input.projectId,
-      linearId: task.linearId,
-      phase: 'documentation_context',
-    });
+    // Step 3.4: Load Documentation Context document (created in Phase 1) - conditional
+    let documentationContext: string | undefined;
+    if (features.reuseDocumentationContext) {
+      const documentationContextDoc = await getPhaseDocumentContent({
+        projectId: input.projectId,
+        linearId: task.linearId,
+        phase: 'documentation_context',
+      });
 
-    if (documentationContextDoc.content) {
-      console.log('[userStoryWorkflow] Documentation context loaded from document');
+      if (documentationContextDoc.content) {
+        console.log('[userStoryWorkflow] Documentation context loaded from document');
+        documentationContext = documentationContextDoc.content;
+      } else {
+        console.log('[userStoryWorkflow] No documentation context document found');
+      }
     } else {
-      console.log('[userStoryWorkflow] No documentation context document found');
+      console.log('[userStoryWorkflow] Documentation context reuse disabled');
     }
 
-    // Step 3.5: Check if task should be split
-    if (refinement.suggestedSplit && refinement.suggestedSplit.proposedStories.length > 0) {
+    // Step 3.5: Check if task should be split (conditional)
+    if (
+      features.enableTaskSplitting &&
+      refinement.suggestedSplit &&
+      refinement.suggestedSplit.proposedStories.length > 0
+    ) {
       // Create sub-issues instead of generating user story
       const subIssuesResult = await createLinearSubtasks({
         projectId: input.projectId,
@@ -374,12 +397,14 @@ export async function userStoryWorkflow(
         body: splitComment,
       });
 
-      // Update parent status to UserStory Ready (parent stays as epic)
-      await updateLinearTask({
-        projectId: input.projectId,
-        linearId: task.linearId,
-        updates: { status: LINEAR_STATUSES.userStoryReady },
-      });
+      // Update parent status to UserStory Ready (parent stays as epic) - conditional
+      if (features.enableAutoStatusUpdate) {
+        await updateLinearTask({
+          projectId: input.projectId,
+          linearId: task.linearId,
+          updates: { status: LINEAR_STATUSES.userStoryReady },
+        });
+      }
 
       return {
         success: true,
@@ -391,6 +416,7 @@ export async function userStoryWorkflow(
     }
 
     // Step 4: Generate user story (no split)
+    // Pass aiModel from automation config
     const result = await generateUserStory({
       task: {
         title: task.title,
@@ -399,8 +425,9 @@ export async function userStoryWorkflow(
       },
       refinement,
       projectId: input.projectId,
-      codebaseContext: codebaseContextDoc.content || undefined,
-      documentationContext: documentationContextDoc.content || undefined,
+      codebaseContext,
+      documentationContext,
+      aiModel: automation.aiModel,
     });
 
     // Step 5: Append user story to Linear issue
@@ -410,12 +437,14 @@ export async function userStoryWorkflow(
       userStory: result.userStory,
     });
 
-    // Step 6: Update status to UserStory Ready
-    await updateLinearTask({
-      projectId: input.projectId,
-      linearId: task.linearId,
-      updates: { status: LINEAR_STATUSES.userStoryReady },
-    });
+    // Step 6: Update status to UserStory Ready (conditional)
+    if (features.enableAutoStatusUpdate) {
+      await updateLinearTask({
+        projectId: input.projectId,
+        linearId: task.linearId,
+        updates: { status: LINEAR_STATUSES.userStoryReady },
+      });
+    }
 
     return {
       success: true,
@@ -424,21 +453,23 @@ export async function userStoryWorkflow(
       userStory: result.userStory,
     };
   } catch (error) {
-    // Update status to UserStory Failed
-    try {
-      const task = await syncLinearTask({
-        taskId: input.taskId,
-        projectId: input.projectId,
-      });
+    // Update status to UserStory Failed (conditional)
+    if (features.enableAutoStatusUpdate) {
+      try {
+        const task = await syncLinearTask({
+          taskId: input.taskId,
+          projectId: input.projectId,
+        });
 
-      await updateLinearTask({
-        projectId: input.projectId,
-        linearId: task.linearId,
-        updates: { status: LINEAR_STATUSES.userStoryFailed },
-      });
-    } catch (updateError) {
-      // Log but don't throw - original error is more important
-      console.error('Failed to update status to userStoryFailed:', updateError);
+        await updateLinearTask({
+          projectId: input.projectId,
+          linearId: task.linearId,
+          updates: { status: LINEAR_STATUSES.userStoryFailed },
+        });
+      } catch (updateError) {
+        // Log but don't throw - original error is more important
+        console.error('Failed to update status to userStoryFailed:', updateError);
+      }
     }
 
     // Throw original error

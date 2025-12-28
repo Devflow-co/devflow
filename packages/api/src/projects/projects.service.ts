@@ -3,7 +3,13 @@
  */
 
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { createLogger, DEFAULT_WORKFLOW_CONFIG } from '@devflow/common';
+import {
+  createLogger,
+  DEFAULT_WORKFLOW_CONFIG,
+  mergeWithDefaults,
+  validateAutomationConfig,
+  AutomationConfig,
+} from '@devflow/common';
 import {
   parseRepositoryUrl,
   GitHubProvider,
@@ -188,9 +194,41 @@ export class ProjectsService {
 
   async update(id: string, dto: UpdateProjectDto) {
     this.logger.info('Updating project', { id });
-    
+
     // Check if project exists
-    await this.findOne(id);
+    const existingProject = await this.findOne(id);
+    const existingConfig = (existingProject.config as Record<string, any>) || {};
+
+    // Handle config update with automation merge
+    let updatedConfig = dto.config;
+    if (dto.config) {
+      // If automation config is provided, merge with defaults and validate
+      if (dto.config.automation) {
+        const mergedAutomation = mergeWithDefaults(dto.config.automation as Partial<AutomationConfig>);
+        const validation = validateAutomationConfig(mergedAutomation);
+
+        if (!validation.valid) {
+          throw new BadRequestException(`Invalid automation config: ${validation.errors.join(', ')}`);
+        }
+
+        if (validation.warnings.length > 0) {
+          this.logger.warn('Automation config warnings', { warnings: validation.warnings });
+        }
+
+        // Merge with existing config, updating automation
+        updatedConfig = {
+          ...existingConfig,
+          ...dto.config,
+          automation: mergedAutomation,
+        };
+      } else {
+        // Keep existing automation config if not provided
+        updatedConfig = {
+          ...dto.config,
+          automation: existingConfig.automation,
+        };
+      }
+    }
 
     return this.prisma.project.update({
       where: { id },
@@ -199,7 +237,7 @@ export class ProjectsService {
         description: dto.description,
         repository: dto.repository,
         workspacePath: dto.workspacePath,
-        config: dto.config,
+        config: updatedConfig,
       },
     });
   }

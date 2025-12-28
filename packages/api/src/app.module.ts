@@ -14,6 +14,7 @@ import { HealthModule } from '@/health/health.module';
 import { AuthModule } from '@/auth/auth.module';
 import { IntegrationsModule } from '@/integrations/integrations.module';
 import { UserAuthModule } from '@/user-auth/user-auth.module';
+import { ConfigAppModule } from '@/config/config.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { UserAuthModule } from '@/user-auth/user-auth.module';
     AuthModule,
     UserAuthModule,
     IntegrationsModule,
+    ConfigAppModule,
     ProjectsModule,
     TasksModule,
     WorkflowsModule,

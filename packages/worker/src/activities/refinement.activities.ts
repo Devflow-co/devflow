@@ -71,6 +71,14 @@ export interface GenerateRefinementInput {
       score: number;
     }>;
   };
+  /** AI model to use for generation (from automation config) */
+  aiModel?: string;
+  /** Feature flag: enable Figma context extraction */
+  enableFigmaContext?: boolean;
+  /** Feature flag: enable Sentry context extraction */
+  enableSentryContext?: boolean;
+  /** Feature flag: enable GitHub Issue context extraction */
+  enableGitHubIssueContext?: boolean;
 }
 
 export interface GenerateRefinementOutput {
@@ -102,44 +110,68 @@ export async function generateRefinement(
     const taskType = detectTaskType(input.task);
     logger.info('Task type detected', { taskType });
 
-    // Step 1.5: Extract external context if links provided
+    // Step 1.5: Extract external context if links provided (respecting feature flags)
     let externalContextMarkdown = '';
     let figmaImages: AgentImage[] = [];
     let extractedExternalContext: GenerateRefinementOutput['externalContext'];
 
     if (input.externalLinks && hasAnyLink(input.externalLinks)) {
-      logger.info('Extracting external context', { links: input.externalLinks });
-
-      const { context, errors } = await extractExternalContext({
-        projectId: input.projectId,
-        links: input.externalLinks,
-      });
-
-      if (errors.length > 0) {
-        logger.warn('Some external context extractions failed', { errors });
+      // Filter links based on feature flags
+      const filteredLinks: ExternalContextLinks = {};
+      if (input.enableFigmaContext !== false && input.externalLinks.figmaFileKey) {
+        filteredLinks.figmaFileKey = input.externalLinks.figmaFileKey;
+        filteredLinks.figmaNodeId = input.externalLinks.figmaNodeId;
+      }
+      if (input.enableSentryContext !== false && input.externalLinks.sentryIssueId) {
+        filteredLinks.sentryIssueId = input.externalLinks.sentryIssueId;
+      }
+      if (input.enableGitHubIssueContext !== false && input.externalLinks.githubIssueRef) {
+        filteredLinks.githubIssueRef = input.externalLinks.githubIssueRef;
       }
 
-      // Store the extracted context for returning later
-      extractedExternalContext = context;
+      if (hasAnyLink(filteredLinks)) {
+        logger.info('Extracting external context', {
+          links: filteredLinks,
+          enabledFlags: {
+            figma: input.enableFigmaContext !== false,
+            sentry: input.enableSentryContext !== false,
+            github: input.enableGitHubIssueContext !== false,
+          },
+        });
 
-      externalContextMarkdown = formatExternalContextAsMarkdown(context);
+        const { context, errors } = await extractExternalContext({
+          projectId: input.projectId,
+          links: filteredLinks,
+        });
 
-      // Collect Figma images for vision (if available)
-      if (context.figma?.screenshots) {
-        figmaImages = context.figma.screenshots
-          .filter((s) => s.imageBase64)
-          .slice(0, 3) // Limit to 3 images
-          .map((s) => ({
-            type: 'base64' as const,
-            mediaType: 'image/png' as const,
-            data: s.imageBase64!,
-          }));
+        if (errors.length > 0) {
+          logger.warn('Some external context extractions failed', { errors });
+        }
+
+        // Store the extracted context for returning later
+        extractedExternalContext = context;
+
+        externalContextMarkdown = formatExternalContextAsMarkdown(context);
+
+        // Collect Figma images for vision (if available)
+        if (context.figma?.screenshots) {
+          figmaImages = context.figma.screenshots
+            .filter((s) => s.imageBase64)
+            .slice(0, 3) // Limit to 3 images
+            .map((s) => ({
+              type: 'base64' as const,
+              mediaType: 'image/png' as const,
+              data: s.imageBase64!,
+            }));
+        }
+
+        logger.info('External context extracted', {
+          hasContext: !!externalContextMarkdown,
+          figmaImagesCount: figmaImages.length,
+        });
+      } else {
+        logger.info('External context extraction skipped - all features disabled');
       }
-
-      logger.info('External context extracted', {
-        hasContext: !!externalContextMarkdown,
-        figmaImagesCount: figmaImages.length,
-      });
     }
 
     // Step 1.6: Format PO answers if available
@@ -268,12 +300,14 @@ ${uniqueFiles.map((f) => `- \`${f}\``).join('\n')}
     });
 
     // Step 3: Generate refinement with AI (single model - council only for Phase 3)
-    logger.info('Generating refinement with single model');
+    // Use aiModel from automation config, fallback to env var or default
+    const modelToUse = input.aiModel || process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4';
+    logger.info('Generating refinement with model', { model: modelToUse });
 
     const agent = createCodeAgentDriver({
       provider: 'openrouter',
       apiKey: process.env.OPENROUTER_API_KEY || '',
-      model: process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4',
+      model: modelToUse,
     });
 
     const response = await agent.generate({
@@ -283,7 +317,7 @@ ${uniqueFiles.map((f) => `- \`${f}\``).join('\n')}
     const refinement = parseRefinementResponse(response.content);
 
     logger.info('Refinement generated successfully', {
-      model: process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4',
+      model: modelToUse,
       hasImages: figmaImages.length > 0,
     });
 

@@ -1,3 +1,5 @@
+import type { AutomationConfig } from './automation-config.types';
+
 /**
  * Configuration that can be safely passed to Temporal workflows
  * Must be serializable (no functions, no complex objects)
@@ -66,7 +68,12 @@ export interface WorkflowConfig {
       enableSubtaskCreation?: boolean; // default: true
     };
   };
-  // Can add more workflow-safe config here as needed
+
+  /**
+   * Automation configuration - controls which automated actions run during workflows.
+   * If not provided, DEFAULT_AUTOMATION_CONFIG is used.
+   */
+  automation?: AutomationConfig;
 }
 
 /**

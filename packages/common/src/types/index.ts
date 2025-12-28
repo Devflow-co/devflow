@@ -1,5 +1,6 @@
 export * from '@/types/workflow.types';
 export * from '@/types/workflow-config.types';
+export * from '@/types/automation-config.types';
 export * from '@/types/project.types';
 export * from '@/types/task.types';
 export * from '@/types/vcs.types';

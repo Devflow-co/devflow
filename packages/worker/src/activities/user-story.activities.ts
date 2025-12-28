@@ -26,6 +26,8 @@ export interface GenerateUserStoryInput {
   codebaseContext?: string;
   /** Documentation context markdown (from Phase 1 document) */
   documentationContext?: string;
+  /** AI model to use for generation (from automation config) */
+  aiModel?: string;
 }
 
 export interface GenerateUserStoryOutput {
@@ -68,18 +70,20 @@ export async function generateUserStory(
     });
 
     // Generate with AI (single model - council only for Phase 3)
-    logger.info('Generating user story with single model');
+    // Use aiModel from automation config, fallback to env var or default
+    const modelToUse = input.aiModel || process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4';
+    logger.info('Generating user story with model', { model: modelToUse });
 
     const agent = createCodeAgentDriver({
       provider: 'openrouter',
       apiKey: process.env.OPENROUTER_API_KEY || '',
-      model: process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4',
+      model: modelToUse,
     });
 
     const response = await agent.generate(prompts);
     const userStory = parseUserStoryResponse(response.content);
 
-    logger.info('User story generated successfully');
+    logger.info('User story generated successfully', { model: modelToUse });
 
     return { userStory };
   } catch (error) {

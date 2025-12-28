@@ -70,6 +70,17 @@
               Integrations
             </button>
             <button
+              @click="activeTab = 'workflow'"
+              :class="[
+                'py-4 px-1 border-b-2 font-medium text-sm transition-colors',
+                activeTab === 'workflow'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
+              ]"
+            >
+              Workflow
+            </button>
+            <button
               @click="activeTab = 'settings'"
               :class="[
                 'py-4 px-1 border-b-2 font-medium text-sm transition-colors',
@@ -218,6 +229,16 @@
           </IntegrationCard>
         </div>
 
+        <!-- Tab Content: Workflow -->
+        <div v-if="activeTab === 'workflow'">
+          <WorkflowConfig
+            :project-id="selectedProject.id"
+            :initial-config="selectedProject.config?.automation"
+            :oauth-connections="oauthConnections"
+            @saved="handleWorkflowConfigSaved"
+          />
+        </div>
+
         <!-- Tab Content: Settings -->
         <div v-if="activeTab === 'settings'">
           <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
@@ -301,6 +322,7 @@ import { useProjectsStore } from '@/stores/projects'
 import { useIntegrationsStore } from '@/stores/integrations'
 import { storeToRefs } from 'pinia'
 import IntegrationCard from '@/components/IntegrationCard.vue'
+import WorkflowConfig from '@/components/workflow/WorkflowConfig.vue'
 
 definePageMeta({
   middleware: 'auth',
@@ -312,9 +334,17 @@ const projectId = computed(() => route.params.id as string)
 const projectsStore = useProjectsStore()
 const integrationsStore = useIntegrationsStore()
 const { selectedProject, loading: projectsLoading } = storeToRefs(projectsStore)
-const { integrationConfig, loading: integrationsLoading } = storeToRefs(integrationsStore)
+const { integrationConfig, connections, loading: integrationsLoading } = storeToRefs(integrationsStore)
 
-const activeTab = ref<'integrations' | 'settings'>('integrations')
+// OAuth connections formatted for WorkflowConfig component
+const oauthConnections = computed(() => {
+  return connections.value.map((conn) => ({
+    provider: conn.provider,
+    isActive: conn.isActive && !conn.refreshFailed,
+  }))
+})
+
+const activeTab = ref<'integrations' | 'workflow' | 'settings'>('integrations')
 const pageLoading = ref(true)
 const pageError = ref<string | null>(null)
 
@@ -430,5 +460,10 @@ const saveIntegrationConfig = async () => {
 const handleIntegrationChange = async () => {
   // Refresh connections list after connect/disconnect
   await integrationsStore.fetchConnections(projectId.value)
+}
+
+const handleWorkflowConfigSaved = async () => {
+  // Refresh project data to get updated config
+  await projectsStore.fetchProjects()
 }
 </script>

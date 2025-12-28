@@ -7,8 +7,8 @@
  */
 
 import { proxyActivities, ApplicationFailure } from '@temporalio/workflow';
-import type { WorkflowConfig } from '@devflow/common';
-import { DEFAULT_WORKFLOW_CONFIG } from '@devflow/common';
+import type { WorkflowConfig, AutomationConfig, TechnicalPlanPhaseConfig } from '@devflow/common';
+import { DEFAULT_WORKFLOW_CONFIG, DEFAULT_AUTOMATION_CONFIG } from '@devflow/common';
 import type * as activities from '@/activities';
 
 // Proxy activities with 10-minute timeout (AI generation takes time)
@@ -249,6 +249,11 @@ export async function technicalPlanWorkflow(
   const config = input.config || DEFAULT_WORKFLOW_CONFIG;
   const LINEAR_STATUSES = config.linear.statuses;
 
+  // Get automation config with defaults
+  const automation: TechnicalPlanPhaseConfig = config.automation?.phases?.technicalPlan ||
+    DEFAULT_AUTOMATION_CONFIG.phases.technicalPlan;
+  const features = automation.features;
+
   try {
     // Step 1: Sync task from Linear
     const task = await syncLinearTask({
@@ -256,42 +261,55 @@ export async function technicalPlanWorkflow(
       projectId: input.projectId,
     });
 
-    // Step 2: Update status to Plan In Progress
-    await updateLinearTask({
-      projectId: input.projectId,
-      linearId: task.linearId,
-      updates: { status: LINEAR_STATUSES.planInProgress },
-    });
-
-    // Step 3: Load Codebase Context document (created in Phase 1)
-    const codebaseContextDoc = await getPhaseDocumentContent({
-      projectId: input.projectId,
-      linearId: task.linearId,
-      phase: 'codebase_context',
-    });
-
-    // Parse document back to RAG-like format
-    const ragContext = codebaseContextDoc.content
-      ? parseCodebaseContextDocument(codebaseContextDoc.content)
-      : null;
-
-    if (ragContext) {
-      console.log('[technicalPlanWorkflow] Codebase context loaded from document with', ragContext.chunks.length, 'chunks');
-    } else {
-      console.log('[technicalPlanWorkflow] No codebase context document found');
+    // Step 2: Update status to Plan In Progress (conditional)
+    if (features.enableAutoStatusUpdate) {
+      await updateLinearTask({
+        projectId: input.projectId,
+        linearId: task.linearId,
+        updates: { status: LINEAR_STATUSES.planInProgress },
+      });
     }
 
-    // Step 3.5: Load Documentation Context document (created in Phase 1)
-    const documentationContextDoc = await getPhaseDocumentContent({
-      projectId: input.projectId,
-      linearId: task.linearId,
-      phase: 'documentation_context',
-    });
+    // Step 3: Load Codebase Context document (created in Phase 1) - conditional
+    let ragContext: ReturnType<typeof parseCodebaseContextDocument> = null;
+    if (features.reuseCodebaseContext) {
+      const codebaseContextDoc = await getPhaseDocumentContent({
+        projectId: input.projectId,
+        linearId: task.linearId,
+        phase: 'codebase_context',
+      });
 
-    if (documentationContextDoc.content) {
-      console.log('[technicalPlanWorkflow] Documentation context loaded from document');
+      // Parse document back to RAG-like format
+      ragContext = codebaseContextDoc.content
+        ? parseCodebaseContextDocument(codebaseContextDoc.content)
+        : null;
+
+      if (ragContext) {
+        console.log('[technicalPlanWorkflow] Codebase context loaded from document with', ragContext.chunks.length, 'chunks');
+      } else {
+        console.log('[technicalPlanWorkflow] No codebase context document found');
+      }
     } else {
-      console.log('[technicalPlanWorkflow] No documentation context document found');
+      console.log('[technicalPlanWorkflow] Codebase context reuse disabled');
+    }
+
+    // Step 3.5: Load Documentation Context document (created in Phase 1) - conditional
+    let documentationContext: string | undefined;
+    if (features.reuseDocumentationContext) {
+      const documentationContextDoc = await getPhaseDocumentContent({
+        projectId: input.projectId,
+        linearId: task.linearId,
+        phase: 'documentation_context',
+      });
+
+      if (documentationContextDoc.content) {
+        console.log('[technicalPlanWorkflow] Documentation context loaded from document');
+        documentationContext = documentationContextDoc.content;
+      } else {
+        console.log('[technicalPlanWorkflow] No documentation context document found');
+      }
+    } else {
+      console.log('[technicalPlanWorkflow] Documentation context reuse disabled');
     }
 
     // Step 4: Get User Story - try document first, then fallback to description
@@ -314,45 +332,56 @@ export async function technicalPlanWorkflow(
       userStory = extractUserStoryFromDescription(task.description);
     }
 
-    // Step 5: Fetch best practices from Perplexity
+    // Step 5: Fetch best practices from Perplexity (conditional)
     const taskLanguage = ragContext?.chunks?.[0]?.language;
-    const bestPracticesResult = await fetchBestPractices({
-      task: {
-        title: task.title,
-        description: task.description,
-      },
-      projectId: input.projectId,
-      context: taskLanguage
-        ? {
-            language: taskLanguage,
-            framework: undefined, // TODO: Extract framework from RAG context
-          }
-        : undefined,
-    });
+    let bestPracticesResult: Awaited<ReturnType<typeof fetchBestPractices>> | undefined;
 
-    // Step 5b: Save best practices as a Linear document
-    if (bestPracticesResult.bestPractices && bestPracticesResult.bestPractices !== 'Unable to fetch best practices at this time.') {
-      await saveBestPracticesDocument({
-        projectId: input.projectId,
-        linearId: task.linearId,
-        bestPractices: bestPracticesResult,
-        taskContext: {
+    if (features.enableBestPracticesQuery) {
+      bestPracticesResult = await fetchBestPractices({
+        task: {
           title: task.title,
-          language: taskLanguage,
-          framework: undefined,
+          description: task.description,
         },
+        projectId: input.projectId,
+        context: taskLanguage
+          ? {
+              language: taskLanguage,
+              framework: undefined, // TODO: Extract framework from RAG context
+            }
+          : undefined,
       });
-      console.log('[technicalPlanWorkflow] Best practices document created');
+
+      // Step 5b: Save best practices as a Linear document
+      if (bestPracticesResult.bestPractices && bestPracticesResult.bestPractices !== 'Unable to fetch best practices at this time.') {
+        await saveBestPracticesDocument({
+          projectId: input.projectId,
+          linearId: task.linearId,
+          bestPractices: bestPracticesResult,
+          taskContext: {
+            title: task.title,
+            language: taskLanguage,
+            framework: undefined,
+          },
+        });
+        console.log('[technicalPlanWorkflow] Best practices document created');
+      }
+    } else {
+      console.log('[technicalPlanWorkflow] Best practices query disabled');
     }
 
     // Step 6: Generate technical plan with best practices
+    // Pass aiModel and Council AI configuration from automation config
     const result = await generateTechnicalPlan({
       task,
       projectId: input.projectId,
       userStory,
       ragContext,
       bestPractices: bestPracticesResult,
-      documentationContext: documentationContextDoc.content || undefined,
+      documentationContext,
+      aiModel: automation.aiModel,
+      enableCouncilAI: features.enableCouncilAI,
+      councilModels: automation.councilModels,
+      councilChairmanModel: automation.councilChairmanModel,
     });
 
     // Step 7: Append technical plan to Linear issue (with council summary if enabled)
@@ -365,12 +394,14 @@ export async function technicalPlanWorkflow(
       bestPractices: bestPracticesResult,
     });
 
-    // Step 8: Update status to Plan Ready
-    await updateLinearTask({
-      projectId: input.projectId,
-      linearId: task.linearId,
-      updates: { status: LINEAR_STATUSES.planReady },
-    });
+    // Step 8: Update status to Plan Ready (conditional)
+    if (features.enableAutoStatusUpdate) {
+      await updateLinearTask({
+        projectId: input.projectId,
+        linearId: task.linearId,
+        updates: { status: LINEAR_STATUSES.planReady },
+      });
+    }
 
     return {
       success: true,
@@ -379,21 +410,23 @@ export async function technicalPlanWorkflow(
       plan: result.plan,
     };
   } catch (error) {
-    // Update status to Plan Failed
-    try {
-      const task = await syncLinearTask({
-        taskId: input.taskId,
-        projectId: input.projectId,
-      });
+    // Update status to Plan Failed (conditional)
+    if (features.enableAutoStatusUpdate) {
+      try {
+        const task = await syncLinearTask({
+          taskId: input.taskId,
+          projectId: input.projectId,
+        });
 
-      await updateLinearTask({
-        projectId: input.projectId,
-        linearId: task.linearId,
-        updates: { status: LINEAR_STATUSES.planFailed },
-      });
-    } catch (updateError) {
-      // Log but don't throw - original error is more important
-      console.error('Failed to update status to planFailed:', updateError);
+        await updateLinearTask({
+          projectId: input.projectId,
+          linearId: task.linearId,
+          updates: { status: LINEAR_STATUSES.planFailed },
+        });
+      } catch (updateError) {
+        // Log but don't throw - original error is more important
+        console.error('Failed to update status to planFailed:', updateError);
+      }
     }
 
     // Throw original error

@@ -43,6 +43,14 @@ export interface GenerateTechnicalPlanInput {
   bestPractices?: FetchBestPracticesOutput;
   /** Documentation context markdown (from Phase 1 document) */
   documentationContext?: string;
+  /** AI model to use for generation (from automation config) */
+  aiModel?: string;
+  /** Feature flag: enable Council AI for multi-model deliberation */
+  enableCouncilAI?: boolean;
+  /** Council AI models to use */
+  councilModels?: string[];
+  /** Council chairman model for final decision */
+  councilChairmanModel?: string;
 }
 
 export interface GenerateTechnicalPlanOutput {
@@ -256,24 +264,35 @@ export async function generateTechnicalPlan(
     });
 
     // Step 5: Generate with AI (council or single model)
-    const useCouncil = process.env.ENABLE_COUNCIL === 'true';
+    // Use enableCouncilAI from automation config, fallback to env var
+    const useCouncil = input.enableCouncilAI ?? (process.env.ENABLE_COUNCIL === 'true');
 
     let plan: TechnicalPlanGenerationOutput;
     let councilSummary: CouncilSummary | undefined = undefined;
 
     if (useCouncil) {
-      logger.info('Using LLM Council for technical plan');
+      // Use councilModels from automation config, fallback to env var or defaults
+      const councilModelsToUse = input.councilModels ||
+        (process.env.COUNCIL_MODELS
+          ? process.env.COUNCIL_MODELS.split(',').map((m) => m.trim())
+          : ['anthropic/claude-sonnet-4', 'openai/gpt-4o', 'google/gemini-2.0-flash-exp']);
 
-      const councilModels = process.env.COUNCIL_MODELS
-        ? process.env.COUNCIL_MODELS.split(',').map((m) => m.trim())
-        : ['anthropic/claude-sonnet-4', 'openai/gpt-4o', 'google/gemini-2.0-flash-exp'];
+      // Use councilChairmanModel from automation config, fallback to env var or default
+      const chairmanModelToUse = input.councilChairmanModel ||
+        process.env.COUNCIL_CHAIRMAN_MODEL ||
+        'anthropic/claude-sonnet-4';
+
+      logger.info('Using LLM Council for technical plan', {
+        models: councilModelsToUse,
+        chairman: chairmanModelToUse,
+      });
 
       const council = createCouncilService(
         process.env.OPENROUTER_API_KEY || '',
         {
           enabled: true,
-          models: councilModels,
-          chairmanModel: process.env.COUNCIL_CHAIRMAN_MODEL || 'anthropic/claude-sonnet-4',
+          models: councilModelsToUse,
+          chairmanModel: chairmanModelToUse,
           timeout: parseInt(process.env.COUNCIL_TIMEOUT || '120000'),
         }
       );
@@ -292,18 +311,20 @@ export async function generateTechnicalPlan(
       councilSummary = result.summary;
     } else {
       // Single model generation
-      logger.info('Using single model generation for technical plan');
+      // Use aiModel from automation config, fallback to env var or default
+      const modelToUse = input.aiModel || process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4';
+      logger.info('Using single model generation for technical plan', { model: modelToUse });
 
       const agent = createCodeAgentDriver({
         provider: 'openrouter',
         apiKey: process.env.OPENROUTER_API_KEY || '',
-        model: process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-4',
+        model: modelToUse,
       });
 
       const response = await agent.generate(prompts);
       plan = parseTechnicalPlanResponse(response.content);
 
-      logger.info('Technical plan generated successfully');
+      logger.info('Technical plan generated successfully', { model: modelToUse });
     }
 
     return {
