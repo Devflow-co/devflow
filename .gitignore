@@ -39,6 +39,11 @@ coverage/
 .nyc_output/
 junit.xml
 
+# Playwright
+playwright-report/
+test-results/
+.playwright/
+
 # Temporal
 .temporal/
 
