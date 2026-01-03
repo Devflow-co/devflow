@@ -7,8 +7,10 @@ import * as activities from '@/activities';
 import { createLogger } from '@devflow/common';
 import * as dotenv from 'dotenv';
 import { oauthResolver } from '@/services/oauth-context';
+import * as path from 'path';
 
-dotenv.config();
+// Load .env from monorepo root
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 const logger = createLogger('Worker');
 

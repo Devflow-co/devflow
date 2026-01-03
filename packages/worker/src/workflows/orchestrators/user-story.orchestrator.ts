@@ -15,9 +15,10 @@
  * 9. Update status to Ready (conditional)
  */
 
-import { executeChild, ApplicationFailure } from '@temporalio/workflow';
+import { executeChild, ApplicationFailure, proxyActivities, workflowInfo } from '@temporalio/workflow';
 import type { WorkflowConfig, UserStoryPhaseConfig } from '@devflow/common';
 import { DEFAULT_WORKFLOW_CONFIG, DEFAULT_AUTOMATION_CONFIG } from '@devflow/common';
+import type * as progressActivities from '../../activities/workflow-progress.activities';
 
 // Import step workflows
 import { syncLinearTaskWorkflow } from '../steps/common/sync-linear-task.workflow';
@@ -288,15 +289,67 @@ export async function userStoryOrchestrator(
     config.automation?.phases?.userStory || DEFAULT_AUTOMATION_CONFIG.phases.userStory;
   const features = automation.features;
 
+  // Configure progress logging activities
+  const { logWorkflowProgress, logWorkflowFailure } = proxyActivities<typeof progressActivities>({
+    startToCloseTimeout: '10 seconds',
+    retry: { maximumAttempts: 3 },
+  });
+
+  const workflowId = workflowInfo().workflowId;
+  const TOTAL_STEPS = 9;
+  const PHASE = 'user_story' as const;
+  const projectId = input.projectId;
+  const taskId = input.taskId;
+
   try {
     // Step 1: Sync task from Linear
+    await logWorkflowProgress({
+      workflowId,
+      projectId,
+      taskId,
+      phase: PHASE,
+      stepName: 'Sync Linear Task',
+      stepNumber: 1,
+      totalSteps: TOTAL_STEPS,
+      status: 'in_progress',
+      startedAt: new Date(),
+    });
+
+    const step1Start = Date.now();
     const task = await executeChild(syncLinearTaskWorkflow, {
       workflowId: `sync-task-${input.taskId}-${Date.now()}`,
       args: [{ taskId: input.taskId, projectId: input.projectId }],
     });
 
+    await logWorkflowProgress({
+      workflowId,
+      projectId,
+      taskId,
+      phase: PHASE,
+      stepName: 'Sync Linear Task',
+      stepNumber: 1,
+      totalSteps: TOTAL_STEPS,
+      status: 'completed',
+      startedAt: new Date(step1Start),
+      completedAt: new Date(),
+      metadata: { taskId: task.id, linearId: task.linearId, title: task.title },
+    });
+
     // Step 2: Update status to UserStory In Progress (conditional)
     if (features.enableAutoStatusUpdate) {
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Update Status to In Progress',
+        stepNumber: 2,
+        totalSteps: TOTAL_STEPS,
+        status: 'in_progress',
+        startedAt: new Date(),
+      });
+
+      const step2Start = Date.now();
       await executeChild(updateLinearStatusWorkflow, {
         workflowId: `status-in-progress-${input.taskId}-${Date.now()}`,
         args: [
@@ -307,14 +360,85 @@ export async function userStoryOrchestrator(
           },
         ],
       });
+
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Update Status to In Progress',
+        stepNumber: 2,
+        totalSteps: TOTAL_STEPS,
+        status: 'completed',
+        startedAt: new Date(step2Start),
+        completedAt: new Date(),
+        metadata: { status: LINEAR_STATUSES.userStoryInProgress },
+      });
+    } else {
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Update Status to In Progress (disabled)',
+        stepNumber: 2,
+        totalSteps: TOTAL_STEPS,
+        status: 'skipped',
+        startedAt: new Date(),
+        completedAt: new Date(),
+      });
     }
 
     // Step 3: Extract refinement from description (local function)
+    await logWorkflowProgress({
+      workflowId,
+      projectId,
+      taskId,
+      phase: PHASE,
+      stepName: 'Extract Refinement from Description',
+      stepNumber: 3,
+      totalSteps: TOTAL_STEPS,
+      status: 'in_progress',
+      startedAt: new Date(),
+    });
+
+    const step3Start = Date.now();
     const refinement = extractRefinementFromDescription(task.description);
+
+    await logWorkflowProgress({
+      workflowId,
+      projectId,
+      taskId,
+      phase: PHASE,
+      stepName: 'Extract Refinement from Description',
+      stepNumber: 3,
+      totalSteps: TOTAL_STEPS,
+      status: 'completed',
+      startedAt: new Date(step3Start),
+      completedAt: new Date(),
+      metadata: {
+        taskType: refinement.taskType,
+        complexityEstimate: refinement.complexityEstimate,
+        hasSuggestedSplit: !!refinement.suggestedSplit,
+      },
+    });
 
     // Step 4: Get codebase context document (conditional)
     let codebaseContext: string | undefined;
     if (features.reuseCodebaseContext) {
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Get Codebase Context Document',
+        stepNumber: 4,
+        totalSteps: TOTAL_STEPS,
+        status: 'in_progress',
+        startedAt: new Date(),
+      });
+
+      const step4Start = Date.now();
       const codebaseContextDoc = await executeChild(getPhaseDocumentWorkflow, {
         workflowId: `get-codebase-${input.taskId}-${Date.now()}`,
         args: [
@@ -329,11 +453,51 @@ export async function userStoryOrchestrator(
       if (codebaseContextDoc.content) {
         codebaseContext = codebaseContextDoc.content;
       }
+
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Get Codebase Context Document',
+        stepNumber: 4,
+        totalSteps: TOTAL_STEPS,
+        status: 'completed',
+        startedAt: new Date(step4Start),
+        completedAt: new Date(),
+        metadata: { hasContext: !!codebaseContext, contentLength: codebaseContext?.length || 0 },
+      });
+    } else {
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Get Codebase Context Document (disabled)',
+        stepNumber: 4,
+        totalSteps: TOTAL_STEPS,
+        status: 'skipped',
+        startedAt: new Date(),
+        completedAt: new Date(),
+      });
     }
 
     // Step 5: Get documentation context document (conditional)
     let documentationContext: string | undefined;
     if (features.reuseDocumentationContext) {
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Get Documentation Context Document',
+        stepNumber: 5,
+        totalSteps: TOTAL_STEPS,
+        status: 'in_progress',
+        startedAt: new Date(),
+      });
+
+      const step5Start = Date.now();
       const documentationContextDoc = await executeChild(getPhaseDocumentWorkflow, {
         workflowId: `get-docs-${input.taskId}-${Date.now()}`,
         args: [
@@ -348,6 +512,33 @@ export async function userStoryOrchestrator(
       if (documentationContextDoc.content) {
         documentationContext = documentationContextDoc.content;
       }
+
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Get Documentation Context Document',
+        stepNumber: 5,
+        totalSteps: TOTAL_STEPS,
+        status: 'completed',
+        startedAt: new Date(step5Start),
+        completedAt: new Date(),
+        metadata: { hasContext: !!documentationContext, contentLength: documentationContext?.length || 0 },
+      });
+    } else {
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Get Documentation Context Document (disabled)',
+        stepNumber: 5,
+        totalSteps: TOTAL_STEPS,
+        status: 'skipped',
+        startedAt: new Date(),
+        completedAt: new Date(),
+      });
     }
 
     // Step 6: Check for task split (conditional)
@@ -357,6 +548,19 @@ export async function userStoryOrchestrator(
       refinement.suggestedSplit.proposedStories.length > 0
     ) {
       // Step 6a: Create split subtasks
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Check for Task Split - Create Subtasks',
+        stepNumber: 6,
+        totalSteps: TOTAL_STEPS,
+        status: 'in_progress',
+        startedAt: new Date(),
+      });
+
+      const step6Start = Date.now();
       const subIssuesResult = await executeChild(createSplitSubtasksWorkflow, {
         workflowId: `create-split-${input.taskId}-${Date.now()}`,
         args: [
@@ -382,8 +586,66 @@ export async function userStoryOrchestrator(
         ],
       });
 
-      // Update status to Ready (conditional)
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Check for Task Split - Create Subtasks',
+        stepNumber: 6,
+        totalSteps: TOTAL_STEPS,
+        status: 'completed',
+        startedAt: new Date(step6Start),
+        completedAt: new Date(),
+        metadata: {
+          split: true,
+          subIssuesCreated: subIssuesResult.created.length,
+          subIssuesFailed: subIssuesResult.failed.length,
+        },
+      });
+
+      // Step 7-8: Skipped (no user story generation when split)
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Generate User Story (skipped - task split)',
+        stepNumber: 7,
+        totalSteps: TOTAL_STEPS,
+        status: 'skipped',
+        startedAt: new Date(),
+        completedAt: new Date(),
+      });
+
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Append User Story to Issue (skipped - task split)',
+        stepNumber: 8,
+        totalSteps: TOTAL_STEPS,
+        status: 'skipped',
+        startedAt: new Date(),
+        completedAt: new Date(),
+      });
+
+      // Step 9: Update status to Ready (conditional)
       if (features.enableAutoStatusUpdate) {
+        await logWorkflowProgress({
+          workflowId,
+          projectId,
+          taskId,
+          phase: PHASE,
+          stepName: 'Update Status to Ready',
+          stepNumber: 9,
+          totalSteps: TOTAL_STEPS,
+          status: 'in_progress',
+          startedAt: new Date(),
+        });
+
+        const step9Start = Date.now();
         await executeChild(updateLinearStatusWorkflow, {
           workflowId: `status-ready-${input.taskId}-${Date.now()}`,
           args: [
@@ -394,6 +656,33 @@ export async function userStoryOrchestrator(
             },
           ],
         });
+
+        await logWorkflowProgress({
+          workflowId,
+          projectId,
+          taskId,
+          phase: PHASE,
+          stepName: 'Update Status to Ready',
+          stepNumber: 9,
+          totalSteps: TOTAL_STEPS,
+          status: 'completed',
+          startedAt: new Date(step9Start),
+          completedAt: new Date(),
+          metadata: { status: LINEAR_STATUSES.userStoryReady },
+        });
+      } else {
+        await logWorkflowProgress({
+          workflowId,
+          projectId,
+          taskId,
+          phase: PHASE,
+          stepName: 'Update Status to Ready (disabled)',
+          stepNumber: 9,
+          totalSteps: TOTAL_STEPS,
+          status: 'skipped',
+          startedAt: new Date(),
+          completedAt: new Date(),
+        });
       }
 
       return {
@@ -403,9 +692,36 @@ export async function userStoryOrchestrator(
         split: true,
         subIssuesCreated: subIssuesResult.created,
       };
+    } else if (!features.enableTaskSplitting || !refinement.suggestedSplit) {
+      // Log skipped if task splitting not enabled or no suggested split
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Check for Task Split (disabled or no split)',
+        stepNumber: 6,
+        totalSteps: TOTAL_STEPS,
+        status: 'skipped',
+        startedAt: new Date(),
+        completedAt: new Date(),
+      });
     }
 
     // Step 7: Generate user story (AI)
+    await logWorkflowProgress({
+      workflowId,
+      projectId,
+      taskId,
+      phase: PHASE,
+      stepName: 'Generate User Story (AI)',
+      stepNumber: 7,
+      totalSteps: TOTAL_STEPS,
+      status: 'in_progress',
+      startedAt: new Date(),
+    });
+
+    const step7Start = Date.now();
     const result = await executeChild(generateUserStoryWorkflow, {
       workflowId: `generate-user-story-${input.taskId}-${Date.now()}`,
       args: [
@@ -424,7 +740,34 @@ export async function userStoryOrchestrator(
       ],
     });
 
+    await logWorkflowProgress({
+      workflowId,
+      projectId,
+      taskId,
+      phase: PHASE,
+      stepName: 'Generate User Story (AI)',
+      stepNumber: 7,
+      totalSteps: TOTAL_STEPS,
+      status: 'completed',
+      startedAt: new Date(step7Start),
+      completedAt: new Date(),
+      metadata: { aiModel: automation.aiModel, hasCodebaseContext: !!codebaseContext, hasDocContext: !!documentationContext },
+    });
+
     // Step 8: Append user story to issue
+    await logWorkflowProgress({
+      workflowId,
+      projectId,
+      taskId,
+      phase: PHASE,
+      stepName: 'Append User Story to Issue',
+      stepNumber: 8,
+      totalSteps: TOTAL_STEPS,
+      status: 'in_progress',
+      startedAt: new Date(),
+    });
+
+    const step8Start = Date.now();
     await executeChild(appendUserStoryWorkflow, {
       workflowId: `append-user-story-${input.taskId}-${Date.now()}`,
       args: [
@@ -436,8 +779,34 @@ export async function userStoryOrchestrator(
       ],
     });
 
+    await logWorkflowProgress({
+      workflowId,
+      projectId,
+      taskId,
+      phase: PHASE,
+      stepName: 'Append User Story to Issue',
+      stepNumber: 8,
+      totalSteps: TOTAL_STEPS,
+      status: 'completed',
+      startedAt: new Date(step8Start),
+      completedAt: new Date(),
+    });
+
     // Step 9: Update status to Ready (conditional)
     if (features.enableAutoStatusUpdate) {
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Update Status to Ready',
+        stepNumber: 9,
+        totalSteps: TOTAL_STEPS,
+        status: 'in_progress',
+        startedAt: new Date(),
+      });
+
+      const step9Start = Date.now();
       await executeChild(updateLinearStatusWorkflow, {
         workflowId: `status-ready-${input.taskId}-${Date.now()}`,
         args: [
@@ -448,6 +817,33 @@ export async function userStoryOrchestrator(
           },
         ],
       });
+
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Update Status to Ready',
+        stepNumber: 9,
+        totalSteps: TOTAL_STEPS,
+        status: 'completed',
+        startedAt: new Date(step9Start),
+        completedAt: new Date(),
+        metadata: { status: LINEAR_STATUSES.userStoryReady },
+      });
+    } else {
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Update Status to Ready (disabled)',
+        stepNumber: 9,
+        totalSteps: TOTAL_STEPS,
+        status: 'skipped',
+        startedAt: new Date(),
+        completedAt: new Date(),
+      });
     }
 
     return {
@@ -457,6 +853,16 @@ export async function userStoryOrchestrator(
       userStory: result.userStory,
     };
   } catch (error) {
+    // Log workflow failure
+    await logWorkflowFailure({
+      workflowId,
+      projectId: input.projectId,
+      taskId: input.taskId,
+      phase: PHASE,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stepName: 'Workflow Failed',
+    });
+
     // Update status to Failed (conditional)
     if (features.enableAutoStatusUpdate) {
       try {
