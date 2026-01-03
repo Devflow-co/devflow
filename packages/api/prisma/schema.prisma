@@ -273,11 +273,18 @@ model Workflow {
   // Status
   status          WorkflowStatus @default(PENDING)
   currentStage    WorkflowStage? @map("current_stage")
-  
+
+  // Progress tracking
+  currentPhase      String?      @map("current_phase")      // refinement, user_story, technical_plan
+  currentStepName   String?      @map("current_step_name")  // Human-readable step name
+  currentStepNumber Int?         @map("current_step_number") // 1, 2, 3...
+  totalSteps        Int?         @map("total_steps")         // 15, 9, 12
+  progressPercent   Int?         @map("progress_percent")    // 0-100
+
   // Results
   result          Json?
   error           String?        @db.Text
-  
+
   // Timing
   startedAt       DateTime?      @map("started_at")
   completedAt     DateTime?      @map("completed_at")
@@ -306,23 +313,31 @@ model Workflow {
 model WorkflowStageLog {
   id          String        @id @default(uuid())
   workflowId  String        @map("workflow_id")
-  
+
   stage       WorkflowStage
   status      WorkflowStatus
-  
+
   data        Json?
   error       String?       @db.Text
-  
+
   startedAt   DateTime      @default(now()) @map("started_at")
   completedAt DateTime?     @map("completed_at")
   duration    Int?          // in milliseconds
-  
+
+  // Step tracking
+  phase       String?       // refinement, user_story, technical_plan
+  stepName    String?       @map("step_name")   // Human-readable step name
+  stepNumber  Int?          @map("step_number")  // 1, 2, 3...
+  totalSteps  Int?          @map("total_steps")  // 15, 9, 12
+
   // Relations
   workflow    Workflow      @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  
+
   @@map("workflow_stage_logs")
   @@index([workflowId])
   @@index([stage])
+  @@index([phase])
+  @@unique([workflowId, stepName])
 }
 
 // ============================================
