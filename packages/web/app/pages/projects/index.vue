@@ -155,7 +155,11 @@
                   d="M13 10V3L4 14h7v7l9-11h-7z"
                 />
               </svg>
-              <span>{{ project._count.workflows }} workflows</span>
+              <span v-if="project._count.activeWorkflows !== undefined">
+                {{ project._count.activeWorkflows }} active
+                <span class="text-gray-500 dark:text-gray-500">({{ project._count.workflows }} total)</span>
+              </span>
+              <span v-else>{{ project._count.workflows }} workflows</span>
             </div>
           </div>
 

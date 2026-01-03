@@ -4,6 +4,8 @@
     <!-- Navbar (hidden on auth pages) -->
     <AppNavbar v-if="showNavbar" />
     <NuxtPage />
+    <!-- Toast Notifications -->
+    <ToastContainer />
   </div>
 </template>
 
@@ -11,6 +13,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import AppNavbar from '@/components/AppNavbar.vue'
+import ToastContainer from '@/components/ToastContainer.vue'
 
 const route = useRoute()
 

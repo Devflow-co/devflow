@@ -185,10 +185,11 @@ export const useIntegrationsStore = defineStore('integrations', () => {
    *
    * 1. Get authorization URL from API
    * 2. Open popup window
-   * 3. Poll /auth/connections every 1s
-   * 4. Detect when connection appears (isActive: true)
-   * 5. Close popup automatically
-   * 6. Stop polling (with 60s timeout)
+   * 3. Listen for window.postMessage from OAuth callback
+   * 4. Also poll /auth/connections every 1s as fallback
+   * 5. Detect when connection appears (isActive: true)
+   * 6. Close popup automatically
+   * 7. Stop polling (with 60s timeout)
    */
   const connectOAuth = async (projectId: string, provider: OAuthProvider): Promise<void> => {
     if (!import.meta.client) {
@@ -222,7 +223,7 @@ export const useIntegrationsStore = defineStore('integrations', () => {
         throw new Error('Popup blocked by browser. Please allow popups and try again.')
       }
 
-      // Step 3-6: Poll for connection
+      // Step 3-7: Poll for connection (also listens for postMessage)
       await pollForConnection(projectId, provider)
     } catch (e: any) {
       error.value = e.message || `Failed to connect ${provider}`
@@ -239,6 +240,7 @@ export const useIntegrationsStore = defineStore('integrations', () => {
 
   /**
    * Poll /auth/connections until the provider connection appears or timeout
+   * Also listens for window.postMessage from OAuth callback for instant feedback
    */
   const pollForConnection = async (
     projectId: string,
@@ -248,15 +250,63 @@ export const useIntegrationsStore = defineStore('integrations', () => {
     return new Promise((resolve, reject) => {
       const startTime = Date.now()
       const pollInterval = 1000 // 1 second
+      let messageListener: ((event: MessageEvent) => void) | null = null
+
+      const cleanup = () => {
+        // Stop polling
+        if (oauthPolling.value) {
+          clearInterval(oauthPolling.value)
+          oauthPolling.value = null
+        }
+        // Remove message listener
+        if (messageListener) {
+          window.removeEventListener('message', messageListener)
+          messageListener = null
+        }
+      }
+
+      const handleSuccess = async () => {
+        try {
+          // Fetch updated connections
+          const response = await apiFetch<{ connections: OAuthConnection[] }>(
+            `/auth/connections?project=${projectId}`
+          )
+          connections.value = response.connections
+
+          // Close popup
+          if (oauthPopup.value && !oauthPopup.value.closed) {
+            oauthPopup.value.close()
+          }
+
+          cleanup()
+          resolve()
+        } catch (e) {
+          console.error('Failed to fetch connections after OAuth success:', e)
+          cleanup()
+          reject(e)
+        }
+      }
+
+      // Listen for postMessage from OAuth callback
+      messageListener = (event: MessageEvent) => {
+        // Verify origin matches our app
+        if (event.origin !== window.location.origin) {
+          return
+        }
+
+        // Check if this is an OAuth success message for our provider
+        if (event.data?.type === 'OAUTH_SUCCESS' && event.data?.provider === provider) {
+          console.log('Received OAuth success message from popup')
+          handleSuccess()
+        }
+      }
+      window.addEventListener('message', messageListener)
 
       const poll = async () => {
         try {
           // Check if popup was closed manually
           if (oauthPopup.value && oauthPopup.value.closed) {
-            if (oauthPolling.value) {
-              clearInterval(oauthPolling.value)
-              oauthPolling.value = null
-            }
+            cleanup()
             reject(new Error('OAuth popup closed by user'))
             return
           }
@@ -272,7 +322,7 @@ export const useIntegrationsStore = defineStore('integrations', () => {
           )
 
           if (connection) {
-            // Success! Connection found
+            // Success! Connection found via polling
             connections.value = response.connections
 
             // Close popup
@@ -280,12 +330,7 @@ export const useIntegrationsStore = defineStore('integrations', () => {
               oauthPopup.value.close()
             }
 
-            // Stop polling
-            if (oauthPolling.value) {
-              clearInterval(oauthPolling.value)
-              oauthPolling.value = null
-            }
-
+            cleanup()
             resolve()
             return
           }
@@ -296,10 +341,7 @@ export const useIntegrationsStore = defineStore('integrations', () => {
             if (oauthPopup.value && !oauthPopup.value.closed) {
               oauthPopup.value.close()
             }
-            if (oauthPolling.value) {
-              clearInterval(oauthPolling.value)
-              oauthPolling.value = null
-            }
+            cleanup()
             reject(new Error('OAuth connection timeout (60s). Please try again.'))
           }
         } catch (e) {

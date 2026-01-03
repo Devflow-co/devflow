@@ -103,6 +103,30 @@
             @connected="handleIntegrationChange"
             @disconnected="handleIntegrationChange"
           >
+            <template #info>
+              <div class="mb-4 p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div class="flex items-start gap-2">
+                  <svg class="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                  </svg>
+                  <div class="flex-1 text-sm">
+                    <p class="font-medium text-blue-800 dark:text-blue-200 mb-1">Repository Access</p>
+                    <p class="text-blue-700 dark:text-blue-300 mb-2">
+                      This OAuth connection grants access to <strong>all repositories</strong> you have access to on GitHub.
+                    </p>
+                    <details class="mt-2">
+                      <summary class="cursor-pointer text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
+                        Want to limit access to specific repositories?
+                      </summary>
+                      <div class="mt-2 pl-4 border-l-2 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300">
+                        <p class="mb-2">To limit access to specific repositories, you'll need to use a GitHub App instead of OAuth.</p>
+                        <p class="text-xs">Contact support or check the documentation for GitHub App setup instructions.</p>
+                      </div>
+                    </details>
+                  </div>
+                </div>
+              </div>
+            </template>
             <template #config>
               <form @submit.prevent="saveIntegrationConfig" class="space-y-4">
                 <div>
@@ -136,7 +160,34 @@
             :project-id="selectedProject.id"
             @connected="handleIntegrationChange"
             @disconnected="handleIntegrationChange"
-          />
+          >
+            <template #info>
+              <div class="mb-4 p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div class="flex items-start gap-2">
+                  <svg class="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                  </svg>
+                  <div class="flex-1 text-sm">
+                    <p class="font-medium text-blue-800 dark:text-blue-200 mb-1">Workspace Access</p>
+                    <p class="text-blue-700 dark:text-blue-300">
+                      This connection grants access to <strong>all teams and issues</strong> in your Linear workspace.
+                    </p>
+                    <details class="mt-2">
+                      <summary class="cursor-pointer text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
+                        What can DevFlow access?
+                      </summary>
+                      <ul class="mt-2 pl-4 border-l-2 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs space-y-1">
+                        <li>• Read and update issues</li>
+                        <li>• Create comments</li>
+                        <li>• Update issue status</li>
+                        <li>• Read team and project information</li>
+                      </ul>
+                    </details>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </IntegrationCard>
 
           <!-- Figma Integration -->
           <IntegrationCard
@@ -145,6 +196,32 @@
             @connected="handleIntegrationChange"
             @disconnected="handleIntegrationChange"
           >
+            <template #info>
+              <div class="mb-4 p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div class="flex items-start gap-2">
+                  <svg class="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                  </svg>
+                  <div class="flex-1 text-sm">
+                    <p class="font-medium text-blue-800 dark:text-blue-200 mb-1">File Access</p>
+                    <p class="text-blue-700 dark:text-blue-300">
+                      This connection grants access to <strong>all files and teams</strong> you have access to in Figma.
+                    </p>
+                    <details class="mt-2">
+                      <summary class="cursor-pointer text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
+                        What can DevFlow access?
+                      </summary>
+                      <ul class="mt-2 pl-4 border-l-2 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs space-y-1">
+                        <li>• Read file content and designs</li>
+                        <li>• Read comments on files</li>
+                        <li>• View your user profile</li>
+                        <li>• Access shared team files</li>
+                      </ul>
+                    </details>
+                  </div>
+                </div>
+              </div>
+            </template>
             <template #config>
               <form @submit.prevent="saveIntegrationConfig" class="space-y-4">
                 <div>
@@ -193,6 +270,35 @@
             @connected="handleIntegrationChange"
             @disconnected="handleIntegrationChange"
           >
+            <template #info>
+              <div class="mb-4 p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div class="flex items-start gap-2">
+                  <svg class="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                  </svg>
+                  <div class="flex-1 text-sm">
+                    <p class="font-medium text-blue-800 dark:text-blue-200 mb-1">Organization Access</p>
+                    <p class="text-blue-700 dark:text-blue-300">
+                      This connection grants read-only access to <strong>all projects and events</strong> in your Sentry organization.
+                    </p>
+                    <details class="mt-2">
+                      <summary class="cursor-pointer text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
+                        What can DevFlow access?
+                      </summary>
+                      <ul class="mt-2 pl-4 border-l-2 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs space-y-1">
+                        <li>• Read error events and issues</li>
+                        <li>• View project information</li>
+                        <li>• Access organization data</li>
+                        <li>• Read stack traces and metadata</li>
+                      </ul>
+                      <p class="mt-2 text-xs text-blue-600 dark:text-blue-400">
+                        Note: DevFlow has read-only access and cannot modify Sentry data.
+                      </p>
+                    </details>
+                  </div>
+                </div>
+              </div>
+            </template>
             <template #config>
               <form @submit.prevent="saveIntegrationConfig" class="space-y-4">
                 <div>

@@ -68,6 +68,11 @@
       </div>
     </div>
 
+    <!-- Info Slot (before connection details) -->
+    <div v-if="$slots.info">
+      <slot name="info"></slot>
+    </div>
+
     <!-- Connection Details -->
     <div v-if="connection" class="mb-4 space-y-2">
       <div v-if="connection.providerEmail" class="flex items-center gap-2 text-sm">

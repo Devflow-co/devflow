@@ -108,13 +108,16 @@
           </div>
         </div>
 
-        <!-- Workflows Stat -->
+        <!-- Active Workflows Stat -->
         <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Workflows</p>
+              <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Active Workflows</p>
               <p class="mt-2 text-3xl font-semibold text-gray-900 dark:text-white">
-                {{ totalWorkflows }}
+                {{ activeWorkflows }}
+              </p>
+              <p class="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                {{ totalWorkflows }} total
               </p>
             </div>
             <div class="w-12 h-12 rounded-lg bg-orange-100 dark:bg-orange-900/20 flex items-center justify-center">
@@ -286,6 +289,16 @@ const totalWorkflows = computed(() => {
   projects.value.forEach((project) => {
     if (project._count) {
       total += project._count.workflows
+    }
+  })
+  return total
+})
+
+const activeWorkflows = computed(() => {
+  let total = 0
+  projects.value.forEach((project) => {
+    if (project._count && project._count.activeWorkflows !== undefined) {
+      total += project._count.activeWorkflows
     }
   })
   return total
