@@ -1,11 +1,11 @@
 /**
  * Workflow Configuration Composable
  *
- * Manages automation configuration state, AI models, and templates.
+ * Manages automation configuration state and AI models.
  * Used by the WorkflowConfig component.
  */
 
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import type { Ref } from 'vue'
 
 // Types mirroring @devflow/common (avoiding direct import for web compatibility)
@@ -46,7 +46,6 @@ interface TechnicalPlanPhaseConfig extends PhaseConfig<TechnicalPlanFeatures> {
 
 export interface AutomationConfig {
   version: 1
-  templateName?: 'standard' | 'minimal' | 'advanced'
   phases: {
     refinement: PhaseConfig<RefinementFeatures>
     userStory: PhaseConfig<UserStoryFeatures>
@@ -64,15 +63,6 @@ export interface AIModelInfo {
   recommendedFor: string[]
 }
 
-export interface TemplateInfo {
-  name: 'standard' | 'minimal' | 'advanced'
-  displayName: string
-  description: string
-  icon: string
-  features: string[]
-  costTier: 'low' | 'medium' | 'high'
-}
-
 export interface OAuthConnection {
   provider: string
   isActive: boolean
@@ -83,7 +73,6 @@ const DEFAULT_AI_MODEL = 'anthropic/claude-sonnet-4'
 
 const DEFAULT_CONFIG: AutomationConfig = {
   version: 1,
-  templateName: 'standard',
   phases: {
     refinement: {
       enabled: true,
@@ -126,7 +115,6 @@ export function useWorkflowConfig(projectId: Ref<string>) {
   const config = ref<AutomationConfig>(structuredClone(DEFAULT_CONFIG))
   const originalConfig = ref<AutomationConfig>(structuredClone(DEFAULT_CONFIG))
   const aiModels = ref<AIModelInfo[]>([])
-  const templates = ref<TemplateInfo[]>([])
   const loading = ref(false)
   const saving = ref(false)
   const error = ref<string | null>(null)
@@ -135,8 +123,6 @@ export function useWorkflowConfig(projectId: Ref<string>) {
   const hasChanges = computed(() => {
     return JSON.stringify(config.value) !== JSON.stringify(originalConfig.value)
   })
-
-  const selectedTemplate = computed(() => config.value.templateName)
 
   // API helper
   const getApiBase = (): string => {
@@ -170,15 +156,11 @@ export function useWorkflowConfig(projectId: Ref<string>) {
     return response.json()
   }
 
-  // Load AI models and templates
+  // Load AI models
   const loadMetadata = async () => {
     try {
-      const [modelsResponse, templatesResponse] = await Promise.all([
-        apiFetch<{ models: AIModelInfo[] }>('/config/ai-models'),
-        apiFetch<{ templates: TemplateInfo[] }>('/config/automation-templates'),
-      ])
+      const modelsResponse = await apiFetch<{ models: AIModelInfo[] }>('/config/ai-models')
       aiModels.value = modelsResponse.models
-      templates.value = templatesResponse.templates
     } catch (e: any) {
       console.error('Failed to load workflow config metadata:', e)
       error.value = e.message
@@ -210,118 +192,6 @@ export function useWorkflowConfig(projectId: Ref<string>) {
     }
   }
 
-  // Apply a template
-  const applyTemplate = async (templateName: 'standard' | 'minimal' | 'advanced') => {
-    try {
-      // Fetch template from API or use local definitions
-      const templateResponse = await apiFetch<{ templates: TemplateInfo[] }>(
-        '/config/automation-templates'
-      )
-
-      // For now, we use the template metadata and construct the config
-      // In a full implementation, the API would return the full template config
-      const templateInfo = templateResponse.templates.find((t) => t.name === templateName)
-      if (!templateInfo) {
-        throw new Error(`Template ${templateName} not found`)
-      }
-
-      // Apply template defaults based on template name
-      if (templateName === 'minimal') {
-        config.value = {
-          version: 1,
-          templateName: 'minimal',
-          phases: {
-            refinement: {
-              enabled: true,
-              aiModel: 'anthropic/claude-3-haiku',
-              features: {
-                enableRagContext: false,
-                enableDocumentationAnalysis: false,
-                enableFigmaContext: false,
-                enableSentryContext: false,
-                enableGitHubIssueContext: false,
-                enablePOQuestions: true,
-                enableContextDocuments: false,
-                enableSubtaskCreation: false,
-              },
-            },
-            userStory: {
-              enabled: false,
-              aiModel: 'anthropic/claude-3-haiku',
-              features: {
-                enableTaskSplitting: false,
-                reuseCodebaseContext: false,
-                reuseDocumentationContext: false,
-              },
-            },
-            technicalPlan: {
-              enabled: false,
-              aiModel: 'anthropic/claude-3-haiku',
-              features: {
-                enableBestPracticesQuery: false,
-                enableCouncilAI: false,
-                reuseCodebaseContext: false,
-                reuseDocumentationContext: false,
-              },
-            },
-          },
-        }
-      } else if (templateName === 'advanced') {
-        config.value = {
-          version: 1,
-          templateName: 'advanced',
-          phases: {
-            refinement: {
-              enabled: true,
-              aiModel: 'anthropic/claude-sonnet-4',
-              features: {
-                enableRagContext: true,
-                enableDocumentationAnalysis: true,
-                enableFigmaContext: true,
-                enableSentryContext: true,
-                enableGitHubIssueContext: true,
-                enablePOQuestions: true,
-                enableContextDocuments: true,
-                enableSubtaskCreation: true,
-              },
-            },
-            userStory: {
-              enabled: true,
-              aiModel: 'anthropic/claude-sonnet-4',
-              features: {
-                enableTaskSplitting: true,
-                reuseCodebaseContext: true,
-                reuseDocumentationContext: true,
-              },
-            },
-            technicalPlan: {
-              enabled: true,
-              aiModel: 'anthropic/claude-sonnet-4',
-              features: {
-                enableBestPracticesQuery: true,
-                enableCouncilAI: true,
-                reuseCodebaseContext: true,
-                reuseDocumentationContext: true,
-              },
-              councilModels: [
-                'anthropic/claude-sonnet-4',
-                'openai/gpt-4o',
-                'google/gemini-2.0-flash-exp',
-              ],
-              councilChairmanModel: 'anthropic/claude-sonnet-4',
-            },
-          },
-        }
-      } else {
-        // Standard template
-        config.value = structuredClone(DEFAULT_CONFIG)
-      }
-    } catch (e: any) {
-      error.value = e.message
-      throw e
-    }
-  }
-
   // Update phase config
   const updatePhase = <K extends keyof AutomationConfig['phases']>(
     phase: K,
@@ -331,11 +201,6 @@ export function useWorkflowConfig(projectId: Ref<string>) {
       ...config.value.phases[phase],
       ...updates,
     } as AutomationConfig['phases'][K]
-
-    // Clear template name when config is customized
-    if (config.value.templateName) {
-      config.value.templateName = undefined
-    }
   }
 
   // Update a specific feature flag
@@ -346,11 +211,6 @@ export function useWorkflowConfig(projectId: Ref<string>) {
   ) => {
     const phaseConfig = config.value.phases[phase]
     ;(phaseConfig.features as any)[featureKey] = value
-
-    // Clear template name when config is customized
-    if (config.value.templateName) {
-      config.value.templateName = undefined
-    }
   }
 
   // Save config to API
@@ -398,18 +258,15 @@ export function useWorkflowConfig(projectId: Ref<string>) {
     // State
     config,
     aiModels,
-    templates,
     loading,
     saving,
     error,
 
     // Computed
     hasChanges,
-    selectedTemplate,
 
     // Actions
     load,
-    applyTemplate,
     updatePhase,
     updateFeature,
     save,

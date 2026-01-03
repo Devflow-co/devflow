@@ -164,7 +164,6 @@ export function mergeWithDefaults(
 
   return {
     version: partial.version ?? defaults.version,
-    templateName: partial.templateName,
     phases: {
       refinement: {
         enabled: partial.phases?.refinement?.enabled ?? defaults.phases.refinement.enabled,
@@ -267,17 +266,6 @@ export function validateAutomationConfig(config: AutomationConfig): ValidationRe
     errors,
     warnings,
   };
-}
-
-/**
- * Check if a config matches a specific template
- */
-export function matchesTemplate(
-  config: AutomationConfig,
-  templateName: string
-): boolean {
-  // Only check if templateName matches - actual config may have been customized
-  return config.templateName === templateName;
 }
 
 /**

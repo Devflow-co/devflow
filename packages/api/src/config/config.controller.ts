@@ -1,15 +1,12 @@
 /**
  * Config Controller - Workflow automation configuration endpoints
  *
- * Provides read-only endpoints for AI models and automation templates.
+ * Provides read-only endpoints for AI models.
  */
 
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import {
-  AVAILABLE_AI_MODELS,
-  getTemplateMetadata,
-} from '@devflow/common';
+import { AVAILABLE_AI_MODELS } from '@devflow/common';
 
 @ApiTags('Config')
 @Controller('config')
@@ -26,21 +23,6 @@ export class ConfigController {
   getAIModels() {
     return {
       models: AVAILABLE_AI_MODELS,
-    };
-  }
-
-  /**
-   * Get automation templates metadata
-   */
-  @Get('automation-templates')
-  @ApiOperation({ summary: 'Get automation templates' })
-  @ApiResponse({
-    status: 200,
-    description: 'List of automation templates with metadata',
-  })
-  getAutomationTemplates() {
-    return {
-      templates: getTemplateMetadata(),
     };
   }
 }

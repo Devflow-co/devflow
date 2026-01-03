@@ -90,21 +90,6 @@ export interface TechnicalPlanPhaseConfig extends BasePhaseConfig<TechnicalPlanF
 }
 
 // ============================================
-// Template Types
-// ============================================
-
-export type TemplateName = 'standard' | 'minimal' | 'advanced';
-
-export interface TemplateInfo {
-  name: TemplateName;
-  displayName: string;
-  description: string;
-  icon: string;
-  features: string[];
-  costTier: 'low' | 'medium' | 'high';
-}
-
-// ============================================
 // Full Automation Configuration
 // ============================================
 
@@ -115,8 +100,6 @@ export interface TemplateInfo {
 export interface AutomationConfig {
   /** Schema version for future migrations */
   version: 1;
-  /** Name of the template this config is based on (if any) */
-  templateName?: TemplateName;
   /** Per-phase configuration */
   phases: {
     refinement: RefinementPhaseConfig;
@@ -198,7 +181,6 @@ export const DEFAULT_TECHNICAL_PLAN_FEATURES: TechnicalPlanFeatures = {
 
 export const DEFAULT_AUTOMATION_CONFIG: AutomationConfig = {
   version: 1,
-  templateName: 'standard',
   phases: {
     refinement: {
       enabled: true,
