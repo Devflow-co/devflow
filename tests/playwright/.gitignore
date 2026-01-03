@@ -1,0 +1,8 @@
+# Environment variables
+.env
+
+# Playwright test results
+test-results/
+
+# Playwright cache
+.playwright/
