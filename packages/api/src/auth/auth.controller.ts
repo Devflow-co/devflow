@@ -772,6 +772,21 @@ export class AuthController {
               font-size: 0.9rem;
             }
           </style>
+          <script>
+            // Notify parent window that OAuth completed successfully
+            if (window.opener && !window.opener.closed) {
+              window.opener.postMessage({
+                type: 'OAUTH_SUCCESS',
+                provider: '${provider}',
+                email: ${email ? `'${email}'` : 'null'}
+              }, window.location.origin);
+            }
+
+            // Auto-close after 3 seconds
+            setTimeout(() => {
+              window.close();
+            }, 3000);
+          </script>
         </head>
         <body>
           <div class="container">
@@ -780,7 +795,7 @@ export class AuthController {
             <p>Your OAuth connection has been established successfully.</p>
             ${email ? `<div class="email">${email}</div>` : ''}
             <div class="footer">
-              You can close this window and return to your terminal.
+              This window will close automatically...
             </div>
           </div>
         </body>

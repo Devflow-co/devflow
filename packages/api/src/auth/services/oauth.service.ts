@@ -171,7 +171,7 @@ export class OAuthService {
   }
 
   /**
-   * Get OAuth application credentials from database
+   * Get OAuth application credentials from database (system-wide only)
    */
   private async getOAuthApp(
     projectId: string,
@@ -183,13 +183,19 @@ export class OAuthService {
     scopes: string[];
     flowType: string;
   }> {
+    const SYSTEM_PROJECT_ID = 'SYSTEM_OAUTH_PROJECT';
+
+    // ALWAYS use system-wide OAuth app (no fallback, no project-specific apps)
     const oauthApp = await this.prisma.oAuthApplication.findUnique({
-      where: { projectId_provider: { projectId, provider } },
+      where: {
+        projectId_provider: { projectId: SYSTEM_PROJECT_ID, provider },
+      },
     });
 
     if (!oauthApp || !oauthApp.isActive) {
       throw new Error(
-        `No active OAuth application configured for ${provider} on project ${projectId}. Please register your OAuth app first.`,
+        `System OAuth application not configured for ${provider}. ` +
+          `Add ${provider}_APP_CLIENT_ID, ${provider}_APP_CLIENT_SECRET, and ${provider}_APP_REDIRECT_URI to .env and restart the API.`,
       );
     }
 

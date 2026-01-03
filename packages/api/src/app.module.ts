@@ -21,7 +21,12 @@ import { ConfigAppModule } from '@/config/config.module';
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
+      envFilePath: [
+        '.env.local',
+        '.env',
+        '../../.env.local', // Root monorepo .env.local
+        '../../.env',        // Root monorepo .env
+      ],
     }),
 
     // Rate limiting
