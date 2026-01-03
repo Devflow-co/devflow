@@ -130,7 +130,9 @@ pnpm --filter @devflow/api db:push     # Push schema
 pnpm --filter @devflow/api db:migrate  # Run migrations
 
 # Testing
-pnpm test                              # Run tests
+pnpm test                              # Run unit tests
+pnpm test:playwright                   # Run Playwright E2E tests
+pnpm test:playwright:ui                # Run Playwright with UI mode
 devflow integrations:test <project-id> # Test OAuth connections
 ```
 
@@ -205,7 +207,10 @@ OPENROUTER_API_KEY=sk-or-xxx
 
 ### Tests
 - `packages/sdk/src/__manual_tests__/` - SDK integration tests
-- `tests/e2e/` - E2E test scripts
+- `tests/e2e/` - E2E test scripts (bash/TypeScript)
+- `tests/playwright/` - Playwright E2E tests (web interface)
+- `tests/integration/` - Integration test scripts
+- `playwright.config.ts` - Playwright configuration
 
 ---
 

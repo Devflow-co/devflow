@@ -6,8 +6,9 @@ This directory contains all test scripts for DevFlow.
 
 ```
 tests/
-├── e2e/              # End-to-end workflow tests
+├── e2e/              # End-to-end workflow tests (bash/TypeScript)
 ├── integration/      # Integration tests (OAuth, API)
+├── playwright/       # Playwright E2E tests (web interface)
 └── .env.example      # Example environment variables for tests
 ```
 
@@ -47,6 +48,48 @@ Integration tests that verify specific components and integrations.
 ./tests/integration/test-oauth-flow.sh <PROJECT_ID> linear
 ```
 
+## Playwright E2E Tests (`playwright/`)
+
+Browser-based end-to-end tests for the web interface using Playwright.
+
+### Available Tests
+
+- **`auth.spec.ts`** - User authentication flow (login, signup, logout)
+- **`projects.spec.ts`** - Project management (create, view, manage projects)
+- **`oauth-integrations.spec.ts`** - OAuth integration flow (connect/disconnect providers)
+
+### Setup
+
+```bash
+# Install Playwright browsers
+pnpm playwright:install
+
+# Copy environment variables
+cp tests/playwright/.env.example tests/playwright/.env
+# Edit .env with your test credentials
+```
+
+### Usage
+
+```bash
+# Run all Playwright tests (headless)
+pnpm test:playwright
+
+# Run with UI mode (recommended for development)
+pnpm test:playwright:ui
+
+# Run in headed mode (see browser)
+pnpm test:playwright:headed
+
+# Debug specific test
+pnpm test:playwright:debug tests/playwright/auth.spec.ts
+
+# View test report
+pnpm test:playwright:report
+```
+
+**See [playwright/README.md](playwright/README.md) for detailed documentation.**
+
 ## Environment Setup
 
 Copy `.env.example` to create your test environment:
@@ -85,7 +128,7 @@ Before running tests, ensure:
 ## Running All Tests
 
 ```bash
-# Run all E2E tests
+# Run all bash E2E tests
 for test in tests/e2e/*.sh; do
   echo "Running $test..."
   $test
@@ -95,6 +138,9 @@ done
 PROJECT_ID="your-project-id"
 ./tests/integration/test-oauth-flow.sh $PROJECT_ID github
 ./tests/integration/test-oauth-flow.sh $PROJECT_ID linear
+
+# Run all Playwright tests
+pnpm test:playwright
 ```
 
 ## Test Development Guidelines
@@ -145,4 +191,4 @@ DATABASE_URL="postgresql://devflow:changeme@localhost:5432/devflow?schema=public
 
 ---
 
-**Last Updated:** December 9, 2025
+**Last Updated:** December 28, 2025
