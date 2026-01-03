@@ -33,7 +33,10 @@ export class ProjectsService {
     this.logger.info('Finding all projects');
 
     return this.prisma.project.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        id: { not: 'SYSTEM_OAUTH_PROJECT' }, // Exclude system project from UI
+      },
       orderBy: { createdAt: 'desc' },
       include: {
         _count: {
@@ -49,9 +52,10 @@ export class ProjectsService {
   async findByUserId(userId: string) {
     this.logger.info('Finding projects for user', { userId });
 
-    return this.prisma.project.findMany({
+    const projects = await this.prisma.project.findMany({
       where: {
         isActive: true,
+        id: { not: 'SYSTEM_OAUTH_PROJECT' }, // Exclude system project from UI
         organizations: {
           some: {
             organization: {
@@ -68,11 +72,36 @@ export class ProjectsService {
           where: { isActive: true },
         },
         _count: {
-          select: { tasks: true, workflows: true },
+          select: {
+            tasks: true,
+            workflows: true,
+          },
         },
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    // Enrich with active workflows count
+    const enrichedProjects = await Promise.all(
+      projects.map(async (project) => {
+        const activeWorkflowsCount = await this.prisma.workflow.count({
+          where: {
+            projectId: project.id,
+            status: { in: ['PENDING', 'RUNNING'] },
+          },
+        });
+
+        return {
+          ...project,
+          _count: {
+            ...project._count,
+            activeWorkflows: activeWorkflowsCount,
+          },
+        };
+      })
+    );
+
+    return enrichedProjects;
   }
 
   /**

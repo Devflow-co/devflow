@@ -2,16 +2,19 @@
  * Workflows Service - Temporal Integration
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Connection, Client } from '@temporalio/client';
 import { createLogger, loadConfig, WorkflowConfig, DEFAULT_WORKFLOW_CONFIG } from '@devflow/common';
 import { StartWorkflowDto } from '@/workflows/dto';
+import { PrismaService } from '@/prisma/prisma.service';
 
 @Injectable()
 export class WorkflowsService {
   private logger = createLogger('WorkflowsService');
   private client: Client | null = null;
   private workflowConfig: WorkflowConfig;
+
+  constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit() {
     try {
@@ -116,6 +119,156 @@ export class WorkflowsService {
     await handle.cancel();
 
     return { workflowId, status: 'cancelled' };
+  }
+
+  /**
+   * List workflows for a project
+   */
+  async listProjectWorkflows(projectId: string, options?: { limit?: number; status?: string }) {
+    this.logger.info('Listing project workflows', { projectId, options });
+
+    const limit = options?.limit ? parseInt(options.limit.toString(), 10) : 50;
+    const statusFilter = options?.status ? { status: options.status as any } : {};
+
+    const workflows = await this.prisma.workflow.findMany({
+      where: {
+        projectId,
+        ...statusFilter,
+      },
+      include: {
+        task: {
+          select: {
+            id: true,
+            title: true,
+            linearId: true,
+          },
+        },
+        _count: {
+          select: {
+            stages: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    return {
+      workflows: workflows.map((w) => ({
+        id: w.id,
+        workflowId: w.workflowId,
+        status: w.status,
+        currentPhase: w.currentPhase,
+        currentStepName: w.currentStepName,
+        currentStepNumber: w.currentStepNumber,
+        progressPercent: w.progressPercent,
+        task: w.task,
+        startedAt: w.startedAt,
+        completedAt: w.completedAt,
+        duration: w.duration,
+        stageCount: w._count.stages,
+      })),
+      total: workflows.length,
+    };
+  }
+
+  /**
+   * Get detailed workflow progress with step information
+   */
+  async getWorkflowProgress(workflowId: string) {
+    this.logger.info('Getting workflow progress', { workflowId });
+
+    const workflow = await this.prisma.workflow.findUnique({
+      where: { workflowId },
+      include: {
+        task: true,
+        stages: {
+          orderBy: [{ phase: 'asc' }, { stepNumber: 'asc' }],
+        },
+      },
+    });
+
+    if (!workflow) {
+      throw new NotFoundException(`Workflow ${workflowId} not found`);
+    }
+
+    // Group stages by phase
+    const phaseGroups = workflow.stages.reduce(
+      (acc, stage) => {
+        const phase = stage.phase || 'unknown';
+        if (!acc[phase]) acc[phase] = [];
+        acc[phase].push(stage);
+        return acc;
+      },
+      {} as Record<string, typeof workflow.stages>,
+    );
+
+    return {
+      workflow: {
+        id: workflow.id,
+        workflowId: workflow.workflowId,
+        status: workflow.status,
+        currentPhase: workflow.currentPhase,
+        currentStepName: workflow.currentStepName,
+        currentStepNumber: workflow.currentStepNumber,
+        progressPercent: workflow.progressPercent,
+        startedAt: workflow.startedAt,
+        completedAt: workflow.completedAt,
+        duration: workflow.duration,
+        error: workflow.error,
+      },
+      task: workflow.task,
+      phases: Object.entries(phaseGroups).map(([phase, stages]) => ({
+        phase,
+        totalSteps: stages[0]?.totalSteps || stages.length,
+        completedSteps: stages.filter((s) => s.status === 'COMPLETED').length,
+        steps: stages.map((s) => ({
+          stepNumber: s.stepNumber,
+          stepName: s.stepName,
+          status: s.status,
+          startedAt: s.startedAt,
+          completedAt: s.completedAt,
+          duration: s.duration,
+          error: s.error,
+          data: s.data,
+        })),
+      })),
+    };
+  }
+
+  /**
+   * Get workflow activity timeline
+   */
+  async getWorkflowTimeline(workflowId: string) {
+    this.logger.info('Getting workflow timeline', { workflowId });
+
+    const workflow = await this.prisma.workflow.findUnique({
+      where: { workflowId },
+      select: { id: true },
+    });
+
+    if (!workflow) {
+      throw new NotFoundException(`Workflow ${workflowId} not found`);
+    }
+
+    const stages = await this.prisma.workflowStageLog.findMany({
+      where: { workflowId: workflow.id },
+      orderBy: { startedAt: 'asc' },
+      select: {
+        stepName: true,
+        phase: true,
+        status: true,
+        startedAt: true,
+        completedAt: true,
+        duration: true,
+        error: true,
+      },
+    });
+
+    return {
+      workflowId,
+      timeline: stages,
+    };
   }
 }
 
