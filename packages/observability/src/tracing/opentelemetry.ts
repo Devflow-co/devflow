@@ -9,7 +9,7 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { Resource } from '@opentelemetry/resources';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
-import { trace, context, SpanStatusCode, Span } from '@opentelemetry/api';
+import { trace, context, SpanStatusCode, Span, createContextKey } from '@opentelemetry/api';
 
 // ============================================
 // Configuration
@@ -269,7 +269,7 @@ export function setSpanError(error: Error): void {
 // ============================================
 
 const CORRELATION_ID_HEADER = 'x-request-id';
-const CORRELATION_ID_CONTEXT_KEY = Symbol('correlationId');
+const CORRELATION_ID_CONTEXT_KEY = createContextKey('correlationId');
 
 /**
  * Generate a correlation ID
@@ -293,14 +293,17 @@ export function setCorrelationId(correlationId: string): void {
   if (span) {
     span.setAttribute('correlation.id', correlationId);
   }
+  // Also store in context for retrieval
+  const ctx = context.active();
+  context.with(ctx.setValue(CORRELATION_ID_CONTEXT_KEY, correlationId), () => {});
 }
 
 /**
  * Get correlation ID from context
  */
 export function getCorrelationId(): string | undefined {
-  const span = getCurrentSpan();
-  return span?.attributes['correlation.id'] as string | undefined;
+  const ctx = context.active();
+  return ctx.getValue(CORRELATION_ID_CONTEXT_KEY) as string | undefined;
 }
 
 // ============================================

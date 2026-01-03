@@ -7,7 +7,6 @@ import { createLogger } from '../logging/structured.logger';
 import {
   recordAlert,
   updateSlaCompliance,
-  alertsTotal,
 } from '../metrics/prometheus.metrics';
 
 const logger = createLogger('SLAMonitor');
