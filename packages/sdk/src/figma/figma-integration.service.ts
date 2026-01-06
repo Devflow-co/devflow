@@ -6,6 +6,8 @@ import {
   FigmaComment,
   FigmaImagesResponse,
   FigmaScreenshot,
+  FigmaProject,
+  FigmaFileListItem,
 } from './figma.types';
 
 /**
@@ -111,6 +113,34 @@ export class FigmaIntegrationService {
     const token = await this.tokenResolver.getAccessToken(projectId, 'FIGMA');
     const client = createFigmaClient(token);
     return await client.getUserInfo();
+  }
+
+  /**
+   * List all projects in a team
+   * GET /v1/teams/:team_id/projects
+   * Requires projects:read scope and private OAuth app
+   *
+   * @param projectId - Project ID for token resolution
+   * @param teamId - Figma team ID from team page URL
+   */
+  async listTeamProjects(projectId: string, teamId: string): Promise<FigmaProject[]> {
+    const token = await this.tokenResolver.getAccessToken(projectId, 'FIGMA');
+    const client = createFigmaClient(token);
+    return await client.listTeamProjects(teamId);
+  }
+
+  /**
+   * List all files in a project
+   * GET /v1/projects/:project_id/files
+   * Requires projects:read scope and private OAuth app
+   *
+   * @param projectId - Project ID for token resolution (DevFlow)
+   * @param figmaProjectId - Figma project ID
+   */
+  async listProjectFiles(projectId: string, figmaProjectId: string): Promise<FigmaFileListItem[]> {
+    const token = await this.tokenResolver.getAccessToken(projectId, 'FIGMA');
+    const client = createFigmaClient(token);
+    return await client.listProjectFiles(figmaProjectId);
   }
 }
 

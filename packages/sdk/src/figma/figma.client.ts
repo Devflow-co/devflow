@@ -13,6 +13,8 @@ import {
   FigmaDesignContext,
   FigmaImagesResponse,
   FigmaUser,
+  FigmaProject,
+  FigmaFileListItem,
 } from './figma.types';
 
 export class FigmaClient {
@@ -275,6 +277,48 @@ export class FigmaClient {
     }
 
     return context;
+  }
+
+  /**
+   * List all projects in a team
+   * GET /v1/teams/:team_id/projects
+   * Requires projects:read scope and private OAuth app
+   * @param teamId - Figma team ID from team page URL
+   */
+  async listTeamProjects(teamId: string): Promise<FigmaProject[]> {
+    if (!teamId || typeof teamId !== 'string') {
+      throw new Error('Figma team ID is required');
+    }
+
+    try {
+      const response = await this.client.get<{ projects: FigmaProject[] }>(
+        `/teams/${teamId}/projects`,
+      );
+      return response.data.projects || [];
+    } catch (error) {
+      this.handleApiError(error, 'listTeamProjects', `team ${teamId}`);
+    }
+  }
+
+  /**
+   * List all files in a project
+   * GET /v1/projects/:project_id/files
+   * Requires projects:read scope and private OAuth app
+   * @param projectId - Figma project ID
+   */
+  async listProjectFiles(projectId: string): Promise<FigmaFileListItem[]> {
+    if (!projectId || typeof projectId !== 'string') {
+      throw new Error('Figma project ID is required');
+    }
+
+    try {
+      const response = await this.client.get<{ files: FigmaFileListItem[] }>(
+        `/projects/${projectId}/files`,
+      );
+      return response.data.files || [];
+    } catch (error) {
+      this.handleApiError(error, 'listProjectFiles', `project ${projectId}`);
+    }
   }
 }
 

@@ -44,6 +44,23 @@ interface TestResult {
   details?: any
 }
 
+interface GitHubAppInstallation {
+  installationId: string
+  accountLogin: string
+  accountType: string
+  repositorySelection: 'all' | 'selected'
+  selectedRepos: string[]
+  selectedOrgs: string[]
+  lastSyncedAt?: string
+  syncError?: string
+}
+
+interface RepositorySelection {
+  repos?: string[]
+  orgs?: string[]
+  selectionType: 'all' | 'selected'
+}
+
 // Cache the API base URL
 let cachedApiBase: string | null = null
 
@@ -77,6 +94,11 @@ export const useIntegrationsStore = defineStore('integrations', () => {
   const error = ref<string | null>(null)
   const oauthPopup = ref<Window | null>(null)
   const oauthPolling = ref<NodeJS.Timeout | null>(null)
+
+  // GitHub App State
+  const githubAppInstallation = ref<GitHubAppInstallation | null>(null)
+  const githubAppPopup = ref<Window | null>(null)
+  const githubAppPolling = ref<NodeJS.Timeout | null>(null)
 
   // Computed
   const isProviderConnected = computed(() => {
@@ -267,11 +289,17 @@ export const useIntegrationsStore = defineStore('integrations', () => {
 
       const handleSuccess = async () => {
         try {
-          // Fetch updated connections
-          const response = await apiFetch<{ connections: OAuthConnection[] }>(
-            `/auth/connections?project=${projectId}`
-          )
-          connections.value = response.connections
+          // Fetch updated connections and integration config
+          const [connectionsResponse] = await Promise.all([
+            apiFetch<{ connections: OAuthConnection[] }>(
+              `/auth/connections?project=${projectId}`
+            ),
+            fetchIntegrationConfig(projectId).catch(e => {
+              console.error('Failed to fetch integration config:', e)
+              // Don't fail the whole OAuth flow if config fetch fails
+            })
+          ])
+          connections.value = connectionsResponse.connections
 
           // Close popup
           if (oauthPopup.value && !oauthPopup.value.closed) {
@@ -442,6 +470,247 @@ export const useIntegrationsStore = defineStore('integrations', () => {
       clearInterval(oauthPolling.value)
       oauthPolling.value = null
     }
+    if (githubAppPopup.value && !githubAppPopup.value.closed) {
+      githubAppPopup.value.close()
+      githubAppPopup.value = null
+    }
+    if (githubAppPolling.value) {
+      clearInterval(githubAppPolling.value)
+      githubAppPolling.value = null
+    }
+  }
+
+  // ==================== GitHub App Methods ====================
+
+  /**
+   * Install GitHub App
+   * Opens popup for GitHub App installation with repository/organization selection
+   */
+  const installGitHubApp = async (projectId: string): Promise<void> => {
+    if (!import.meta.client) {
+      throw new Error('GitHub App installation can only run on client side')
+    }
+
+    try {
+      loading.value = true
+      error.value = null
+
+      // Step 1: Get installation URL
+      const response = await apiFetch<{ installationUrl: string; state: string }>(
+        '/auth/github-app/install',
+        {
+          method: 'POST',
+          body: JSON.stringify({ projectId }),
+        }
+      )
+
+      // Step 2: Open popup window
+      const popupWidth = 600
+      const popupHeight = 700
+      const left = window.screen.width / 2 - popupWidth / 2
+      const top = window.screen.height / 2 - popupHeight / 2
+
+      githubAppPopup.value = window.open(
+        response.installationUrl,
+        'GitHub App Installation',
+        `width=${popupWidth},height=${popupHeight},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes`
+      )
+
+      if (!githubAppPopup.value) {
+        throw new Error('Popup blocked by browser. Please allow popups and try again.')
+      }
+
+      // Step 3: Poll for installation
+      await pollForGitHubAppInstallation(projectId)
+    } catch (e: any) {
+      error.value = e.message || 'Failed to install GitHub App'
+      // Clean up popup if it exists
+      if (githubAppPopup.value && !githubAppPopup.value.closed) {
+        githubAppPopup.value.close()
+      }
+      throw e
+    } finally {
+      loading.value = false
+      githubAppPopup.value = null
+    }
+  }
+
+  /**
+   * Poll for GitHub App installation
+   * Similar to OAuth polling but for GitHub App
+   */
+  const pollForGitHubAppInstallation = async (
+    projectId: string,
+    timeoutMs: number = 60000
+  ): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const startTime = Date.now()
+      const pollInterval = 1000 // 1 second
+      let messageListener: ((event: MessageEvent) => void) | null = null
+
+      const cleanup = () => {
+        if (githubAppPolling.value) {
+          clearInterval(githubAppPolling.value)
+          githubAppPolling.value = null
+        }
+        if (messageListener) {
+          window.removeEventListener('message', messageListener)
+          messageListener = null
+        }
+      }
+
+      const handleSuccess = async () => {
+        try {
+          // Fetch installation info
+          await fetchGitHubAppInstallation(projectId)
+
+          // Close popup
+          if (githubAppPopup.value && !githubAppPopup.value.closed) {
+            githubAppPopup.value.close()
+          }
+
+          cleanup()
+          resolve()
+        } catch (e) {
+          console.error('Failed to fetch GitHub App installation:', e)
+          cleanup()
+          reject(e)
+        }
+      }
+
+      // Listen for postMessage from callback
+      messageListener = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) {
+          return
+        }
+
+        if (event.data?.type === 'GITHUB_APP_SUCCESS') {
+          console.log('Received GitHub App success message from popup')
+          handleSuccess()
+        }
+      }
+      window.addEventListener('message', messageListener)
+
+      const poll = async () => {
+        try {
+          // Check if popup was closed manually
+          if (githubAppPopup.value && githubAppPopup.value.closed) {
+            cleanup()
+            reject(new Error('GitHub App installation popup closed by user'))
+            return
+          }
+
+          // Try to fetch installation
+          const installation = await apiFetch<GitHubAppInstallation>(
+            `/auth/github-app/repositories?projectId=${projectId}`
+          )
+
+          if (installation) {
+            githubAppInstallation.value = installation
+
+            // Close popup
+            if (githubAppPopup.value && !githubAppPopup.value.closed) {
+              githubAppPopup.value.close()
+            }
+
+            cleanup()
+            resolve()
+            return
+          }
+
+          // Check timeout
+          if (Date.now() - startTime > timeoutMs) {
+            if (githubAppPopup.value && !githubAppPopup.value.closed) {
+              githubAppPopup.value.close()
+            }
+            cleanup()
+            reject(new Error('GitHub App installation timeout (60s). Please try again.'))
+          }
+        } catch (e) {
+          // Ignore polling errors, continue polling
+          console.debug('Polling error (ignored):', e)
+        }
+      }
+
+      // Start polling
+      githubAppPolling.value = setInterval(poll, pollInterval)
+
+      // Initial poll
+      poll()
+    })
+  }
+
+  /**
+   * Fetch GitHub App installation for a project
+   */
+  const fetchGitHubAppInstallation = async (projectId: string): Promise<void> => {
+    try {
+      loading.value = true
+      error.value = null
+
+      githubAppInstallation.value = await apiFetch<GitHubAppInstallation>(
+        `/auth/github-app/repositories?projectId=${projectId}`
+      )
+    } catch (e: any) {
+      // 404 means no installation yet
+      if (e.message?.includes('404')) {
+        githubAppInstallation.value = null
+      } else {
+        error.value = e.message || 'Failed to fetch GitHub App installation'
+        throw e
+      }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * Update repository selection for GitHub App
+   */
+  const updateGitHubRepoSelection = async (
+    projectId: string,
+    selection: RepositorySelection
+  ): Promise<void> => {
+    try {
+      loading.value = true
+      error.value = null
+
+      await apiFetch('/auth/github-app/repositories', {
+        method: 'POST',
+        body: JSON.stringify({ projectId, selection }),
+      })
+
+      // Refresh installation data
+      await fetchGitHubAppInstallation(projectId)
+    } catch (e: any) {
+      error.value = e.message || 'Failed to update repository selection'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * Uninstall GitHub App
+   */
+  const uninstallGitHubApp = async (projectId: string): Promise<void> => {
+    try {
+      loading.value = true
+      error.value = null
+
+      await apiFetch('/auth/github-app/uninstall', {
+        method: 'POST',
+        body: JSON.stringify({ projectId }),
+      })
+
+      // Clear local installation
+      githubAppInstallation.value = null
+    } catch (e: any) {
+      error.value = e.message || 'Failed to uninstall GitHub App'
+      throw e
+    } finally {
+      loading.value = false
+    }
   }
 
   return {
@@ -451,6 +720,7 @@ export const useIntegrationsStore = defineStore('integrations', () => {
     testResults,
     loading,
     error,
+    githubAppInstallation,
 
     // Computed
     isProviderConnected,
@@ -465,5 +735,11 @@ export const useIntegrationsStore = defineStore('integrations', () => {
     testConnection,
     refreshToken,
     cleanup,
+
+    // GitHub App Actions
+    installGitHubApp,
+    fetchGitHubAppInstallation,
+    updateGitHubRepoSelection,
+    uninstallGitHubApp,
   }
 })

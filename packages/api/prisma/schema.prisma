@@ -37,6 +37,8 @@ model Project {
   ragRetrievals    RagRetrieval[]
   oauthApplications OAuthApplication[]
   oauthConnections OAuthConnection[]
+  githubAppConfigs GitHubAppConfig[]
+  githubAppInstallations GitHubAppInstallation[]
   integration      ProjectIntegration?
 
   @@map("projects")
@@ -1243,6 +1245,10 @@ model OAuthConnection {
   refreshFailed  Boolean  @default(false) @map("refresh_failed")
   failureReason  String?  @map("failure_reason")
 
+  // Connection type (oauth_app | github_app)
+  connectionType String   @default("oauth_app") @map("connection_type")
+  githubInstallationId String? @map("github_installation_id")
+
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
@@ -1257,6 +1263,95 @@ model OAuthConnection {
 }
 
 // ============================================
+// GitHub App Configuration & Installations
+// ============================================
+
+// GitHub App Configuration (per project or global)
+// Stores GitHub App credentials (multi-tenant)
+model GitHubAppConfig {
+  id              String   @id @default(cuid())
+  projectId       String?  @map("project_id") @unique // null = global config
+
+  // GitHub App credentials
+  appId           BigInt   @map("app_id")
+  clientId        String   @map("client_id")
+  clientSecret    String   @map("client_secret") @db.Text // Encrypted
+  encryptionIv    String   @map("encryption_iv")
+
+  // Private key (PEM format, encrypted)
+  privateKey      String   @map("private_key") @db.Text
+  privateKeyIv    String   @map("private_key_iv")
+
+  // Webhooks
+  webhookSecret   String?  @map("webhook_secret") // Encrypted
+  webhookSecretIv String?  @map("webhook_secret_iv")
+
+  // Metadata
+  name            String
+  slug            String
+  description     String?
+  isActive        Boolean  @default(true) @map("is_active")
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  project         Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("github_app_configs")
+  @@index([projectId])
+  @@index([appId])
+}
+
+// GitHub App Installations (active installations)
+// Stores installations and repository selection
+model GitHubAppInstallation {
+  id                    String   @id @default(cuid())
+  projectId             String   @map("project_id")
+
+  // GitHub identifiers
+  installationId        BigInt   @map("installation_id") @unique
+  appId                 BigInt   @map("app_id")
+
+  // Account info
+  accountLogin          String   @map("account_login")     // username or org
+  accountType           String   @map("account_type")      // User | Organization
+  targetType            String   @map("target_type")       // Account | Repository
+
+  // Repository selection
+  selectedRepos         String[] @map("selected_repos")    // ["owner/repo1", "owner/repo2"]
+  selectedOrgs          String[] @map("selected_orgs")     // ["org1", "org2"]
+  repositorySelection   String   @map("repository_selection") // all | selected
+
+  // Permissions & events
+  permissions           Json
+  events                String[] @default([])
+
+  // Token cache
+  cachedTokenExpiresAt  DateTime? @map("cached_token_expires_at")
+
+  // Status
+  isActive              Boolean  @default(true) @map("is_active")
+  isSuspended           Boolean  @default(false) @map("is_suspended")
+
+  // Sync
+  lastSyncedAt          DateTime? @map("last_synced_at")
+  syncError             String?  @map("sync_error")
+
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  project               Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("github_app_installations")
+  @@index([projectId])
+  @@index([installationId])
+  @@index([accountLogin])
+  @@index([isActive])
+}
+
+// ============================================
 // Project Integrations (Figma, Sentry, GitHub Issues)
 // ============================================
 
@@ -1267,6 +1362,8 @@ model ProjectIntegration {
   // Figma Integration
   figmaFileKey    String?  @map("figma_file_key")
   figmaNodeId     String?  @map("figma_node_id")
+  figmaTeamId     String?  @map("figma_team_id")
+  figmaProjectId  String?  @map("figma_project_id")
 
   // Sentry Integration
   sentryProjectSlug String? @map("sentry_project_slug")

@@ -1,5 +1,8 @@
 import type { RedisClientType } from 'redis';
 import { OAuthDatabase, OAuthProvider } from './oauth.types';
+import { ITokenResolver } from './token-resolver.interface';
+import { GitHubAppAuthService } from './github-app-auth.service';
+import { TokenStorageService } from './token-storage.service';
 
 /**
  * OAuth Resolver Service
@@ -7,19 +10,50 @@ import { OAuthDatabase, OAuthProvider } from './oauth.types';
  *
  * This service is designed to be used by Temporal workers and other
  * background services that need to access OAuth tokens.
+ *
+ * GitHub App Support:
+ * - For GITHUB provider: Uses GitHub App installation tokens (no fallback to OAuth)
+ * - For other providers (LINEAR, FIGMA, SENTRY): Uses OAuth tokens
  */
-export class OAuthResolverService {
+export class OAuthResolverService implements ITokenResolver {
+  private githubAppAuth?: GitHubAppAuthService;
+  private tokenStorage?: TokenStorageService;
+
   constructor(
     private readonly db: OAuthDatabase,
     private readonly redis: RedisClientType,
-  ) {}
+    githubAppAuth?: GitHubAppAuthService,
+    tokenStorage?: TokenStorageService,
+  ) {
+    this.githubAppAuth = githubAppAuth;
+    this.tokenStorage = tokenStorage;
+  }
 
   /**
    * Resolve GitHub token for a project
-   * Returns the access token, refreshing if needed
+   * Uses GitHub App installation token (no OAuth fallback)
    */
   async resolveGitHubToken(projectId: string): Promise<string> {
-    return this.getAccessToken(projectId, 'GITHUB');
+    if (!this.githubAppAuth) {
+      throw new Error('GitHubAppAuthService is required for GitHub token resolution');
+    }
+
+    // Find GitHub App installation for this project
+    const installation = await this.db.gitHubAppInstallation.findFirst({
+      where: { projectId, isActive: true },
+    });
+
+    if (!installation) {
+      throw new Error(
+        `No GitHub App installation found for project ${projectId}. Please install the GitHub App.`,
+      );
+    }
+
+    // Get installation token (cached with 50min TTL)
+    return await this.githubAppAuth.getInstallationToken(
+      projectId,
+      Number(installation.installationId),
+    );
   }
 
   /**
@@ -31,10 +65,29 @@ export class OAuthResolverService {
   }
 
   /**
-   * Get access token from cache or database
-   * This method checks Redis first, then falls back to database
+   * Get access token for any provider
+   * Implements ITokenResolver interface
+   *
+   * - GitHub: Uses GitHub App installation tokens
+   * - Other providers: Uses OAuth tokens from cache/database
    */
-  private async getAccessToken(
+  async getAccessToken(projectId: string, provider: OAuthProvider): Promise<string> {
+    // Special handling for GitHub: use GitHub App
+    if (provider === 'GITHUB') {
+      return this.resolveGitHubToken(projectId);
+    }
+
+    // For other providers (LINEAR, FIGMA, SENTRY): use OAuth
+    return this.getOAuthAccessToken(projectId, provider);
+  }
+
+  /**
+   * Get OAuth access token from cache or database
+   * This method checks Redis first, then falls back to database
+   *
+   * Used for non-GitHub providers (LINEAR, FIGMA, SENTRY)
+   */
+  private async getOAuthAccessToken(
     projectId: string,
     provider: OAuthProvider,
   ): Promise<string> {

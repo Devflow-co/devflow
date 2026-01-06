@@ -70,3 +70,21 @@ export interface FigmaDesignContext {
   comments: FigmaComment[];
   screenshots: FigmaScreenshot[];
 }
+
+/**
+ * Figma Project (from GET /v1/teams/:team_id/projects)
+ */
+export interface FigmaProject {
+  id: string;
+  name: string;
+}
+
+/**
+ * Figma File List Item (from GET /v1/projects/:project_id/files)
+ */
+export interface FigmaFileListItem {
+  key: string;
+  name: string;
+  thumbnail_url?: string;
+  last_modified: string;
+}

@@ -6,6 +6,8 @@ import {
   FigmaComment,
   FigmaImagesResponse,
   FigmaScreenshot,
+  FigmaProject,
+  FigmaFileListItem,
 } from '@devflow/sdk';
 import { TokenRefreshService } from '@/auth/services/token-refresh.service';
 
@@ -169,6 +171,54 @@ export class FigmaApiService {
     } catch (error: any) {
       this.logger.error(
         `Failed to get screenshot: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * List all projects in a Figma team
+   * GET /v1/teams/:team_id/projects
+   * Requires projects:read scope and private OAuth app
+   *
+   * @param projectId - Project ID for token resolution
+   * @param teamId - Figma team ID from team page URL
+   */
+  async listTeamProjects(projectId: string, teamId: string): Promise<FigmaProject[]> {
+    this.logger.log(`Listing projects for project ${projectId}, team ${teamId}`);
+
+    try {
+      const projects = await this.figmaService.listTeamProjects(projectId, teamId);
+      this.logger.log(`Successfully retrieved ${projects.length} projects`);
+      return projects;
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to list team projects: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * List all files in a Figma project
+   * GET /v1/projects/:project_id/files
+   * Requires projects:read scope and private OAuth app
+   *
+   * @param projectId - Project ID for token resolution (DevFlow)
+   * @param figmaProjectId - Figma project ID
+   */
+  async listProjectFiles(projectId: string, figmaProjectId: string): Promise<FigmaFileListItem[]> {
+    this.logger.log(`Listing files for project ${projectId}, Figma project ${figmaProjectId}`);
+
+    try {
+      const files = await this.figmaService.listProjectFiles(projectId, figmaProjectId);
+      this.logger.log(`Successfully retrieved ${files.length} files`);
+      return files;
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to list project files: ${error.message}`,
         error.stack,
       );
       throw error;

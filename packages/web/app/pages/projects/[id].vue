@@ -154,6 +154,117 @@
             </template>
           </IntegrationCard>
 
+          <!-- GitHub App Section -->
+          <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm">
+            <div class="flex items-start justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-lg flex items-center justify-center bg-gray-900 dark:bg-gray-700">
+                  <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+                    GitHub App (Granular Access)
+                  </h3>
+                  <p class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                    Select specific repositories or organizations
+                  </p>
+                </div>
+              </div>
+
+              <div v-if="githubAppInstallation">
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-300">
+                  Installed
+                </span>
+              </div>
+            </div>
+
+            <!-- Not Installed State -->
+            <div v-if="!githubAppInstallation" class="space-y-4">
+              <div class="p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div class="flex items-start gap-2">
+                  <svg class="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                  </svg>
+                  <div class="flex-1 text-sm">
+                    <p class="font-medium text-blue-800 dark:text-blue-200 mb-1">Better Repository Control</p>
+                    <p class="text-blue-700 dark:text-blue-300 mb-2">
+                      GitHub Apps allow you to <strong>select specific repositories or entire organizations</strong> instead of granting access to all repositories.
+                    </p>
+                    <ul class="mt-2 pl-4 space-y-1 text-blue-700 dark:text-blue-300">
+                      <li>✓ Choose individual repositories</li>
+                      <li>✓ Select entire organizations</li>
+                      <li>✓ Modify selection after installation</li>
+                      <li>✓ More secure and precise access control</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                @click="handleInstallGitHubApp"
+                :disabled="integrationsLoading"
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {{ integrationsLoading ? 'Installing...' : 'Install GitHub App' }}
+              </button>
+            </div>
+
+            <!-- Installed State -->
+            <div v-else class="space-y-4">
+              <div class="flex items-center justify-between mb-4">
+                <div class="text-sm text-gray-700 dark:text-gray-300">
+                  <div class="flex items-center gap-2 mb-1">
+                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                      />
+                    </svg>
+                    <span class="font-medium">{{ githubAppInstallation.accountLogin }}</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">({{ githubAppInstallation.accountType }})</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"
+                      />
+                    </svg>
+                    <span>
+                      {{ githubAppInstallation.repositorySelection === 'all'
+                        ? `All repos from ${githubAppInstallation.selectedOrgs.length} org(s)`
+                        : `${githubAppInstallation.selectedRepos.length} selected repo(s)` }}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  @click="handleUninstallGitHubApp"
+                  :disabled="integrationsLoading"
+                  class="px-3 py-2 bg-red-100 dark:bg-red-900/20 hover:bg-red-200 dark:hover:bg-red-900/40 text-red-700 dark:text-red-300 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  Uninstall
+                </button>
+              </div>
+
+              <!-- Repository Selection Component -->
+              <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+                <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Repository Selection</h4>
+                <GitHubAppSelector
+                  :project-id="projectId"
+                  @saved="handleGitHubAppSaved"
+                  @synced="handleGitHubAppSynced"
+                />
+              </div>
+            </div>
+          </div>
+
           <!-- Linear Integration -->
           <IntegrationCard
             provider="LINEAR"
@@ -228,14 +339,23 @@
                   <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Figma File Key
                   </label>
-                  <input
-                    v-model="configForm.figmaFileKey"
-                    type="text"
-                    placeholder="TfJw2zsGB11mbievCt5c3n"
-                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
+                  <div class="flex gap-2">
+                    <input
+                      v-model="configForm.figmaFileKey"
+                      type="text"
+                      placeholder="TfJw2zsGB11mbievCt5c3n"
+                      class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <button
+                      type="button"
+                      @click="openFigmaFilePicker"
+                      class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
+                    >
+                      Browse Files
+                    </button>
+                  </div>
                   <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Found in Figma URL between /file/ and /
+                    Found in Figma URL between /file/ and / or click "Browse Files" to select
                   </p>
                 </div>
                 <div>
@@ -428,6 +548,7 @@ import { useProjectsStore } from '@/stores/projects'
 import { useIntegrationsStore } from '@/stores/integrations'
 import { storeToRefs } from 'pinia'
 import IntegrationCard from '@/components/IntegrationCard.vue'
+import GitHubAppSelector from '@/components/GitHubAppSelector.vue'
 import WorkflowConfig from '@/components/workflow/WorkflowConfig.vue'
 
 definePageMeta({
@@ -440,7 +561,7 @@ const projectId = computed(() => route.params.id as string)
 const projectsStore = useProjectsStore()
 const integrationsStore = useIntegrationsStore()
 const { selectedProject, loading: projectsLoading } = storeToRefs(projectsStore)
-const { integrationConfig, connections, loading: integrationsLoading } = storeToRefs(integrationsStore)
+const { integrationConfig, connections, githubAppInstallation, loading: integrationsLoading } = storeToRefs(integrationsStore)
 
 // OAuth connections formatted for WorkflowConfig component
 const oauthConnections = computed(() => {
@@ -497,6 +618,9 @@ onMounted(async () => {
     await Promise.all([
       integrationsStore.fetchConnections(projectId.value),
       integrationsStore.fetchIntegrationConfig(projectId.value),
+      integrationsStore.fetchGitHubAppInstallation(projectId.value).catch(() => {
+        // Ignore errors if GitHub App is not installed
+      }),
     ])
 
     // Initialize forms
@@ -568,8 +692,54 @@ const handleIntegrationChange = async () => {
   await integrationsStore.fetchConnections(projectId.value)
 }
 
+const openFigmaFilePicker = () => {
+  const width = 800
+  const height = 600
+  const left = (window.screen.width / 2) - (width / 2)
+  const top = (window.screen.height / 2) - (height / 2)
+
+  window.open(
+    `/oauth/figma/select-file?projectId=${projectId.value}`,
+    'Figma File Picker',
+    `width=${width},height=${height},left=${left},top=${top},scrollbars=yes`
+  )
+}
+
 const handleWorkflowConfigSaved = async () => {
   // Refresh project data to get updated config
   await projectsStore.fetchProjects()
+}
+
+// GitHub App handlers
+const handleInstallGitHubApp = async () => {
+  try {
+    await integrationsStore.installGitHubApp(projectId.value)
+    // After successful installation, fetch the installation data
+    await integrationsStore.fetchGitHubAppInstallation(projectId.value)
+  } catch (e: any) {
+    alert(`Failed to install GitHub App: ${e.message}`)
+  }
+}
+
+const handleUninstallGitHubApp = async () => {
+  if (!confirm('Are you sure you want to uninstall the GitHub App? This will remove access to all repositories.')) {
+    return
+  }
+
+  try {
+    await integrationsStore.uninstallGitHubApp(projectId.value)
+  } catch (e: any) {
+    alert(`Failed to uninstall GitHub App: ${e.message}`)
+  }
+}
+
+const handleGitHubAppSaved = async () => {
+  // Refresh installation data after save
+  await integrationsStore.fetchGitHubAppInstallation(projectId.value)
+}
+
+const handleGitHubAppSynced = async () => {
+  // Data is already refreshed by the sync operation
+  // No additional action needed
 }
 </script>

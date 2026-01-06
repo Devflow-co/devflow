@@ -53,6 +53,31 @@ export interface OAuthApplication {
 }
 
 /**
+ * GitHub App Installation - mirrors Prisma's GitHubAppInstallation model
+ */
+export interface GitHubAppInstallation {
+  id: string;
+  projectId: string;
+  installationId: bigint;
+  appId: bigint;
+  accountLogin: string;
+  accountType: string;
+  targetType: string;
+  selectedRepos: string[];
+  selectedOrgs: string[];
+  repositorySelection: string;
+  permissions: any;
+  events: string[];
+  cachedTokenExpiresAt: Date | null;
+  isActive: boolean;
+  isSuspended: boolean;
+  lastSyncedAt: Date | null;
+  syncError: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
  * Database interface for OAuth operations
  * This abstraction allows the SDK to work with any database implementation
  */
@@ -88,5 +113,10 @@ export interface OAuthDatabase {
     delete(args: {
       where: { projectId_provider: { projectId: string; provider: OAuthProvider } };
     }): Promise<OAuthApplication>;
+  };
+  gitHubAppInstallation: {
+    findFirst(args: {
+      where: { projectId: string; isActive: boolean };
+    }): Promise<GitHubAppInstallation | null>;
   };
 }

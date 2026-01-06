@@ -17,4 +17,6 @@ export type {
   FigmaUser,
   FigmaNode,
   FigmaImagesResponse,
+  FigmaProject,
+  FigmaFileListItem,
 } from './figma.types';
