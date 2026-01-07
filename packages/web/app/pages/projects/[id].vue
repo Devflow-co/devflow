@@ -484,7 +484,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useProjectsStore } from '@/stores/projects'
 import { useIntegrationsStore } from '@/stores/integrations'
@@ -536,8 +536,34 @@ const configForm = ref({
 })
 const integrationConfigLoading = ref(false)
 
+// Handle OAuth popup messages (for auto-refresh after connection)
+const handleOAuthMessage = async (event: MessageEvent) => {
+  // Verify origin matches our app
+  if (event.origin !== window.location.origin) {
+    return
+  }
+
+  // Check if this is an OAuth success message
+  if (event.data?.type === 'OAUTH_SUCCESS' || event.data?.type === 'GITHUB_APP_SUCCESS') {
+    console.log('OAuth success message received, refreshing integrations...')
+    try {
+      await Promise.all([
+        integrationsStore.fetchConnections(projectId.value),
+        integrationsStore.fetchIntegrationConfig(projectId.value),
+        integrationsStore.fetchGitHubAppInstallation(projectId.value).catch(() => {}),
+      ])
+      resetConfigForm()
+    } catch (e) {
+      console.error('Failed to refresh integrations:', e)
+    }
+  }
+}
+
 // Load project data
 onMounted(async () => {
+  // Listen for OAuth popup messages
+  window.addEventListener('message', handleOAuthMessage)
+
   try {
     pageLoading.value = true
     pageError.value = null
@@ -573,6 +599,11 @@ onMounted(async () => {
   } finally {
     pageLoading.value = false
   }
+})
+
+// Cleanup message listener
+onUnmounted(() => {
+  window.removeEventListener('message', handleOAuthMessage)
 })
 
 // Watch for integration config changes

@@ -355,9 +355,7 @@ export class AuthController {
         state,
       );
 
-      // Redirect to file picker instead of showing success page
-      // The file picker will handle project/file selection and close the popup
-      return res.redirect(`/oauth/figma/select-file?projectId=${projectId}`);
+      return res.send(this.renderSuccessPage('Figma', connection.providerEmail));
     } catch (error) {
       this.logger.error(`Failed to complete Figma OAuth callback`, error);
       return res.status(400).send(this.renderErrorPage(error.message));

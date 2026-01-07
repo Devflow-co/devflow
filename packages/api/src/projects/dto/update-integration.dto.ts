@@ -3,6 +3,22 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateIntegrationDto {
   @ApiPropertyOptional({
+    description: 'Figma team ID (from URL: figma.com/files/team/{teamId}/...)',
+    example: '1234567890123456789',
+  })
+  @IsOptional()
+  @IsString()
+  figmaTeamId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Figma project ID',
+    example: '12345678',
+  })
+  @IsOptional()
+  @IsString()
+  figmaProjectId?: string;
+
+  @ApiPropertyOptional({
     description: 'Figma file key (from URL: figma.com/file/{fileKey}/...)',
     example: 'ABC123xyz',
   })

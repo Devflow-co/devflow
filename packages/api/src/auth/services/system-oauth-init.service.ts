@@ -89,7 +89,7 @@ export class SystemOAuthInitService implements OnModuleInit {
         clientIdVar: 'FIGMA_APP_CLIENT_ID',
         clientSecretVar: 'FIGMA_APP_CLIENT_SECRET',
         redirectUriVar: 'FIGMA_APP_REDIRECT_URI',
-        scopes: ['file_read', 'file_comments:read'],
+        scopes: ['file_content:read', 'current_user:read', 'projects:read'],
         flowType: 'authorization_code',
       },
     ];

@@ -439,6 +439,8 @@ export class ProjectsService {
       where: { projectId: id },
       create: {
         projectId: id,
+        figmaTeamId: dto.figmaTeamId,
+        figmaProjectId: dto.figmaProjectId,
         figmaFileKey: dto.figmaFileKey,
         figmaNodeId: dto.figmaNodeId,
         sentryProjectSlug: dto.sentryProjectSlug,
@@ -446,6 +448,8 @@ export class ProjectsService {
         githubIssuesRepo: dto.githubIssuesRepo,
       },
       update: {
+        figmaTeamId: dto.figmaTeamId,
+        figmaProjectId: dto.figmaProjectId,
         figmaFileKey: dto.figmaFileKey,
         figmaNodeId: dto.figmaNodeId,
         sentryProjectSlug: dto.sentryProjectSlug,

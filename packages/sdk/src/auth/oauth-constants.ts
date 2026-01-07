@@ -49,11 +49,12 @@ export const OAUTH_CONSTANTS = {
     // Credentials are stored per-project in the database (OAuthApplication table)
     // Register at: https://www.figma.com/developers/apps
     // Note: Figma migrated token endpoint to api.figma.com/v1 (2024+)
-    // Note: projects:read scope requires a PRIVATE OAuth app (not public)
+    // Valid scopes: file_content:read, current_user:read, projects:read, file_comments:read, etc.
+    // Make sure scopes are enabled in your Figma app settings
     AUTHORIZE_URL: 'https://www.figma.com/oauth',
     TOKEN_URL: 'https://api.figma.com/v1/oauth/token',
     USER_API_URL: 'https://api.figma.com/v1/me',
-    SCOPES: ['current_user:read', 'file_content:read', 'file_comments:read', 'projects:read'],
+    SCOPES: ['file_content:read', 'current_user:read'],
     FLOW_TYPE: 'authorization_code' as const,
   },
   GITHUB_ISSUES: {

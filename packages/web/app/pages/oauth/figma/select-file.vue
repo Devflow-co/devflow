@@ -149,6 +149,8 @@
 
 <script setup lang="ts">
 const route = useRoute()
+const config = useRuntimeConfig()
+const apiBase = config.public.apiBase as string
 const projectId = route.query.projectId as string
 
 interface FigmaProject {
@@ -220,7 +222,8 @@ const loadProjects = async () => {
     searchQuery.value = ''
 
     const response = await $fetch<{ projects: FigmaProject[] }>(
-      `/api/v1/integrations/figma/teams/${teamId.value}/projects?projectId=${projectId}`
+      `${apiBase}/integrations/figma/teams/${teamId.value}/projects?projectId=${projectId}`,
+      { credentials: 'include' }
     )
 
     projects.value = response.projects
@@ -240,14 +243,24 @@ const selectProject = async (project: FigmaProject) => {
     selectedProjectId.value = project.id
     selectedProjectName.value = project.name
 
+    console.log('Fetching files for Figma project:', project.id)
+
     const response = await $fetch<{ files: FigmaFileListItem[] }>(
-      `/api/v1/integrations/figma/projects/${project.id}/files?projectId=${projectId}`
+      `${apiBase}/integrations/figma/projects/${project.id}/files?projectId=${projectId}`,
+      { credentials: 'include' }
     )
 
-    files.value = response.files
+    console.log('Files response:', response)
+
+    files.value = response.files || []
     step.value = 'files'
+
+    if (files.value.length === 0) {
+      error.value = 'Ce projet Figma ne contient aucun fichier.'
+    }
   } catch (e: any) {
-    error.value = e.data?.message || 'Impossible de charger les fichiers. Veuillez réessayer.'
+    console.error('Error fetching files:', e)
+    error.value = e.data?.message || e.message || 'Impossible de charger les fichiers. Veuillez réessayer.'
   } finally {
     loading.value = false
   }
@@ -259,8 +272,9 @@ const selectFile = async (file: FigmaFileListItem) => {
     error.value = ''
 
     // Save selection to project config
-    await $fetch(`/api/v1/projects/${projectId}/integrations`, {
+    await $fetch(`${apiBase}/projects/${projectId}/integrations`, {
       method: 'PUT',
+      credentials: 'include',
       body: {
         figmaTeamId: teamId.value,
         figmaProjectId: selectedProjectId.value,
