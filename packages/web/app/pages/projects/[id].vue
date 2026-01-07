@@ -240,6 +240,82 @@
                 </div>
               </div>
             </template>
+            <template #config>
+              <div class="space-y-4">
+                <!-- Team Selection -->
+                <div>
+                  <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Team Configuration</h4>
+
+                  <!-- No Team Selected -->
+                  <div v-if="!integrationsStore.linearTeamId" class="p-4 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <p class="text-sm text-yellow-800 dark:text-yellow-200 mb-3">
+                      Please select a Linear team to configure workflow states.
+                    </p>
+                    <button
+                      @click="openLinearTeamPicker"
+                      class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                    >
+                      Select Linear Team
+                    </button>
+                  </div>
+
+                  <!-- Team Selected -->
+                  <div v-else class="space-y-3">
+                    <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                      <div>
+                        <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Selected Team:</span>
+                        <span class="ml-2 text-sm text-gray-900 dark:text-white font-mono">{{ integrationsStore.linearTeamId }}</span>
+                      </div>
+                      <button
+                        @click="openLinearTeamPicker"
+                        class="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                      >
+                        Change
+                      </button>
+                    </div>
+
+                    <!-- Workflow Validation Status -->
+                    <div v-if="integrationsStore.linearTeamValidation">
+                      <div v-if="integrationsStore.linearTeamValidation.valid" class="p-3 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-lg">
+                        <div class="flex items-center gap-2">
+                          <svg class="w-5 h-5 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                          </svg>
+                          <span class="text-sm text-green-800 dark:text-green-200">
+                            All {{ integrationsStore.linearTeamValidation.totalRequired }} DevFlow workflow states are configured
+                          </span>
+                        </div>
+                      </div>
+                      <div v-else class="p-3 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                        <div class="flex items-center gap-2 mb-2">
+                          <svg class="w-5 h-5 text-yellow-600 dark:text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                          </svg>
+                          <span class="text-sm text-yellow-800 dark:text-yellow-200">
+                            {{ integrationsStore.linearTeamValidation.missingStates.length }} workflow states missing
+                          </span>
+                        </div>
+                        <button
+                          @click="openLinearTeamPicker"
+                          class="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                        >
+                          Configure workflow states
+                        </button>
+                      </div>
+                    </div>
+                    <div v-else>
+                      <button
+                        @click="validateLinearWorkflowStates"
+                        :disabled="validatingLinearStates"
+                        class="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 disabled:opacity-50"
+                      >
+                        {{ validatingLinearStates ? 'Validating...' : 'Validate workflow states' }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
           </IntegrationCard>
 
           <!-- Figma Integration -->
@@ -362,37 +438,168 @@
               </div>
             </template>
             <template #config>
-              <form @submit.prevent="saveIntegrationConfig" class="space-y-4">
+              <div class="space-y-4">
+                <!-- Project Selection -->
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Organization Slug
-                  </label>
-                  <input
-                    v-model="configForm.sentryOrgSlug"
-                    type="text"
-                    placeholder="my-organization"
-                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
+                  <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Project Configuration</h4>
+
+                  <!-- No Project Selected -->
+                  <div v-if="!integrationsStore.sentryProjectSlug" class="p-4 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <p class="text-sm text-yellow-800 dark:text-yellow-200 mb-3">
+                      Select a Sentry project to link with DevFlow.
+                    </p>
+                    <button
+                      @click="openSentryProjectPicker"
+                      class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                    >
+                      Browse Projects
+                    </button>
+                  </div>
+
+                  <!-- Project Selected -->
+                  <div v-else class="space-y-3">
+                    <div class="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-lg">
+                      <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                        </svg>
+                        <div>
+                          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Selected Project:</span>
+                          <span class="ml-2 text-sm text-gray-900 dark:text-white font-mono">
+                            {{ integrationsStore.sentryOrgSlug }}/{{ integrationsStore.sentryProjectSlug }}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        @click="openSentryProjectPicker"
+                        class="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  </div>
                 </div>
+
+                <!-- Manual Configuration (collapsed) -->
+                <details class="mt-4">
+                  <summary class="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
+                    Or configure manually
+                  </summary>
+                  <form @submit.prevent="saveIntegrationConfig" class="space-y-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Organization Slug
+                      </label>
+                      <input
+                        v-model="configForm.sentryOrgSlug"
+                        type="text"
+                        placeholder="my-organization"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Project Slug
+                      </label>
+                      <input
+                        v-model="configForm.sentryProjectSlug"
+                        type="text"
+                        placeholder="my-project"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      :disabled="integrationConfigLoading"
+                      class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {{ integrationConfigLoading ? 'Saving...' : 'Save Configuration' }}
+                    </button>
+                  </form>
+                </details>
+              </div>
+            </template>
+          </IntegrationCard>
+
+          <!-- Slack Integration -->
+          <IntegrationCard
+            provider="SLACK"
+            :project-id="selectedProject.id"
+            @connected="handleIntegrationChange"
+            @disconnected="handleIntegrationChange"
+          >
+            <template #info>
+              <div class="mb-4 p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div class="flex items-start gap-2">
+                  <svg class="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                  </svg>
+                  <div class="flex-1 text-sm">
+                    <p class="font-medium text-blue-800 dark:text-blue-200 mb-1">Notifications</p>
+                    <p class="text-blue-700 dark:text-blue-300">
+                      Connect your Slack workspace to receive <strong>workflow notifications</strong> and error alerts.
+                    </p>
+                    <details class="mt-2">
+                      <summary class="cursor-pointer text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
+                        What can DevFlow do?
+                      </summary>
+                      <ul class="mt-2 pl-4 border-l-2 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs space-y-1">
+                        <li>• Send workflow status updates</li>
+                        <li>• Post error notifications</li>
+                        <li>• Join the selected channel automatically</li>
+                        <li>• Read public channel list</li>
+                      </ul>
+                    </details>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <template #config>
+              <div class="space-y-4">
+                <!-- Channel Selection -->
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Project Slug
-                  </label>
-                  <input
-                    v-model="configForm.sentryProjectSlug"
-                    type="text"
-                    placeholder="my-project"
-                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
+                  <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Notification Channel</h4>
+
+                  <!-- No Channel Selected -->
+                  <div v-if="!integrationsStore.slackChannelId" class="p-4 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <p class="text-sm text-yellow-800 dark:text-yellow-200 mb-3">
+                      Select a Slack channel to receive DevFlow notifications.
+                    </p>
+                    <button
+                      @click="openSlackChannelPicker"
+                      class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                    >
+                      Select Channel
+                    </button>
+                  </div>
+
+                  <!-- Channel Selected -->
+                  <div v-else class="space-y-3">
+                    <div class="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-lg">
+                      <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                        </svg>
+                        <div>
+                          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Channel:</span>
+                          <span class="ml-2 text-sm text-gray-900 dark:text-white font-mono">
+                            #{{ integrationsStore.slackChannelName }}
+                          </span>
+                          <span v-if="integrationsStore.slackTeamName" class="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                            ({{ integrationsStore.slackTeamName }})
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        @click="openSlackChannelPicker"
+                        class="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <button
-                  type="submit"
-                  :disabled="integrationConfigLoading"
-                  class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {{ integrationConfigLoading ? 'Saving...' : 'Save Configuration' }}
-                </button>
-              </form>
+              </div>
             </template>
           </IntegrationCard>
         </div>
@@ -536,6 +743,9 @@ const configForm = ref({
 })
 const integrationConfigLoading = ref(false)
 
+// Linear team picker
+const validatingLinearStates = ref(false)
+
 // Handle OAuth popup messages (for auto-refresh after connection)
 const handleOAuthMessage = async (event: MessageEvent) => {
   // Verify origin matches our app
@@ -555,6 +765,43 @@ const handleOAuthMessage = async (event: MessageEvent) => {
       resetConfigForm()
     } catch (e) {
       console.error('Failed to refresh integrations:', e)
+    }
+  }
+
+  // Check if this is a Linear team selection success message
+  if (event.data?.type === 'LINEAR_TEAM_SUCCESS') {
+    console.log('Linear team selection success, refreshing...', event.data)
+    try {
+      await integrationsStore.fetchLinearTeamSelection(projectId.value)
+      // Also fetch validation for the selected team
+      if (integrationsStore.linearTeamId) {
+        await integrationsStore.fetchLinearWorkflowValidation(projectId.value, integrationsStore.linearTeamId)
+      }
+    } catch (e) {
+      console.error('Failed to refresh Linear team selection:', e)
+    }
+  }
+
+  // Check if this is a Sentry project selection success message
+  if (event.data?.type === 'SENTRY_PROJECT_SUCCESS') {
+    console.log('Sentry project selection success, refreshing...', event.data)
+    try {
+      await integrationsStore.fetchSentryProjectSelection(projectId.value)
+      // Also refresh integration config
+      await integrationsStore.fetchIntegrationConfig(projectId.value)
+      resetConfigForm()
+    } catch (e) {
+      console.error('Failed to refresh Sentry project selection:', e)
+    }
+  }
+
+  // Check if this is a Slack channel selection success message
+  if (event.data?.type === 'SLACK_CHANNEL_SUCCESS') {
+    console.log('Slack channel selection success, refreshing...', event.data)
+    try {
+      await integrationsStore.fetchSlackChannelSelection(projectId.value)
+    } catch (e) {
+      console.error('Failed to refresh Slack channel selection:', e)
     }
   }
 }
@@ -589,7 +836,23 @@ onMounted(async () => {
       integrationsStore.fetchGitHubAppInstallation(projectId.value).catch(() => {
         // Ignore errors if GitHub App is not installed
       }),
+      integrationsStore.fetchLinearTeamSelection(projectId.value).catch(() => {
+        // Ignore errors if Linear team is not selected yet
+      }),
+      integrationsStore.fetchSentryProjectSelection(projectId.value).catch(() => {
+        // Ignore errors if Sentry project is not selected yet
+      }),
+      integrationsStore.fetchSlackChannelSelection(projectId.value).catch(() => {
+        // Ignore errors if Slack channel is not selected yet
+      }),
     ])
+
+    // If Linear team is selected, fetch workflow validation
+    if (integrationsStore.linearTeamId) {
+      await integrationsStore.fetchLinearWorkflowValidation(projectId.value, integrationsStore.linearTeamId).catch(() => {
+        // Ignore validation errors on initial load
+      })
+    }
 
     // Initialize forms
     resetSettingsForm()
@@ -714,5 +977,61 @@ const handleGitHubAppSaved = async () => {
 const handleGitHubAppSynced = async () => {
   // Data is already refreshed by the sync operation
   // No additional action needed
+}
+
+// Linear team picker handlers
+const openLinearTeamPicker = () => {
+  const width = 800
+  const height = 600
+  const left = (window.screen.width / 2) - (width / 2)
+  const top = (window.screen.height / 2) - (height / 2)
+
+  window.open(
+    `/oauth/linear/select-team?projectId=${projectId.value}`,
+    'Linear Team Picker',
+    `width=${width},height=${height},left=${left},top=${top},scrollbars=yes`
+  )
+}
+
+const validateLinearWorkflowStates = async () => {
+  if (!integrationsStore.linearTeamId) return
+
+  try {
+    validatingLinearStates.value = true
+    await integrationsStore.fetchLinearWorkflowValidation(projectId.value, integrationsStore.linearTeamId)
+  } catch (e: any) {
+    console.error('Failed to validate Linear workflow states:', e)
+    alert(`Failed to validate workflow states: ${e.message}`)
+  } finally {
+    validatingLinearStates.value = false
+  }
+}
+
+// Sentry project picker handler
+const openSentryProjectPicker = () => {
+  const width = 800
+  const height = 600
+  const left = (window.screen.width / 2) - (width / 2)
+  const top = (window.screen.height / 2) - (height / 2)
+
+  window.open(
+    `/oauth/sentry/select-project?projectId=${projectId.value}`,
+    'Sentry Project Picker',
+    `width=${width},height=${height},left=${left},top=${top},scrollbars=yes`
+  )
+}
+
+// Slack channel picker handler
+const openSlackChannelPicker = () => {
+  const width = 600
+  const height = 700
+  const left = (window.screen.width / 2) - (width / 2)
+  const top = (window.screen.height / 2) - (height / 2)
+
+  window.open(
+    `/oauth/slack/select-channel?projectId=${projectId.value}`,
+    'Slack Channel Picker',
+    `width=${width},height=${height},left=${left},top=${top},scrollbars=yes`
+  )
 }
 </script>

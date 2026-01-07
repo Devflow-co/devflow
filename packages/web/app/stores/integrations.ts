@@ -17,7 +17,7 @@ interface OAuthConnection {
   updatedAt: string
 }
 
-type OAuthProvider = 'GITHUB' | 'LINEAR' | 'FIGMA' | 'SENTRY'
+type OAuthProvider = 'GITHUB' | 'LINEAR' | 'FIGMA' | 'SENTRY' | 'SLACK'
 
 interface ProjectIntegration {
   projectId: string
@@ -26,6 +26,10 @@ interface ProjectIntegration {
   sentryProjectSlug?: string
   sentryOrgSlug?: string
   githubIssuesRepo?: string
+  slackTeamId?: string
+  slackTeamName?: string
+  slackChannelId?: string
+  slackChannelName?: string
 }
 
 interface UpdateIntegrationDto {
@@ -53,6 +57,17 @@ interface GitHubAppInstallation {
   selectedOrgs: string[]
   lastSyncedAt?: string
   syncError?: string
+}
+
+interface LinearTeamSelection {
+  teamId: string | null
+}
+
+interface LinearWorkflowValidation {
+  valid: boolean
+  existingStates: Array<{ name: string; id: string; type: string; color?: string }>
+  missingStates: string[]
+  totalRequired: number
 }
 
 interface RepositorySelection {
@@ -99,6 +114,23 @@ export const useIntegrationsStore = defineStore('integrations', () => {
   const githubAppInstallation = ref<GitHubAppInstallation | null>(null)
   const githubAppPopup = ref<Window | null>(null)
   const githubAppPolling = ref<NodeJS.Timeout | null>(null)
+
+  // Linear Team State
+  const linearTeamId = ref<string | null>(null)
+  const linearTeamValidation = ref<LinearWorkflowValidation | null>(null)
+  const linearTeamPopup = ref<Window | null>(null)
+
+  // Sentry Project State
+  const sentryOrgSlug = ref<string | null>(null)
+  const sentryProjectSlug = ref<string | null>(null)
+  const sentryProjectPopup = ref<Window | null>(null)
+
+  // Slack Channel State
+  const slackTeamId = ref<string | null>(null)
+  const slackTeamName = ref<string | null>(null)
+  const slackChannelId = ref<string | null>(null)
+  const slackChannelName = ref<string | null>(null)
+  const slackChannelPopup = ref<Window | null>(null)
 
   // Computed
   const isProviderConnected = computed(() => {
@@ -458,6 +490,54 @@ export const useIntegrationsStore = defineStore('integrations', () => {
     }
   }
 
+  // ==================== Linear Team Methods ====================
+
+  /**
+   * Fetch Linear team selection for a project
+   */
+  const fetchLinearTeamSelection = async (projectId: string): Promise<void> => {
+    try {
+      const response = await apiFetch<LinearTeamSelection>(
+        `/projects/${projectId}/linear/team`
+      )
+      linearTeamId.value = response.teamId
+    } catch (e: any) {
+      console.error('Failed to fetch Linear team selection:', e)
+      linearTeamId.value = null
+    }
+  }
+
+  /**
+   * Fetch Linear workflow states validation for a team
+   */
+  const fetchLinearWorkflowValidation = async (projectId: string, teamId: string): Promise<LinearWorkflowValidation> => {
+    const response = await apiFetch<LinearWorkflowValidation>(
+      `/projects/${projectId}/linear/workflow-states/${teamId}/validate`
+    )
+    linearTeamValidation.value = response
+    return response
+  }
+
+  /**
+   * Open Linear team picker popup
+   */
+  const openLinearTeamPicker = (projectId: string): void => {
+    if (!import.meta.client) {
+      throw new Error('Linear team picker can only run on client side')
+    }
+
+    const popupWidth = 600
+    const popupHeight = 700
+    const left = window.screen.width / 2 - popupWidth / 2
+    const top = window.screen.height / 2 - popupHeight / 2
+
+    linearTeamPopup.value = window.open(
+      `/oauth/linear/select-team?projectId=${projectId}`,
+      'Linear Team Selection',
+      `width=${popupWidth},height=${popupHeight},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes`
+    )
+  }
+
   /**
    * Clean up OAuth popup and polling on component unmount
    */
@@ -478,6 +558,103 @@ export const useIntegrationsStore = defineStore('integrations', () => {
       clearInterval(githubAppPolling.value)
       githubAppPolling.value = null
     }
+    if (linearTeamPopup.value && !linearTeamPopup.value.closed) {
+      linearTeamPopup.value.close()
+      linearTeamPopup.value = null
+    }
+    if (sentryProjectPopup.value && !sentryProjectPopup.value.closed) {
+      sentryProjectPopup.value.close()
+      sentryProjectPopup.value = null
+    }
+    if (slackChannelPopup.value && !slackChannelPopup.value.closed) {
+      slackChannelPopup.value.close()
+      slackChannelPopup.value = null
+    }
+  }
+
+  // ==================== Sentry Project Methods ====================
+
+  /**
+   * Fetch Sentry project selection for a project
+   */
+  const fetchSentryProjectSelection = async (projectId: string): Promise<void> => {
+    try {
+      const response = await apiFetch<{ orgSlug: string | null; projectSlug: string | null }>(
+        `/projects/${projectId}/sentry/project`
+      )
+      sentryOrgSlug.value = response.orgSlug
+      sentryProjectSlug.value = response.projectSlug
+    } catch (e: any) {
+      console.error('Failed to fetch Sentry project selection:', e)
+      sentryOrgSlug.value = null
+      sentryProjectSlug.value = null
+    }
+  }
+
+  /**
+   * Open Sentry project picker popup
+   */
+  const openSentryProjectPicker = (projectId: string): void => {
+    if (!import.meta.client) {
+      throw new Error('Sentry project picker can only run on client side')
+    }
+
+    const popupWidth = 600
+    const popupHeight = 700
+    const left = window.screen.width / 2 - popupWidth / 2
+    const top = window.screen.height / 2 - popupHeight / 2
+
+    sentryProjectPopup.value = window.open(
+      `/oauth/sentry/select-project?projectId=${projectId}`,
+      'Sentry Project Selection',
+      `width=${popupWidth},height=${popupHeight},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes`
+    )
+  }
+
+  // ==================== Slack Channel Methods ====================
+
+  /**
+   * Fetch Slack channel selection for a project
+   */
+  const fetchSlackChannelSelection = async (projectId: string): Promise<void> => {
+    try {
+      const response = await apiFetch<{
+        teamId: string | null
+        teamName: string | null
+        channelId: string | null
+        channelName: string | null
+      }>(`/projects/${projectId}/slack/channel`)
+      slackTeamId.value = response.teamId
+      slackTeamName.value = response.teamName
+      slackChannelId.value = response.channelId
+      slackChannelName.value = response.channelName
+    } catch (e: any) {
+      console.error('Failed to fetch Slack channel selection:', e)
+      slackTeamId.value = null
+      slackTeamName.value = null
+      slackChannelId.value = null
+      slackChannelName.value = null
+    }
+  }
+
+  /**
+   * Open Slack channel picker popup
+   */
+  const openSlackChannelPicker = (projectId: string): void => {
+    if (!import.meta.client) {
+      throw new Error('Slack channel picker can only run on client side')
+    }
+
+    const popupWidth = 600
+    const popupHeight = 700
+    const left = window.screen.width / 2 - popupWidth / 2
+    const top = window.screen.height / 2 - popupHeight / 2
+
+    slackChannelPopup.value = window.open(
+      `/oauth/slack/select-channel?projectId=${projectId}`,
+      'Slack Channel Selection',
+      `width=${popupWidth},height=${popupHeight},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes`
+    )
   }
 
   // ==================== GitHub App Methods ====================
@@ -721,6 +898,14 @@ export const useIntegrationsStore = defineStore('integrations', () => {
     loading,
     error,
     githubAppInstallation,
+    linearTeamId,
+    linearTeamValidation,
+    sentryOrgSlug,
+    sentryProjectSlug,
+    slackTeamId,
+    slackTeamName,
+    slackChannelId,
+    slackChannelName,
 
     // Computed
     isProviderConnected,
@@ -741,5 +926,18 @@ export const useIntegrationsStore = defineStore('integrations', () => {
     fetchGitHubAppInstallation,
     updateGitHubRepoSelection,
     uninstallGitHubApp,
+
+    // Linear Team Actions
+    fetchLinearTeamSelection,
+    fetchLinearWorkflowValidation,
+    openLinearTeamPicker,
+
+    // Sentry Project Actions
+    fetchSentryProjectSelection,
+    openSentryProjectPicker,
+
+    // Slack Channel Actions
+    fetchSlackChannelSelection,
+    openSlackChannelPicker,
   }
 })

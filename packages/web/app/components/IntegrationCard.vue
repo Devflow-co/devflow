@@ -29,6 +29,18 @@
           <svg v-else-if="provider === 'SENTRY'" class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
             <path d="M17.227 7.633a7.886 7.886 0 00-1.385-2.467l-1.164 2.015a5.847 5.847 0 011.022 1.852l1.527-.4zm-3.638-4.023a7.87 7.87 0 00-2.691-.845v2.326a5.847 5.847 0 011.991.625l.7-2.106zM8.42 5.07a7.886 7.886 0 00-2.126 1.876l1.757 1.408a5.847 5.847 0 011.574-1.387L8.42 5.07zm11.335 6.867a7.87 7.87 0 00-.845-2.69l-2.106.7a5.847 5.847 0 01.625 1.99h2.326zm-2.691 5.452a7.886 7.886 0 001.385-2.467l-1.527-.4a5.847 5.847 0 01-1.022 1.852l1.164 2.015zM4.329 11.937a7.87 7.87 0 00.845 2.69l2.106-.7a5.847 5.847 0 01-.625-1.99H4.329zm9.26 8.453a7.886 7.886 0 002.126-1.876l-1.757-1.408a5.847 5.847 0 01-1.574 1.387l1.205 1.897zm2.638-4.023a7.87 7.87 0 001.385-2.467l-1.527-.4a5.847 5.847 0 01-1.022 1.852l1.164 2.015zM8.42 18.93l-.7-2.106a5.847 5.847 0 01-1.991.625v2.326a7.87 7.87 0 002.691-.845z"/>
           </svg>
+
+          <!-- Slack Logo -->
+          <svg v-else-if="provider === 'SLACK'" class="w-6 h-6" viewBox="0 0 24 24" fill="none">
+            <path d="M8.71 0C7.21 0 6 1.21 6 2.71C6 4.21 7.21 5.42 8.71 5.42H11.42V2.71C11.42 1.21 10.21 0 8.71 0Z" fill="#E01E5A"/>
+            <path d="M8.71 6.57H2.71C1.21 6.57 0 7.78 0 9.28C0 10.78 1.21 11.99 2.71 11.99H8.71C10.21 11.99 11.42 10.78 11.42 9.28C11.42 7.78 10.21 6.57 8.71 6.57Z" fill="#E01E5A"/>
+            <path d="M24 9.28C24 7.78 22.79 6.57 21.29 6.57C19.79 6.57 18.58 7.78 18.58 9.28V11.99H21.29C22.79 11.99 24 10.78 24 9.28Z" fill="#2EB67D"/>
+            <path d="M12.58 2.71V9.28C12.58 10.78 13.79 11.99 15.29 11.99C16.79 11.99 18 10.78 18 9.28V2.71C18 1.21 16.79 0 15.29 0C13.79 0 12.58 1.21 12.58 2.71Z" fill="#2EB67D"/>
+            <path d="M15.29 24C16.79 24 18 22.79 18 21.29C18 19.79 16.79 18.58 15.29 18.58H12.58V21.29C12.58 22.79 13.79 24 15.29 24Z" fill="#ECB22E"/>
+            <path d="M15.29 12.58H21.29C22.79 12.58 24 13.79 24 15.29C24 16.79 22.79 18 21.29 18H15.29C13.79 18 12.58 16.79 12.58 15.29C12.58 13.79 13.79 12.58 15.29 12.58Z" fill="#ECB22E"/>
+            <path d="M0 15.29C0 16.79 1.21 18 2.71 18C4.21 18 5.42 16.79 5.42 15.29V12.58H2.71C1.21 12.58 0 13.79 0 15.29Z" fill="#36C5F0"/>
+            <path d="M11.42 21.29V15.29C11.42 13.79 10.21 12.58 8.71 12.58C7.21 12.58 6 13.79 6 15.29V21.29C6 22.79 7.21 24 8.71 24C10.21 24 11.42 22.79 11.42 21.29Z" fill="#36C5F0"/>
+          </svg>
         </div>
         <div>
           <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
@@ -229,7 +241,7 @@ import { useIntegrationsStore } from '@/stores/integrations'
 import { storeToRefs } from 'pinia'
 import StatusBadge from './StatusBadge.vue'
 
-type OAuthProvider = 'GITHUB' | 'LINEAR' | 'FIGMA' | 'SENTRY'
+type OAuthProvider = 'GITHUB' | 'LINEAR' | 'FIGMA' | 'SENTRY' | 'SLACK'
 
 interface Props {
   provider: OAuthProvider
@@ -257,6 +269,8 @@ const providerName = computed(() => {
       return 'Figma'
     case 'SENTRY':
       return 'Sentry'
+    case 'SLACK':
+      return 'Slack'
     default:
       return props.provider
   }
@@ -272,6 +286,8 @@ const providerBgClass = computed(() => {
       return 'bg-purple-600 dark:bg-purple-700'
     case 'SENTRY':
       return 'bg-indigo-600 dark:bg-indigo-700'
+    case 'SLACK':
+      return 'bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600'
     default:
       return 'bg-gray-600'
   }
