@@ -35,7 +35,7 @@ Teste toutes les intégrations configurées pour un projet.
 🧪 DevFlow End-to-End Integration Tests
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Project ID: indy-promocode-prod
+Project ID: <your-project-id>
 API URL: http://localhost:3000/api/v1
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -48,7 +48,7 @@ API URL: http://localhost:3000/api/v1
 
 🧪 Testing Integration Connections
 
-Project: indy-promocode-prod
+Project: <your-project-id>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ✔ Testing GitHub integration...

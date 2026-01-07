@@ -1,41 +1,46 @@
 #!/usr/bin/env npx tsx
 /**
- * End-to-End Test: Refinement Workflow
+ * End-to-End Test: Refinement Workflow (Full with PO Questions)
  *
- * This test validates the complete refinement workflow:
+ * This test validates the complete refinement workflow including PO Q&A:
  * 1. Creates a test issue in Linear
  * 2. Moves it to "To Refinement" status
  * 3. Simulates the Linear webhook
  * 4. Monitors the Temporal workflow execution
- * 5. Verifies the refinement is appended to Linear
- * 6. Verifies the issue moves to "Refinement Ready"
+ * 5. If PO questions are posted, automatically answers them
+ * 6. Verifies the refinement is appended to Linear
+ * 7. Verifies the issue moves to "Refinement Ready"
  *
  * Prerequisites:
  * - Docker services running (postgres, redis, temporal)
  * - API running on port 3001
  * - Worker running
  * - LINEAR_API_KEY env var set
- * - DEFAULT_PROJECT_ID env var set
+ * - DEFAULT_PROJECT_ID env var set (or auto-detected from DB)
  *
  * Usage:
  *   DATABASE_URL="postgresql://..." LINEAR_API_KEY="lin_api_xxx" npx tsx tests/e2e/test-refinement-workflow.ts
  *
  * Options:
- *   --cleanup    Delete the test issue after the test
- *   --team-id    Specify Linear team ID (auto-detected if not provided)
- *   --timeout    Workflow completion timeout in seconds (default: 120)
+ *   --cleanup        Delete the test issue after the test
+ *   --team-id        Specify Linear team ID (auto-detected if not provided)
+ *   --timeout        Workflow completion timeout in seconds (default: 180)
+ *   --skip-answers   Skip auto-answering PO questions (will timeout if questions exist)
  */
 
 import { LinearClient as LinearSDK } from '@linear/sdk';
+import { PrismaClient } from '@prisma/client';
 
-// Configuration
+// Configuration (will be populated dynamically if not provided)
 const config = {
   apiUrl: process.env.DEVFLOW_API_URL || 'http://localhost:3001/api/v1',
   linearApiKey: process.env.LINEAR_API_KEY,
-  projectId: process.env.DEFAULT_PROJECT_ID,
+  projectId: process.env.DEFAULT_PROJECT_ID || process.env.PROJECT_ID,
   teamId: process.env.LINEAR_TEAM_ID,
-  timeoutSeconds: parseInt(process.env.TEST_TIMEOUT || '120', 10),
+  timeoutSeconds: parseInt(process.env.TEST_TIMEOUT || '180', 10),
   cleanup: process.argv.includes('--cleanup'),
+  skipAnswers: process.argv.includes('--skip-answers'),
+  databaseUrl: process.env.DATABASE_URL,
 };
 
 // Parse CLI arguments
@@ -47,6 +52,23 @@ for (let i = 2; i < process.argv.length; i++) {
   if (process.argv[i] === '--timeout' && process.argv[i + 1]) {
     config.timeoutSeconds = parseInt(process.argv[i + 1], 10);
     i++;
+  }
+}
+
+// Prisma client (singleton)
+let prisma: PrismaClient | null = null;
+
+function getPrisma(): PrismaClient {
+  if (!prisma) {
+    prisma = new PrismaClient();
+  }
+  return prisma;
+}
+
+async function closePrisma(): Promise<void> {
+  if (prisma) {
+    await prisma.$disconnect();
+    prisma = null;
   }
 }
 
@@ -85,15 +107,254 @@ function logWarning(message: string) {
   console.log(`${colors.yellow}⚠️  ${message}${colors.reset}`);
 }
 
+// Get first non-system project from database
+async function getProjectFromDatabase(): Promise<string | null> {
+  if (!config.databaseUrl) {
+    return null;
+  }
+
+  try {
+    const db = getPrisma();
+    const project = await db.project.findFirst({
+      where: {
+        id: {
+          not: 'SYSTEM_OAUTH_PROJECT', // Exclude system project
+        },
+      },
+      select: { id: true, name: true },
+    });
+
+    if (project) {
+      logInfo(`Auto-detected project from database: ${project.name} (${project.id})`);
+      return project.id;
+    }
+    return null;
+  } catch (error) {
+    logWarning(`Could not fetch project from database: ${(error as Error).message}`);
+    return null;
+  }
+}
+
+// =========================================================================
+// PO Questions Handling
+// =========================================================================
+
+interface TaskQuestion {
+  id: string;
+  questionText: string;
+  linearCommentId: string | null;
+  answered: boolean;
+}
+
+/**
+ * Get unanswered PO questions for a task from the database
+ */
+async function getUnansweredQuestions(linearIssueId: string): Promise<TaskQuestion[]> {
+  const db = getPrisma();
+
+  const task = await db.task.findFirst({
+    where: { linearId: linearIssueId },
+    include: {
+      questions: {
+        where: { answered: false },
+        orderBy: { createdAt: 'asc' },
+      },
+    },
+  });
+
+  if (!task) {
+    return [];
+  }
+
+  return task.questions.map((q) => ({
+    id: q.id,
+    questionText: q.questionText,
+    linearCommentId: q.linearCommentId,
+    answered: q.answered,
+  }));
+}
+
+/**
+ * Reply to a PO question comment in Linear
+ * Returns the created comment ID
+ */
+async function replyToQuestion(
+  linear: LinearSDK,
+  issueId: string,
+  parentCommentId: string,
+  answerText: string
+): Promise<string | null> {
+  try {
+    // Create a reply comment using Linear GraphQL mutation
+    const result = await linear.createComment({
+      issueId,
+      body: answerText,
+      parentId: parentCommentId,
+    });
+
+    const comment = await result.comment;
+    return comment?.id || null;
+  } catch (error) {
+    logError(`Failed to reply to question: ${(error as Error).message}`);
+    return null;
+  }
+}
+
+/**
+ * Simulate a Linear comment webhook for an answer
+ */
+async function simulateAnswerWebhook(
+  issueId: string,
+  answerCommentId: string,
+  parentCommentId: string,
+  answerText: string
+): Promise<boolean> {
+  const webhookPayload = {
+    action: 'create',
+    type: 'Comment',
+    createdAt: new Date().toISOString(),
+    data: {
+      id: answerCommentId,
+      body: answerText,
+      issueId,
+      parent: {
+        id: parentCommentId,
+      },
+      user: {
+        id: 'e2e-test',
+        name: 'E2E Test PO',
+      },
+    },
+    actor: {
+      id: 'e2e-test',
+      name: 'E2E Test PO',
+    },
+  };
+
+  try {
+    const response = await fetch(`${config.apiUrl}/webhooks/linear`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'linear-signature': 'e2e-test-signature',
+      },
+      body: JSON.stringify(webhookPayload),
+    });
+
+    const result = await response.json();
+
+    if (result.answerDetected) {
+      logSuccess(`Answer detected for question ${parentCommentId}`);
+      if (result.allQuestionsAnswered) {
+        logSuccess('All questions answered - workflow will restart');
+      }
+      return true;
+    }
+
+    return response.ok;
+  } catch (error) {
+    logError(`Failed to simulate webhook: ${(error as Error).message}`);
+    return false;
+  }
+}
+
+/**
+ * Answer all pending PO questions for an issue
+ * Uses polling to wait for questions to appear (they may be created asynchronously)
+ */
+async function answerAllQuestions(
+  linear: LinearSDK,
+  issueId: string,
+  maxRetries: number = 10,
+  retryDelayMs: number = 5000
+): Promise<{ answered: number; total: number }> {
+  let questions: TaskQuestion[] = [];
+
+  // Poll for questions to appear
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    questions = await getUnansweredQuestions(issueId);
+
+    if (questions.length > 0) {
+      logInfo(`Found ${questions.length} unanswered PO question(s) on attempt ${attempt}`);
+      break;
+    }
+
+    if (attempt < maxRetries) {
+      logInfo(`No questions found yet (attempt ${attempt}/${maxRetries}), waiting ${retryDelayMs / 1000}s...`);
+      await sleep(retryDelayMs);
+    }
+  }
+
+  if (questions.length === 0) {
+    logInfo(`No questions found after ${maxRetries} attempts`);
+    return { answered: 0, total: 0 };
+  }
+
+  logInfo(`Processing ${questions.length} unanswered PO question(s)`);
+
+  let answered = 0;
+
+  for (const question of questions) {
+    if (!question.linearCommentId) {
+      logWarning(`Question ${question.id} has no Linear comment ID, skipping`);
+      continue;
+    }
+
+    // Generate a simple answer
+    const answerText = `[E2E Test Auto-Answer]\n\nThis is an automated response for testing purposes.\n\nQuestion: "${question.questionText.substring(0, 100)}..."\n\nAnswer: Yes, this is acceptable. Please proceed with the implementation.`;
+
+    logInfo(`Answering question: "${question.questionText.substring(0, 50)}..."`);
+
+    // Reply via Linear API
+    const answerCommentId = await replyToQuestion(
+      linear,
+      issueId,
+      question.linearCommentId,
+      answerText
+    );
+
+    if (!answerCommentId) {
+      logError(`Failed to create reply for question ${question.id}`);
+      continue;
+    }
+
+    logSuccess(`Created reply comment: ${answerCommentId}`);
+
+    // Simulate the webhook so the system detects the answer
+    const webhookSuccess = await simulateAnswerWebhook(
+      issueId,
+      answerCommentId,
+      question.linearCommentId,
+      answerText
+    );
+
+    if (webhookSuccess) {
+      answered++;
+    }
+
+    // Small delay between answers
+    await sleep(1000);
+  }
+
+  return { answered, total: questions.length };
+}
+
 // Validate configuration
-function validateConfig(): boolean {
+async function validateConfig(): Promise<boolean> {
   const errors: string[] = [];
 
   if (!config.linearApiKey) {
     errors.push('LINEAR_API_KEY environment variable is required');
   }
+
+  // Try to auto-detect project if not provided
   if (!config.projectId) {
-    errors.push('DEFAULT_PROJECT_ID environment variable is required');
+    const dbProject = await getProjectFromDatabase();
+    if (dbProject) {
+      config.projectId = dbProject;
+    } else {
+      errors.push('No project found. Set DEFAULT_PROJECT_ID or PROJECT_ID env var, or ensure a project exists in database');
+    }
   }
 
   if (errors.length > 0) {
@@ -117,7 +378,7 @@ async function runTest() {
   console.log('═'.repeat(70) + '\n');
 
   // Validate configuration
-  if (!validateConfig()) {
+  if (!(await validateConfig())) {
     process.exit(1);
   }
 
@@ -125,6 +386,7 @@ async function runTest() {
   logInfo(`Project ID: ${config.projectId}`);
   logInfo(`Timeout: ${config.timeoutSeconds}s`);
   logInfo(`Cleanup: ${config.cleanup ? 'yes' : 'no'}`);
+  logInfo(`Auto-answer PO questions: ${config.skipAnswers ? 'no' : 'yes'}`);
 
   const totalSteps = 7;
   let createdIssueId: string | null = null;
@@ -287,7 +549,7 @@ This is an automated test issue created by the DevFlow E2E test suite.
     }
 
     // =========================================================================
-    // Step 5: Monitor workflow progress
+    // Step 5: Monitor workflow progress (with PO question handling)
     // =========================================================================
     logStep(5, totalSteps, 'Monitoring workflow progress...');
 
@@ -297,6 +559,9 @@ This is an automated test issue created by the DevFlow E2E test suite.
     let finalStatus = '';
     let lastStatus = '';
     let checkCount = 0;
+    let questionsAnswered = false;
+    let inProgressSince: number | null = null;
+    const IN_PROGRESS_WAIT_FOR_QUESTIONS = 10000; // Wait 10s before starting to poll for questions
 
     while (Date.now() - startTime < timeoutMs) {
       checkCount++;
@@ -309,6 +574,13 @@ This is an automated test issue created by the DevFlow E2E test suite.
       if (currentStatus !== lastStatus) {
         logInfo(`Status changed: ${lastStatus || 'Initial'} → ${currentStatus}`);
         lastStatus = currentStatus;
+
+        // Track when we enter "In Progress" status
+        if (currentStatus.includes('In Progress')) {
+          inProgressSince = Date.now();
+        } else {
+          inProgressSince = null;
+        }
       }
 
       // Check for completion states
@@ -321,6 +593,36 @@ This is an automated test issue created by the DevFlow E2E test suite.
       if (currentStatus === 'Refinement Failed' || currentStatus === 'Spec Failed') {
         finalStatus = currentStatus;
         throw new Error(`Workflow failed with status: ${currentStatus}`);
+      }
+
+      // Handle PO questions when stuck in "In Progress"
+      if (
+        !config.skipAnswers &&
+        !questionsAnswered &&
+        currentStatus.includes('In Progress') &&
+        inProgressSince &&
+        Date.now() - inProgressSince > IN_PROGRESS_WAIT_FOR_QUESTIONS
+      ) {
+        console.log(''); // New line before question handling
+        logInfo('Workflow appears to be waiting for PO answers. Polling for questions...');
+
+        // answerAllQuestions has built-in polling to wait for questions to appear
+        const answerResult = await answerAllQuestions(linear, createdIssueId);
+
+        if (answerResult.total > 0) {
+          logSuccess(
+            `Answered ${answerResult.answered}/${answerResult.total} PO question(s)`
+          );
+          questionsAnswered = true;
+
+          // Give the webhook time to process and restart workflow
+          logInfo('Waiting for workflow to restart after answering questions...');
+          await sleep(5000);
+        } else {
+          // No questions after polling - workflow may complete without questions
+          logInfo('No questions found after polling - workflow may not require PO input');
+          questionsAnswered = true;
+        }
       }
 
       // Progress indicator
@@ -424,6 +726,9 @@ This is an automated test issue created by the DevFlow E2E test suite.
   Cleanup: ${config.cleanup ? 'Issue archived' : 'Issue preserved'}
     `);
 
+    // Close Prisma connection
+    await closePrisma();
+
     return 0;
   } catch (error) {
     console.log('\n' + '═'.repeat(70));
@@ -441,6 +746,9 @@ This is an automated test issue created by the DevFlow E2E test suite.
       console.log(`\n${colors.dim}${error.stack}${colors.reset}`);
     }
 
+    // Close Prisma connection
+    await closePrisma();
+
     return 1;
   }
 }
@@ -448,7 +756,8 @@ This is an automated test issue created by the DevFlow E2E test suite.
 // Run the test
 runTest()
   .then((exitCode) => process.exit(exitCode))
-  .catch((error) => {
+  .catch(async (error) => {
     logError(`Unexpected error: ${error}`);
+    await closePrisma();
     process.exit(1);
   });

@@ -202,8 +202,33 @@ export async function syncLinearTask(input: SyncLinearTaskInput): Promise<SyncLi
       githubIssueUrl: githubIssueUrl ? 'set' : 'not set',
     });
 
+    // Upsert task to local database so it can be referenced by other activities
+    const dbTask = await prisma.task.upsert({
+      where: { linearId: task.linearId },
+      create: {
+        linearId: task.linearId,
+        title: task.title,
+        description: task.description || '',
+        status: task.status || 'To Refinement',
+        priority: task.priority,
+        projectId: input.projectId,
+      },
+      update: {
+        title: task.title,
+        description: task.description || '',
+        status: task.status || 'To Refinement',
+        priority: task.priority,
+      },
+    });
+
+    logger.info('Task upserted to local database', {
+      taskId: dbTask.id,
+      linearId: dbTask.linearId,
+      projectId: input.projectId,
+    });
+
     return {
-      id: task.id,
+      id: dbTask.id,
       linearId: task.linearId,
       identifier: task.identifier,
       title: task.title,
