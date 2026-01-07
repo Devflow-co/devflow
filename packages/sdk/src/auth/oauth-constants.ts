@@ -66,6 +66,17 @@ export const OAUTH_CONSTANTS = {
     SCOPES: ['repo', 'read:user'],
     FLOW_TYPE: 'device' as const,
   },
+  SLACK: {
+    // Slack OAuth App (uses OAuth 2.0 v2 flow)
+    // Credentials are stored per-project in the database (OAuthApplication table)
+    // Register at: https://api.slack.com/apps
+    // Note: Slack bot tokens (xoxb-) do NOT expire - no refresh_token
+    AUTHORIZE_URL: 'https://slack.com/oauth/v2/authorize',
+    TOKEN_URL: 'https://slack.com/api/oauth.v2.access',
+    USER_API_URL: 'https://slack.com/api/auth.test',
+    SCOPES: ['channels:read', 'channels:join', 'chat:write', 'team:read'],
+    FLOW_TYPE: 'authorization_code' as const,
+  },
 } as const;
 
 export type OAuthProvider = keyof typeof OAUTH_CONSTANTS;

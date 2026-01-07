@@ -9,7 +9,7 @@
 /**
  * OAuth Provider enum - mirrors Prisma's OAuthProvider
  */
-export type OAuthProvider = 'GITHUB' | 'LINEAR' | 'SENTRY' | 'FIGMA' | 'GITHUB_ISSUES';
+export type OAuthProvider = 'GITHUB' | 'LINEAR' | 'SENTRY' | 'FIGMA' | 'GITHUB_ISSUES' | 'SLACK';
 
 /**
  * OAuth Connection - mirrors Prisma's OAuthConnection model

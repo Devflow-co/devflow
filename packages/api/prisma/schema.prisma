@@ -1178,6 +1178,7 @@ enum OAuthProvider {
   SENTRY
   FIGMA
   GITHUB_ISSUES
+  SLACK
 }
 
 // OAuth Application Credentials (per project, per provider)
@@ -1371,6 +1372,12 @@ model ProjectIntegration {
 
   // GitHub Issues Integration
   githubIssuesRepo  String? @map("github_issues_repo") // format: owner/repo
+
+  // Slack Integration
+  slackTeamId       String? @map("slack_team_id")      // Workspace ID (T...)
+  slackTeamName     String? @map("slack_team_name")    // Workspace name
+  slackChannelId    String? @map("slack_channel_id")   // Selected channel ID (C...)
+  slackChannelName  String? @map("slack_channel_name") // Selected channel name
 
   // Timestamps
   createdAt       DateTime @default(now()) @map("created_at")

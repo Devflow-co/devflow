@@ -19,9 +19,13 @@ export {
   LinearSetupService,
   createLinearSetupService,
   DEVFLOW_CUSTOM_FIELDS,
+  DEVFLOW_WORKFLOW_STATES,
   type DevFlowCustomFieldKey,
+  type LinearWorkflowStateType,
   type SetupCustomFieldsResult,
   type ValidateSetupResult,
+  type ValidateWorkflowStatesResult,
+  type CreateWorkflowStatesResult,
 } from './linear/linear-setup.service';
 export {
   LabelService,
@@ -104,6 +108,9 @@ export * from './figma';
 
 // Sentry
 export * from './sentry';
+
+// Slack
+export * from './slack';
 
 // Factory functions
 export * from './factories';
