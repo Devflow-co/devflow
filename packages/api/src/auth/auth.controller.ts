@@ -22,9 +22,9 @@ import { CurrentUser } from '@/user-auth/decorators/current-user.decorator';
 import { ProjectsService } from '@/projects/projects.service';
 
 // Supported OAuth providers
-const SUPPORTED_PROVIDERS = ['GITHUB', 'LINEAR', 'SENTRY', 'FIGMA', 'GITHUB_ISSUES'] as const;
+const SUPPORTED_PROVIDERS = ['GITHUB', 'LINEAR', 'SENTRY', 'FIGMA', 'GITHUB_ISSUES', 'SLACK'] as const;
 const DEVICE_FLOW_PROVIDERS = ['GITHUB_ISSUES'] as const;
-const AUTH_CODE_PROVIDERS = ['LINEAR', 'SENTRY', 'FIGMA', 'GITHUB'] as const;
+const AUTH_CODE_PROVIDERS = ['LINEAR', 'SENTRY', 'FIGMA', 'GITHUB', 'SLACK'] as const;
 
 /**
  * Auth Controller
@@ -433,6 +433,83 @@ export class AuthController {
       return res.send(this.renderSuccessPage('GitHub', connection.providerEmail));
     } catch (error) {
       this.logger.error(`Failed to complete GitHub OAuth callback`, error);
+      return res.status(400).send(this.renderErrorPage(error.message));
+    }
+  }
+
+  /**
+   * Initiate Slack OAuth Authorization Code Flow
+   * POST /auth/slack/authorize
+   *
+   * Body: { projectId: string }
+   * Returns: { authorizationUrl: string }
+   */
+  @Post('slack/authorize')
+  @HttpCode(HttpStatus.OK)
+  async initiateSlackAuth(@Body('projectId') projectId: string, @CurrentUser() user: User) {
+    this.logger.log(`Initiating Slack OAuth for project ${projectId}`);
+
+    if (!projectId) {
+      throw new BadRequestException('projectId is required');
+    }
+
+    // Verify user has access to project
+    await this.verifyProjectAccess(projectId, user.id);
+
+    try {
+      const result = await this.oauthService.initiateAuthorizationCodeFlow(
+        projectId,
+        'SLACK',
+      );
+
+      return {
+        authorizationUrl: result.authorizationUrl,
+        message: 'Please visit the authorization URL in your browser',
+      };
+    } catch (error) {
+      this.logger.error(`Failed to initiate Slack OAuth`, error);
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  /**
+   * Slack OAuth callback
+   * GET /auth/slack/callback?code=xxx&state=xxx
+   *
+   * This endpoint receives the authorization code from Slack after user authorization
+   * The projectId is retrieved from the state parameter via Redis
+   *
+   * Note: Slack bot tokens (xoxb-) do NOT expire and don't include refresh_token
+   */
+  @Get('slack/callback')
+  async slackCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Res() res: Response,
+  ) {
+    if (!code || !state) {
+      return res.status(400).send(this.renderErrorPage('Missing code or state parameter'));
+    }
+
+    // Retrieve projectId from state (stored in Redis during authorization)
+    const projectId = await this.oauthService.getProjectIdFromState(state, 'SLACK');
+    if (!projectId) {
+      return res.status(400).send(this.renderErrorPage('Invalid or expired state parameter'));
+    }
+
+    this.logger.log(`Slack OAuth callback received for project ${projectId}`);
+
+    try {
+      const connection = await this.oauthService.exchangeAuthorizationCode(
+        projectId,
+        'SLACK',
+        code,
+        state,
+      );
+
+      return res.send(this.renderSuccessPage('Slack', connection.providerEmail));
+    } catch (error) {
+      this.logger.error(`Failed to complete Slack OAuth callback`, error);
       return res.status(400).send(this.renderErrorPage(error.message));
     }
   }

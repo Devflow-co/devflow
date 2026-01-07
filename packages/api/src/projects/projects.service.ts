@@ -15,6 +15,12 @@ import {
   GitHubProvider,
   createLinearClient,
   createLinearSetupService,
+  createSentryIntegrationService,
+  SentryOrganization,
+  SentryProjectDetail,
+  createSlackIntegrationService,
+  SlackChannel,
+  SlackTeam,
 } from '@devflow/sdk';
 import { PrismaService } from '@/prisma/prisma.service';
 import { TokenRefreshService } from '@/auth/services/token-refresh.service';
@@ -544,5 +550,366 @@ export class ProjectsService {
         `Failed to get Linear teams: ${(error as Error).message}`
       );
     }
+  }
+
+  /**
+   * Get Linear workflow states for a team
+   */
+  async getLinearWorkflowStates(projectId: string, teamId: string) {
+    this.logger.info('Getting Linear workflow states', { projectId, teamId });
+
+    await this.findOne(projectId);
+
+    let token: string;
+    try {
+      token = await this.tokenRefresh.getAccessToken(projectId, 'LINEAR');
+    } catch (error) {
+      this.logger.error('Linear OAuth token not available', error as Error);
+      throw new BadRequestException(
+        'Linear OAuth not configured for this project. Please connect Linear first.'
+      );
+    }
+
+    const linearClient = createLinearClient(token);
+
+    try {
+      const states = await linearClient.getWorkflowStates(teamId);
+      this.logger.info('Linear workflow states retrieved', { projectId, teamId, count: states.length });
+      return states;
+    } catch (error) {
+      this.logger.error('Failed to get Linear workflow states', error as Error);
+      throw new BadRequestException(
+        `Failed to get Linear workflow states: ${(error as Error).message}`
+      );
+    }
+  }
+
+  /**
+   * Validate DevFlow workflow states in a Linear team
+   */
+  async validateLinearWorkflowStates(projectId: string, teamId: string) {
+    this.logger.info('Validating Linear workflow states', { projectId, teamId });
+
+    await this.findOne(projectId);
+
+    let token: string;
+    try {
+      token = await this.tokenRefresh.getAccessToken(projectId, 'LINEAR');
+    } catch (error) {
+      throw new BadRequestException(
+        'Linear OAuth not configured for this project. Please connect Linear first.'
+      );
+    }
+
+    const linearClient = createLinearClient(token);
+    const setupService = createLinearSetupService(linearClient);
+
+    try {
+      const result = await setupService.validateWorkflowStates(teamId);
+      this.logger.info('Workflow states validation complete', { projectId, teamId, result });
+      return result;
+    } catch (error) {
+      this.logger.error('Failed to validate workflow states', error as Error);
+      throw new BadRequestException(
+        `Failed to validate workflow states: ${(error as Error).message}`
+      );
+    }
+  }
+
+  /**
+   * Create missing DevFlow workflow states in a Linear team
+   */
+  async createLinearWorkflowStates(projectId: string, teamId: string) {
+    this.logger.info('Creating Linear workflow states', { projectId, teamId });
+
+    await this.findOne(projectId);
+
+    let token: string;
+    try {
+      token = await this.tokenRefresh.getAccessToken(projectId, 'LINEAR');
+    } catch (error) {
+      throw new BadRequestException(
+        'Linear OAuth not configured for this project. Please connect Linear first.'
+      );
+    }
+
+    const linearClient = createLinearClient(token);
+    const setupService = createLinearSetupService(linearClient);
+
+    try {
+      const result = await setupService.createMissingWorkflowStates(teamId);
+      this.logger.info('Workflow states creation complete', { projectId, teamId, result });
+      return result;
+    } catch (error) {
+      this.logger.error('Failed to create workflow states', error as Error);
+      throw new BadRequestException(
+        `Failed to create workflow states: ${(error as Error).message}`
+      );
+    }
+  }
+
+  /**
+   * Save Linear team selection for a project
+   */
+  async saveLinearTeamSelection(projectId: string, teamId: string, teamName?: string) {
+    this.logger.info('Saving Linear team selection', { projectId, teamId });
+
+    await this.findOne(projectId);
+
+    // Find the OrganizationProject link
+    const orgProject = await this.prisma.organizationProject.findFirst({
+      where: { projectId },
+    });
+
+    if (!orgProject) {
+      throw new NotFoundException('Project organization link not found');
+    }
+
+    // Update with the selected team
+    await this.prisma.organizationProject.update({
+      where: { id: orgProject.id },
+      data: { linearTeamId: teamId },
+    });
+
+    this.logger.info('Linear team selection saved', { projectId, teamId });
+    return { teamId, teamName };
+  }
+
+  /**
+   * Get saved Linear team for a project
+   */
+  async getLinearTeamSelection(projectId: string) {
+    this.logger.info('Getting Linear team selection', { projectId });
+
+    await this.findOne(projectId);
+
+    const orgProject = await this.prisma.organizationProject.findFirst({
+      where: { projectId },
+    });
+
+    return { teamId: orgProject?.linearTeamId || null };
+  }
+
+  // ============================================
+  // Sentry Project Selection
+  // ============================================
+
+  /**
+   * Get Sentry organizations for a project
+   */
+  async getSentryOrganizations(projectId: string): Promise<SentryOrganization[]> {
+    this.logger.info('Getting Sentry organizations', { projectId });
+
+    await this.findOne(projectId);
+
+    const sentryService = createSentryIntegrationService(this.tokenRefresh);
+
+    try {
+      const orgs = await sentryService.listOrganizations(projectId);
+      this.logger.info('Sentry organizations retrieved', { projectId, count: orgs.length });
+      return orgs;
+    } catch (error) {
+      this.logger.error('Failed to get Sentry organizations', error as Error);
+      throw new BadRequestException(
+        `Failed to get Sentry organizations: ${(error as Error).message}`
+      );
+    }
+  }
+
+  /**
+   * Get Sentry projects for an organization
+   */
+  async getSentryProjects(projectId: string, orgSlug: string): Promise<SentryProjectDetail[]> {
+    this.logger.info('Getting Sentry projects', { projectId, orgSlug });
+
+    await this.findOne(projectId);
+
+    const sentryService = createSentryIntegrationService(this.tokenRefresh);
+
+    try {
+      const projects = await sentryService.listProjects(projectId, orgSlug);
+      this.logger.info('Sentry projects retrieved', { projectId, orgSlug, count: projects.length });
+      return projects;
+    } catch (error) {
+      this.logger.error('Failed to get Sentry projects', error as Error);
+      throw new BadRequestException(
+        `Failed to get Sentry projects: ${(error as Error).message}`
+      );
+    }
+  }
+
+  /**
+   * Save Sentry project selection
+   */
+  async saveSentryProjectSelection(
+    projectId: string,
+    orgSlug: string,
+    sentryProjectSlug: string,
+  ) {
+    this.logger.info('Saving Sentry project selection', { projectId, orgSlug, sentryProjectSlug });
+
+    await this.findOne(projectId);
+
+    // Upsert the integration record
+    const integration = await this.prisma.projectIntegration.upsert({
+      where: { projectId },
+      create: {
+        projectId,
+        sentryOrgSlug: orgSlug,
+        sentryProjectSlug,
+      },
+      update: {
+        sentryOrgSlug: orgSlug,
+        sentryProjectSlug,
+      },
+    });
+
+    this.logger.info('Sentry project selection saved', { projectId, orgSlug, sentryProjectSlug });
+    return integration;
+  }
+
+  /**
+   * Get saved Sentry project selection
+   */
+  async getSentryProjectSelection(projectId: string) {
+    this.logger.info('Getting Sentry project selection', { projectId });
+
+    await this.findOne(projectId);
+
+    const integration = await this.prisma.projectIntegration.findUnique({
+      where: { projectId },
+    });
+
+    return {
+      orgSlug: integration?.sentryOrgSlug || null,
+      projectSlug: integration?.sentryProjectSlug || null,
+    };
+  }
+
+  // ============================================
+  // Slack Channel Selection
+  // ============================================
+
+  /**
+   * Get Slack channels for a project
+   */
+  async getSlackChannels(projectId: string): Promise<SlackChannel[]> {
+    this.logger.info('Getting Slack channels', { projectId });
+
+    await this.findOne(projectId);
+
+    const slackService = createSlackIntegrationService(this.tokenRefresh);
+
+    try {
+      const channels = await slackService.listChannels(projectId);
+      this.logger.info('Slack channels retrieved', { projectId, count: channels.length });
+      return channels;
+    } catch (error) {
+      this.logger.error('Failed to get Slack channels', error as Error);
+      throw new BadRequestException(
+        `Failed to get Slack channels: ${(error as Error).message}`
+      );
+    }
+  }
+
+  /**
+   * Get Slack team info for a project
+   */
+  async getSlackTeamInfo(projectId: string): Promise<SlackTeam> {
+    this.logger.info('Getting Slack team info', { projectId });
+
+    await this.findOne(projectId);
+
+    const slackService = createSlackIntegrationService(this.tokenRefresh);
+
+    try {
+      const team = await slackService.getTeamInfo(projectId);
+      this.logger.info('Slack team info retrieved', { projectId, teamId: team.id, teamName: team.name });
+      return team;
+    } catch (error) {
+      this.logger.error('Failed to get Slack team info', error as Error);
+      throw new BadRequestException(
+        `Failed to get Slack team info: ${(error as Error).message}`
+      );
+    }
+  }
+
+  /**
+   * Save Slack channel selection and auto-join the channel
+   */
+  async saveSlackChannelSelection(
+    projectId: string,
+    channelId: string,
+    channelName: string,
+  ) {
+    this.logger.info('Saving Slack channel selection', { projectId, channelId, channelName });
+
+    await this.findOne(projectId);
+
+    // First, join the channel (auto-join feature)
+    const slackService = createSlackIntegrationService(this.tokenRefresh);
+    try {
+      await slackService.joinChannel(projectId, channelId);
+      this.logger.info('Bot joined Slack channel', { projectId, channelId });
+    } catch (error) {
+      // Log but don't fail - bot might already be in the channel
+      this.logger.warn('Failed to join Slack channel (may already be member)', {
+        projectId,
+        channelId,
+        error: (error as Error).message
+      });
+    }
+
+    // Get team info to store team name
+    let teamId: string | null = null;
+    let teamName: string | null = null;
+    try {
+      const team = await slackService.getTeamInfo(projectId);
+      teamId = team.id;
+      teamName = team.name;
+    } catch (error) {
+      this.logger.warn('Failed to get Slack team info', { projectId, error: (error as Error).message });
+    }
+
+    // Upsert the integration record
+    const integration = await this.prisma.projectIntegration.upsert({
+      where: { projectId },
+      create: {
+        projectId,
+        slackTeamId: teamId,
+        slackTeamName: teamName,
+        slackChannelId: channelId,
+        slackChannelName: channelName,
+      },
+      update: {
+        slackTeamId: teamId,
+        slackTeamName: teamName,
+        slackChannelId: channelId,
+        slackChannelName: channelName,
+      },
+    });
+
+    this.logger.info('Slack channel selection saved', { projectId, channelId, channelName, teamId, teamName });
+    return integration;
+  }
+
+  /**
+   * Get saved Slack channel selection
+   */
+  async getSlackChannelSelection(projectId: string) {
+    this.logger.info('Getting Slack channel selection', { projectId });
+
+    await this.findOne(projectId);
+
+    const integration = await this.prisma.projectIntegration.findUnique({
+      where: { projectId },
+    });
+
+    return {
+      teamId: integration?.slackTeamId || null,
+      teamName: integration?.slackTeamName || null,
+      channelId: integration?.slackChannelId || null,
+      channelName: integration?.slackChannelName || null,
+    };
   }
 }

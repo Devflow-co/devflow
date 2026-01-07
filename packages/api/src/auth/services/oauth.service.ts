@@ -17,9 +17,14 @@ interface DeviceFlowResponse {
 interface OAuthTokens {
   access_token: string;
   refresh_token?: string;
-  expires_in: number;
-  scope: string;
+  expires_in?: number; // Optional - Slack tokens don't expire
+  scope?: string; // Optional - Slack returns it differently
   token_type?: string;
+  // Slack-specific fields
+  ok?: boolean;
+  team?: { id: string; name: string };
+  authed_user?: { id: string };
+  bot_user_id?: string;
 }
 
 interface UserInfo {
@@ -226,7 +231,7 @@ export class OAuthService {
       `Initiating Authorization Code Flow for ${provider} on project ${projectId}`,
     );
 
-    const authCodeProviders = ['LINEAR', 'SENTRY', 'FIGMA', 'GITHUB'];
+    const authCodeProviders = ['LINEAR', 'SENTRY', 'FIGMA', 'GITHUB', 'SLACK'];
     if (!authCodeProviders.includes(provider)) {
       throw new Error(`Authorization Code Flow not supported for ${provider}`);
     }
@@ -312,7 +317,7 @@ export class OAuthService {
       `Exchanging authorization code for ${provider} on project ${projectId}`,
     );
 
-    const authCodeProviders = ['LINEAR', 'SENTRY', 'FIGMA', 'GITHUB'];
+    const authCodeProviders = ['LINEAR', 'SENTRY', 'FIGMA', 'GITHUB', 'SLACK'];
     if (!authCodeProviders.includes(provider)) {
       throw new Error(`Authorization Code Flow not supported for ${provider}`);
     }
@@ -385,11 +390,18 @@ export class OAuthService {
     registeredScopes: string[],
   ): Promise<OAuthConnection> {
     // Encrypt refresh token (if provided)
+    // For Slack: store access_token since bot tokens don't expire and there's no refresh_token
     let encryptedRefreshToken: string | undefined;
     let encryptionIv: string | undefined;
 
     if (tokens.refresh_token) {
       const encrypted = this.tokenEncryption.encrypt(tokens.refresh_token);
+      encryptedRefreshToken = encrypted.ciphertext;
+      encryptionIv = encrypted.iv;
+    } else if (provider === 'SLACK') {
+      // Slack bot tokens don't expire and don't have refresh_token
+      // Store the access_token encrypted as our persistent backup
+      const encrypted = this.tokenEncryption.encrypt(tokens.access_token);
       encryptedRefreshToken = encrypted.ciphertext;
       encryptionIv = encrypted.iv;
     }
@@ -403,9 +415,16 @@ export class OAuthService {
       : null;
 
     // Parse scopes - some providers return scope as string, others don't return it at all
-    const scopes = tokens.scope
-      ? tokens.scope.split(' ')
-      : registeredScopes; // Fallback to registered app scopes
+    // Slack uses comma-separated scopes, others use space-separated
+    let scopes: string[];
+    if (tokens.scope) {
+      // Slack uses commas, others use spaces
+      scopes = provider === 'SLACK'
+        ? tokens.scope.split(',')
+        : tokens.scope.split(' ');
+    } else {
+      scopes = registeredScopes; // Fallback to registered app scopes
+    }
 
     // Store in database
     const connection = await this.prisma.oAuthConnection.upsert({
@@ -445,6 +464,16 @@ export class OAuthService {
         provider,
         tokens.access_token,
         tokens.expires_in,
+      );
+    } else if (provider === 'SLACK') {
+      // Slack tokens don't expire - cache for 1 year (effectively permanent)
+      // The token is also stored encrypted in refreshToken field as backup
+      const oneYearInSeconds = 365 * 24 * 60 * 60;
+      await this.tokenStorage.cacheAccessToken(
+        projectId,
+        provider,
+        tokens.access_token,
+        oneYearInSeconds,
       );
     }
 
@@ -513,6 +542,22 @@ export class OAuthService {
           id: response.data.id,
           email: response.data.email || null,
         };
+      } else if (provider === 'SLACK') {
+        // Slack's auth.test endpoint returns bot info
+        const response = await axios.post(
+          'https://slack.com/api/auth.test',
+          {},
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          },
+        );
+        if (!response.data.ok) {
+          throw new Error(`Slack auth.test failed: ${response.data.error}`);
+        }
+        return {
+          id: response.data.bot_id || response.data.user_id || response.data.team_id,
+          email: null, // Slack OAuth doesn't expose user email in auth.test
+        };
       }
 
       throw new Error(`Unsupported provider: ${provider}`);
@@ -524,6 +569,7 @@ export class OAuthService {
 
   /**
    * Refresh access token using refresh token
+   * For Slack: bot tokens don't expire, so we return the stored access token directly
    */
   async refreshToken(connection: OAuthConnection): Promise<string> {
     this.logger.log(
@@ -534,11 +580,27 @@ export class OAuthService {
       throw new Error('No refresh token available for this connection');
     }
 
-    // Decrypt refresh token
-    const refreshToken = this.tokenEncryption.decrypt(
+    // Decrypt stored token
+    const storedToken = this.tokenEncryption.decrypt(
       connection.refreshToken,
       connection.encryptionIv,
     );
+
+    // For Slack: the stored token IS the access token (bot tokens don't expire)
+    // Simply re-cache it and return
+    if (connection.provider === 'SLACK') {
+      const oneYearInSeconds = 365 * 24 * 60 * 60;
+      await this.tokenStorage.cacheAccessToken(
+        connection.projectId,
+        connection.provider,
+        storedToken,
+        oneYearInSeconds,
+      );
+      return storedToken;
+    }
+
+    // For other providers: storedToken is the refresh_token
+    const refreshToken = storedToken;
 
     // Get OAuth app credentials from database
     const oauthApp = await this.getOAuthApp(
