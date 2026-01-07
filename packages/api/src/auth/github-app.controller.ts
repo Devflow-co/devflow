@@ -25,7 +25,6 @@ import type { RedisClientType } from 'redis';
 import * as crypto from 'crypto';
 
 @Controller('auth/github-app')
-@UseGuards(AuthGuard)
 export class GitHubAppController {
   private readonly logger = createLogger('GitHubAppController');
 
@@ -52,6 +51,7 @@ export class GitHubAppController {
    * Initiate GitHub App installation flow
    */
   @Post('install')
+  @UseGuards(AuthGuard)
   async initiateInstallation(
     @Body('projectId') projectId: string,
     @CurrentUser() user: User,
@@ -214,6 +214,7 @@ export class GitHubAppController {
    * Get installation repositories and configuration
    */
   @Get('repositories')
+  @UseGuards(AuthGuard)
   async getRepositories(
     @Query('projectId') projectId: string,
     @CurrentUser() user: User,
@@ -271,6 +272,7 @@ export class GitHubAppController {
    * Update repository selection
    */
   @Post('repositories')
+  @UseGuards(AuthGuard)
   async updateRepositories(
     @Body('projectId') projectId: string,
     @Body('selection') selection: RepositorySelection,
@@ -333,6 +335,7 @@ export class GitHubAppController {
    * Uninstall GitHub App (mark as inactive)
    */
   @Post('uninstall')
+  @UseGuards(AuthGuard)
   async uninstall(
     @Body('projectId') projectId: string,
     @CurrentUser() user: User,

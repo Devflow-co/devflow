@@ -96,64 +96,6 @@
 
         <!-- Tab Content: Integrations -->
         <div v-if="activeTab === 'integrations'" class="space-y-6">
-          <!-- GitHub Integration -->
-          <IntegrationCard
-            provider="GITHUB"
-            :project-id="selectedProject.id"
-            @connected="handleIntegrationChange"
-            @disconnected="handleIntegrationChange"
-          >
-            <template #info>
-              <div class="mb-4 p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <div class="flex items-start gap-2">
-                  <svg class="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
-                  </svg>
-                  <div class="flex-1 text-sm">
-                    <p class="font-medium text-blue-800 dark:text-blue-200 mb-1">Repository Access</p>
-                    <p class="text-blue-700 dark:text-blue-300 mb-2">
-                      This OAuth connection grants access to <strong>all repositories</strong> you have access to on GitHub.
-                    </p>
-                    <details class="mt-2">
-                      <summary class="cursor-pointer text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
-                        Want to limit access to specific repositories?
-                      </summary>
-                      <div class="mt-2 pl-4 border-l-2 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300">
-                        <p class="mb-2">To limit access to specific repositories, you'll need to use a GitHub App instead of OAuth.</p>
-                        <p class="text-xs">Contact support or check the documentation for GitHub App setup instructions.</p>
-                      </div>
-                    </details>
-                  </div>
-                </div>
-              </div>
-            </template>
-            <template #config>
-              <form @submit.prevent="saveIntegrationConfig" class="space-y-4">
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Default Repository
-                  </label>
-                  <input
-                    v-model="configForm.githubIssuesRepo"
-                    type="text"
-                    placeholder="owner/repo"
-                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    e.g. facebook/react
-                  </p>
-                </div>
-                <button
-                  type="submit"
-                  :disabled="integrationConfigLoading"
-                  class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {{ integrationConfigLoading ? 'Saving...' : 'Save Configuration' }}
-                </button>
-              </form>
-            </template>
-          </IntegrationCard>
-
           <!-- GitHub App Section -->
           <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm">
             <div class="flex items-start justify-between mb-4">
