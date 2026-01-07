@@ -34,8 +34,14 @@ const redis = createClient({
 });
 
 async function testLinearIntegration() {
-  // Configuration
-  const projectId = process.env.PROJECT_ID || 'indy-promocode-prod';
+  // Configuration - PROJECT_ID is required
+  const projectId = process.env.PROJECT_ID;
+  if (!projectId) {
+    console.error('❌ PROJECT_ID environment variable is required');
+    console.log('\nUsage:');
+    console.log('  DATABASE_URL="postgresql://..." PROJECT_ID="your-project-id" npx tsx src/__manual_tests__/test-linear-integration.ts');
+    process.exit(1);
+  }
   const testIssueId = process.env.LINEAR_ISSUE_ID || 'DEV-1';
   const testStatus = process.env.LINEAR_STATUS || 'To Refinement';
 

@@ -276,6 +276,9 @@ export class OAuthService {
       params.set('scope', oauthApp.scopes.join(','));
     } else if (provider === 'GITHUB') {
       params.set('scope', oauthApp.scopes.join(' '));
+    } else if (provider === 'SLACK') {
+      // Slack uses comma-separated scopes for bot tokens
+      params.set('scope', oauthApp.scopes.join(','));
     }
 
     const authorizationUrl = `${config.AUTHORIZE_URL}?${params.toString()}`;

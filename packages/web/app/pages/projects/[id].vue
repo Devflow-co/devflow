@@ -91,6 +91,17 @@
             >
               Settings
             </button>
+            <button
+              @click="activeTab = 'context'"
+              :class="[
+                'py-4 px-1 border-b-2 font-medium text-sm transition-colors',
+                activeTab === 'context'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
+              ]"
+            >
+              Vector Database
+            </button>
           </nav>
         </div>
 
@@ -644,26 +655,52 @@
 
               <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Repository URL
+                  Repository
                 </label>
-                <input
-                  v-model="settingsForm.repository"
-                  type="url"
-                  placeholder="https://github.com/owner/repo"
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
 
-              <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Workspace Path
-                </label>
-                <input
-                  v-model="settingsForm.workspacePath"
-                  type="text"
-                  placeholder="/path/to/workspace"
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
+                <!-- GitHub App connected with available repos -->
+                <div v-if="hasGitHubApp && availableRepos.length > 0">
+                  <select
+                    v-model="settingsForm.repository"
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select a repository...</option>
+                    <option v-for="repo in availableRepos" :key="repo.fullName" :value="repo.url">
+                      {{ repo.fullName }}
+                    </option>
+                  </select>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Select from repositories available via GitHub App
+                  </p>
+                </div>
+
+                <!-- GitHub App connected but no repos selected -->
+                <div v-else-if="hasGitHubApp && availableRepos.length === 0">
+                  <div class="p-3 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800 rounded-lg mb-2">
+                    <p class="text-sm text-yellow-800 dark:text-yellow-200">
+                      No repositories selected in GitHub App. Go to Integrations tab to select repositories.
+                    </p>
+                  </div>
+                  <input
+                    v-model="settingsForm.repository"
+                    type="url"
+                    placeholder="https://github.com/owner/repo"
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <!-- No GitHub App - show manual input -->
+                <div v-else>
+                  <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">
+                    Connect GitHub App in Integrations tab to select from available repositories
+                  </p>
+                  <input
+                    v-model="settingsForm.repository"
+                    type="url"
+                    placeholder="https://github.com/owner/repo"
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
               </div>
 
               <div class="flex items-center gap-4">
@@ -685,6 +722,11 @@
             </form>
           </div>
         </div>
+
+        <!-- Tab Content: Vector Database Context -->
+        <div v-if="activeTab === 'context'">
+          <RagTab :project-id="selectedProject.id" />
+        </div>
       </div>
     </div>
   </div>
@@ -699,6 +741,7 @@ import { storeToRefs } from 'pinia'
 import IntegrationCard from '@/components/IntegrationCard.vue'
 import GitHubAppSelector from '@/components/GitHubAppSelector.vue'
 import WorkflowConfig from '@/components/workflow/WorkflowConfig.vue'
+import RagTab from '@/components/rag/RagTab.vue'
 
 definePageMeta({
   middleware: 'auth',
@@ -720,7 +763,12 @@ const oauthConnections = computed(() => {
   }))
 })
 
-const activeTab = ref<'integrations' | 'workflow' | 'settings'>('integrations')
+const activeTab = ref<'integrations' | 'workflow' | 'settings' | 'context'>('integrations')
+
+// Available GitHub repositories from GitHub App
+const availableRepos = ref<Array<{ fullName: string; url: string }>>([])
+const hasGitHubApp = ref(false)
+const reposLoading = ref(false)
 const pageLoading = ref(true)
 const pageError = ref<string | null>(null)
 
@@ -845,6 +893,7 @@ onMounted(async () => {
       integrationsStore.fetchSlackChannelSelection(projectId.value).catch(() => {
         // Ignore errors if Slack channel is not selected yet
       }),
+      fetchAvailableRepositories(),
     ])
 
     // If Linear team is selected, fetch workflow validation
@@ -970,8 +1019,11 @@ const handleUninstallGitHubApp = async () => {
 }
 
 const handleGitHubAppSaved = async () => {
-  // Refresh installation data after save
-  await integrationsStore.fetchGitHubAppInstallation(projectId.value)
+  // Refresh installation data and available repos after save
+  await Promise.all([
+    integrationsStore.fetchGitHubAppInstallation(projectId.value),
+    fetchAvailableRepositories(),
+  ])
 }
 
 const handleGitHubAppSynced = async () => {
@@ -1004,6 +1056,30 @@ const validateLinearWorkflowStates = async () => {
     alert(`Failed to validate workflow states: ${e.message}`)
   } finally {
     validatingLinearStates.value = false
+  }
+}
+
+// Fetch available GitHub repositories from GitHub App
+const fetchAvailableRepositories = async () => {
+  try {
+    reposLoading.value = true
+    const config = useRuntimeConfig()
+    const apiBase = config.public.apiBase || 'http://localhost:3001/api/v1'
+    const response = await $fetch<{
+      availableRepositories: Array<{ fullName: string; url: string }>
+      hasGitHubApp: boolean
+    }>(`${apiBase}/projects/${projectId.value}/github/repositories`, {
+      credentials: 'include',
+    })
+    availableRepos.value = response.availableRepositories
+    hasGitHubApp.value = response.hasGitHubApp
+    console.log('Fetched repositories:', { availableRepos: availableRepos.value, hasGitHubApp: hasGitHubApp.value })
+  } catch (e) {
+    console.error('Failed to fetch available repositories:', e)
+    availableRepos.value = []
+    hasGitHubApp.value = false
+  } finally {
+    reposLoading.value = false
   }
 }
 

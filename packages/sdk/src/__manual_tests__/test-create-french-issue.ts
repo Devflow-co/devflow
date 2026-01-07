@@ -5,8 +5,15 @@ import { LinearClient } from '@linear/sdk';
 import { createOAuthTokenResolver } from '../auth/oauth-token-resolver';
 
 async function createTestIssue() {
-  const projectId = 'indy-promocode-prod';
-  
+  // PROJECT_ID is required
+  const projectId = process.env.PROJECT_ID;
+  if (!projectId) {
+    console.error('❌ PROJECT_ID environment variable is required');
+    console.log('\nUsage:');
+    console.log('  DATABASE_URL="postgresql://..." PROJECT_ID="your-project-id" npx tsx src/__manual_tests__/test-create-french-issue.ts');
+    process.exit(1);
+  }
+
   // Use SDK's token resolver
   const tokenResolver = createOAuthTokenResolver();
   const accessToken = await tokenResolver.resolveToken(projectId, 'LINEAR');

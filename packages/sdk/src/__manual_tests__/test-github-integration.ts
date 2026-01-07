@@ -34,8 +34,14 @@ const redis = createClient({
 });
 
 async function testGitHubIntegration() {
-  // Configuration
-  const projectId = process.env.PROJECT_ID || 'indy-promocode-prod';
+  // Configuration - PROJECT_ID is required
+  const projectId = process.env.PROJECT_ID;
+  if (!projectId) {
+    console.error('❌ PROJECT_ID environment variable is required');
+    console.log('\nUsage:');
+    console.log('  DATABASE_URL="postgresql://..." PROJECT_ID="your-project-id" npx tsx src/__manual_tests__/test-github-integration.ts');
+    process.exit(1);
+  }
   const testRepo = {
     owner: process.env.GITHUB_OWNER || 'facebook',
     repo: process.env.GITHUB_REPO || 'react',

@@ -92,6 +92,14 @@ export class SystemOAuthInitService implements OnModuleInit {
         scopes: ['file_content:read', 'current_user:read', 'projects:read'],
         flowType: 'authorization_code',
       },
+      {
+        provider: 'SLACK' as OAuthProvider,
+        clientIdVar: 'SLACK_APP_CLIENT_ID',
+        clientSecretVar: 'SLACK_APP_CLIENT_SECRET',
+        redirectUriVar: 'SLACK_APP_REDIRECT_URI',
+        scopes: ['channels:read', 'channels:join', 'chat:write', 'team:read'],
+        flowType: 'authorization_code',
+      },
     ];
 
     let registeredCount = 0;

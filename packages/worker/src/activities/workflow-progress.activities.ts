@@ -120,19 +120,54 @@ export async function logWorkflowProgress(params: LogWorkflowProgressParams): Pr
     // Calculate progress percentage
     const progressPercent = Math.round((stepNumber / totalSteps) * 100);
 
+    // Handle date deserialization from Temporal (dates come as ISO strings)
+    const parsedStartedAt = startedAt ? new Date(startedAt) : undefined;
+    const parsedCompletedAt = completedAt ? new Date(completedAt) : undefined;
+
     // Calculate duration if both timestamps provided
     let duration: number | undefined;
-    if (startedAt && completedAt) {
-      duration = completedAt.getTime() - startedAt.getTime();
+    if (parsedStartedAt && parsedCompletedAt) {
+      duration = parsedCompletedAt.getTime() - parsedStartedAt.getTime();
     }
 
     // Map status to Prisma enum
     const prismaStatus = mapStepStatusToPrisma(status);
 
-    // 1. Update Workflow record with current progress
-    await prisma.workflow.update({
+    // 1. Upsert Workflow record (create if doesn't exist, update if exists)
+    // First, get the task to link the workflow
+    const task = await prisma.task.findFirst({
+      where: {
+        OR: [{ id: taskId }, { linearId: taskId }],
+      },
+      select: { id: true, projectId: true },
+    });
+
+    // If no task found, we can't create the workflow record (required relation)
+    // Just log and skip - this shouldn't fail the workflow
+    if (!task) {
+      logger.warn('Task not found for workflow progress, skipping', {
+        workflowId,
+        taskId,
+        projectId,
+      });
+      return;
+    }
+
+    await prisma.workflow.upsert({
       where: { workflowId },
-      data: {
+      create: {
+        workflowId,
+        project: { connect: { id: task.projectId } },
+        task: { connect: { id: task.id } },
+        status: 'RUNNING',
+        currentPhase: phase,
+        currentStepName: stepName,
+        currentStepNumber: stepNumber,
+        totalSteps,
+        progressPercent,
+        startedAt: new Date(),
+      },
+      update: {
         currentPhase: phase,
         currentStepName: stepName,
         currentStepNumber: stepNumber,
@@ -155,35 +190,43 @@ export async function logWorkflowProgress(params: LogWorkflowProgressParams): Pr
     // 2. Upsert WorkflowStageLog entry for this step
     const stage = mapPhaseToStage(phase, stepName);
 
-    await prisma.workflowStageLog.upsert({
-      where: {
-        workflowId_stepName: {
-          workflowId,
-          stepName,
-        },
-      },
-      create: {
-        workflowId,
-        stage: stage as any,
-        status: prismaStatus,
-        phase,
-        stepName,
-        stepNumber,
-        totalSteps,
-        data: metadata || null,
-        error: error || null,
-        startedAt: startedAt || new Date(),
-        completedAt: completedAt || null,
-        duration: duration || null,
-      },
-      update: {
-        status: prismaStatus,
-        data: metadata || null,
-        error: error || null,
-        completedAt: completedAt || null,
-        duration: duration || null,
-      },
+    // Get the workflow record to get the id for the stage log
+    const workflowRecord = await prisma.workflow.findUnique({
+      where: { workflowId },
+      select: { id: true },
     });
+
+    if (workflowRecord) {
+      await prisma.workflowStageLog.upsert({
+        where: {
+          workflowId_stepName: {
+            workflowId: workflowRecord.id,
+            stepName,
+          },
+        },
+        create: {
+          workflowId: workflowRecord.id,
+          stage: stage as any,
+          status: prismaStatus,
+          phase,
+          stepName,
+          stepNumber,
+          totalSteps,
+          data: metadata || null,
+          error: error || null,
+          startedAt: parsedStartedAt || new Date(),
+          completedAt: parsedCompletedAt || null,
+          duration: duration || null,
+        },
+        update: {
+          status: prismaStatus,
+          data: metadata || null,
+          error: error || null,
+          completedAt: parsedCompletedAt || null,
+          duration: duration || null,
+        },
+      });
+    }
 
     logger.info('Workflow progress logged', {
       workflowId,
@@ -219,9 +262,39 @@ export async function logWorkflowFailure(params: {
   const { workflowId, projectId, taskId, phase, error, stepName } = params;
 
   try {
-    await prisma.workflow.update({
+    // First, get the task to link the workflow
+    const task = await prisma.task.findFirst({
+      where: {
+        OR: [{ id: taskId }, { linearId: taskId }],
+      },
+      select: { id: true, projectId: true },
+    });
+
+    // If no task found, we can't create the workflow record (required relation)
+    // Just log and skip - this shouldn't fail the workflow
+    if (!task) {
+      logger.warn('Task not found for workflow failure logging, skipping', {
+        workflowId,
+        taskId,
+        projectId,
+      });
+      return;
+    }
+
+    // Use upsert to handle both create and update scenarios
+    await prisma.workflow.upsert({
       where: { workflowId },
-      data: {
+      create: {
+        workflowId,
+        project: { connect: { id: task.projectId } },
+        task: { connect: { id: task.id } },
+        status: 'FAILED',
+        currentPhase: phase,
+        error,
+        startedAt: new Date(),
+        completedAt: new Date(),
+      },
+      update: {
         status: 'FAILED',
         error,
         completedAt: new Date(),

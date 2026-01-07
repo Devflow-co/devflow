@@ -115,7 +115,8 @@ export class SemanticRetriever {
     });
 
     if (!index) {
-      throw new Error(`No completed index found for project ${projectId}`);
+      logger.warn('No completed index found for project, returning empty results', { projectId });
+      return [];
     }
 
     logger.debug('Using index', {

@@ -12,6 +12,7 @@ import {
 } from '@devflow/common';
 import { WorkflowsService } from '@/workflows/workflows.service';
 import { LinearSyncApiService, CommentContext } from '@/linear/linear-sync-api.service';
+import { PrismaService } from '@/prisma/prisma.service';
 
 @Injectable()
 export class WebhooksService {
@@ -20,13 +21,60 @@ export class WebhooksService {
   /** Auto-sync Linear issues to database on every webhook event */
   private autoSyncEnabled: boolean;
 
+  /** Cached project ID (auto-detected from database if not in env) */
+  private cachedProjectId: string | null = null;
+
   constructor(
     private workflowsService: WorkflowsService,
+    private prisma: PrismaService,
     @Optional() private linearSyncService?: LinearSyncApiService,
   ) {
     // Enable auto-sync by default, can be disabled via env var
     this.autoSyncEnabled = process.env.LINEAR_AUTO_SYNC !== 'false';
     this.logger.info('WebhooksService initialized', { autoSyncEnabled: this.autoSyncEnabled });
+  }
+
+  /**
+   * Get project ID from environment or auto-detect from database
+   */
+  private async getProjectId(): Promise<string | null> {
+    // First check environment variable
+    if (process.env.DEFAULT_PROJECT_ID) {
+      return process.env.DEFAULT_PROJECT_ID;
+    }
+
+    // Return cached value if available
+    if (this.cachedProjectId) {
+      return this.cachedProjectId;
+    }
+
+    // Auto-detect from database
+    try {
+      const project = await this.prisma.project.findFirst({
+        where: {
+          id: {
+            not: 'SYSTEM_OAUTH_PROJECT', // Exclude system project
+          },
+        },
+        select: { id: true, name: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (project) {
+        this.cachedProjectId = project.id;
+        this.logger.info('Auto-detected project from database', {
+          projectId: project.id,
+          projectName: project.name,
+        });
+        return project.id;
+      }
+    } catch (error) {
+      this.logger.warn('Failed to auto-detect project from database', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
+    return null;
   }
 
   /**
@@ -38,9 +86,9 @@ export class WebhooksService {
       return;
     }
 
-    const projectId = process.env.DEFAULT_PROJECT_ID;
+    const projectId = await this.getProjectId();
     if (!projectId) {
-      this.logger.debug('Auto-sync skipped: no DEFAULT_PROJECT_ID');
+      this.logger.debug('Auto-sync skipped: no project configured');
       return;
     }
 
@@ -102,7 +150,7 @@ export class WebhooksService {
       }
 
       // Check if this issue completed a phase and should trigger parent rollup
-      const projectId = process.env.DEFAULT_PROJECT_ID;
+      const projectId = await this.getProjectId();
       let rollupResult = null;
 
       if (isRollupStatus(stateName || '') && this.linearSyncService && projectId) {
@@ -258,9 +306,9 @@ export class WebhooksService {
       return;
     }
 
-    const projectId = process.env.DEFAULT_PROJECT_ID;
+    const projectId = await this.getProjectId();
     if (!projectId) {
-      this.logger.debug('Auto-sync comment skipped: no DEFAULT_PROJECT_ID');
+      this.logger.debug('Auto-sync comment skipped: no project configured');
       return;
     }
 
@@ -314,7 +362,7 @@ export class WebhooksService {
 
     // Check if this is a reply to a DevFlow question (PO answer detection)
     const parentCommentId = comment?.parent?.id;
-    const projectId = process.env.DEFAULT_PROJECT_ID;
+    const projectId = await this.getProjectId();
 
     if (action === 'create' && parentCommentId && this.linearSyncService && projectId && issueId) {
       const isAnswerToQuestion = await this.linearSyncService.checkIfAnswerToQuestion(

@@ -19,6 +19,7 @@ import { OAuthProvider, User } from '@prisma/client';
 import { OAuthService } from '@/auth/services/oauth.service';
 import { AuthGuard } from '@/user-auth/guards/auth.guard';
 import { CurrentUser } from '@/user-auth/decorators/current-user.decorator';
+import { Public } from '@/user-auth/decorators/public.decorator';
 import { ProjectsService } from '@/projects/projects.service';
 
 // Supported OAuth providers
@@ -179,6 +180,7 @@ export class AuthController {
    * This endpoint receives the authorization code from Linear after user authorization
    * The projectId is retrieved from the state parameter via Redis
    */
+  @Public()
   @Get('linear/callback')
   async linearCallback(
     @Query('code') code: string,
@@ -254,6 +256,7 @@ export class AuthController {
    * This endpoint receives the authorization code from Sentry after user authorization
    * The projectId is retrieved from the state parameter via Redis
    */
+  @Public()
   @Get('sentry/callback')
   async sentryCallback(
     @Query('code') code: string,
@@ -329,6 +332,7 @@ export class AuthController {
    * This endpoint receives the authorization code from Figma after user authorization
    * The projectId is retrieved from the state parameter via Redis
    */
+  @Public()
   @Get('figma/callback')
   async figmaCallback(
     @Query('code') code: string,
@@ -404,6 +408,7 @@ export class AuthController {
    * This endpoint receives the authorization code from GitHub after user authorization
    * The projectId is retrieved from the state parameter via Redis
    */
+  @Public()
   @Get('github/callback')
   async githubCallback(
     @Query('code') code: string,
@@ -481,6 +486,7 @@ export class AuthController {
    *
    * Note: Slack bot tokens (xoxb-) do NOT expire and don't include refresh_token
    */
+  @Public()
   @Get('slack/callback')
   async slackCallback(
     @Query('code') code: string,

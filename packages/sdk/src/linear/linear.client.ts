@@ -677,46 +677,18 @@ export class LinearClient {
 
   /**
    * Get custom field values for an issue
+   *
+   * NOTE: Temporarily disabled - Linear API 'customFields' field is not available on Issue type.
+   * The correct field name needs to be determined from Linear's current GraphQL schema.
+   * Custom fields are optional for DevFlow workflows, so this returns an empty Map.
+   *
+   * TODO: Re-enable once we find the correct GraphQL field for issue custom field values.
+   * Possible fields: customFieldValues, issueCustomFields, or via a separate query.
    */
   async getIssueCustomFields(issueId: string): Promise<Map<string, string>> {
-    this.logger.info('Getting custom field values for issue', { issueId });
-
-    try {
-      const query = `
-        query IssueCustomFields($issueId: String!) {
-          issue(id: $issueId) {
-            customFields {
-              nodes {
-                id
-                value
-                customField {
-                  id
-                  name
-                }
-              }
-            }
-          }
-        }
-      `;
-
-      const result = await this.client.client.rawRequest(query, { issueId });
-      const data = result.data as any;
-      const customFieldValues = data?.issue?.customFields?.nodes || [];
-
-      const values = new Map<string, string>();
-      for (const cfv of customFieldValues) {
-        if (cfv.customField?.name && cfv.value) {
-          values.set(cfv.customField.name, cfv.value);
-        }
-      }
-
-      this.logger.info('Custom field values retrieved', { issueId, count: values.size });
-      return values;
-    } catch (error) {
-      this.logger.error('Failed to get issue custom fields', error as Error, { issueId });
-      // Return empty map instead of throwing - custom fields might not exist
-      return new Map();
-    }
+    this.logger.debug('Custom fields query disabled - returning empty map', { issueId });
+    // Return empty map - custom fields are optional
+    return new Map();
   }
 
   /**

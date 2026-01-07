@@ -403,6 +403,39 @@ export class ProjectsController {
   }
 
   // ============================================
+  // GitHub Repository Selection (via GitHub App)
+  // ============================================
+
+  @Get(':id/github/repositories')
+  @ApiOperation({ summary: 'Get available repositories from GitHub App installation' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of available repositories',
+    schema: {
+      type: 'object',
+      properties: {
+        availableRepositories: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              fullName: { type: 'string', example: 'owner/repo' },
+              url: { type: 'string', example: 'https://github.com/owner/repo' },
+            },
+          },
+        },
+        hasGitHubApp: { type: 'boolean' },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Project not found' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  async getAvailableRepositories(@Param('id') id: string, @CurrentUser() user: User) {
+    await this.verifyAccess(id, user.id);
+    return this.projectsService.getAvailableRepositories(id);
+  }
+
+  // ============================================
   // Private Helper Methods
   // ============================================
 

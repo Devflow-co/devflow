@@ -21,23 +21,6 @@
 
     <!-- Content -->
     <template v-else>
-      <!-- Templates Section -->
-      <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Templates</h2>
-        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-          Choose a template as a starting point, then customize individual settings below.
-        </p>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <TemplateCard
-            v-for="template in templates"
-            :key="template.name"
-            :template="template"
-            :is-selected="selectedTemplate === template.name"
-            @select="applyTemplate(template.name)"
-          />
-        </div>
-      </div>
-
       <!-- Phase Configurations -->
       <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Phase Configuration</h2>
@@ -119,10 +102,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, toRef } from 'vue'
+import { onMounted, toRef } from 'vue'
 import { useWorkflowConfig } from '@/composables/useWorkflowConfig'
 import type { AutomationConfig } from '@/composables/useWorkflowConfig'
-import TemplateCard from './TemplateCard.vue'
 import PhaseConfig from './PhaseConfig.vue'
 
 interface OAuthConnection {
@@ -152,14 +134,11 @@ const projectIdRef = toRef(() => props.projectId)
 const {
   config,
   aiModels,
-  templates,
   loading,
   saving,
   error,
   hasChanges,
-  selectedTemplate,
   load,
-  applyTemplate: applyTemplateAction,
   save,
   reset,
 } = useWorkflowConfig(projectIdRef)
@@ -174,23 +153,12 @@ const reload = async () => {
   await load(props.initialConfig)
 }
 
-// Apply template
-const applyTemplate = async (templateName: 'standard' | 'minimal' | 'advanced') => {
-  try {
-    await applyTemplateAction(templateName)
-  } catch (e) {
-    console.error('Failed to apply template:', e)
-  }
-}
-
 // Update phase config
 const updatePhaseConfig = (
   phase: 'refinement' | 'userStory' | 'technicalPlan',
   phaseConfig: any
 ) => {
   config.value.phases[phase] = phaseConfig
-  // Clear template name when customized
-  config.value.templateName = undefined
 }
 
 // Save config

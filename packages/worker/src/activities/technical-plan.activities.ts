@@ -79,6 +79,8 @@ export interface FetchBestPracticesInput {
     language: string;
     framework?: string;
   };
+  /** AI model to use for best practices (defaults to perplexity/sonar-pro) */
+  aiModel?: string;
 }
 
 export interface FetchBestPracticesOutput {
@@ -90,9 +92,13 @@ export interface FetchBestPracticesOutput {
 export async function fetchBestPractices(
   input: FetchBestPracticesInput
 ): Promise<FetchBestPracticesOutput> {
-  logger.info('Fetching best practices from Perplexity', {
+  // Use aiModel from input, fallback to default
+  const modelToUse = input.aiModel || 'perplexity/sonar-pro';
+
+  logger.info('Fetching best practices', {
     taskTitle: input.task.title,
     projectId: input.projectId,
+    model: modelToUse,
   });
 
   try {
@@ -117,11 +123,11 @@ Provide a concise summary (max 500 words) with:
 
 Be specific and actionable. Skip generic advice.`;
 
-    // Call Perplexity via OpenRouter
+    // Call model via OpenRouter
     const response = await axios.post(
       'https://openrouter.ai/api/v1/chat/completions',
       {
-        model: 'perplexity/sonar-pro',
+        model: modelToUse,
         messages: [
           {
             role: 'user',

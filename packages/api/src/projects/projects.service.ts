@@ -912,4 +912,53 @@ export class ProjectsService {
       channelName: integration?.slackChannelName || null,
     };
   }
+
+  // ============================================
+  // GitHub Repository Selection (via GitHub App)
+  // ============================================
+
+  /**
+   * Get available repositories from GitHub App installation for a project
+   */
+  async getAvailableRepositories(projectId: string): Promise<{
+    availableRepositories: Array<{ fullName: string; url: string }>;
+    hasGitHubApp: boolean;
+  }> {
+    this.logger.info('Getting available repositories from GitHub App', { projectId });
+
+    await this.findOne(projectId);
+
+    // Find active GitHub App installation for this project
+    const installation = await this.prisma.gitHubAppInstallation.findFirst({
+      where: {
+        projectId,
+        isActive: true,
+        isSuspended: false,
+      },
+    });
+
+    if (!installation) {
+      this.logger.info('No active GitHub App installation found', { projectId });
+      return {
+        availableRepositories: [],
+        hasGitHubApp: false,
+      };
+    }
+
+    // Map selectedRepos to the expected format
+    const availableRepositories = installation.selectedRepos.map((fullName) => ({
+      fullName,
+      url: `https://github.com/${fullName}`,
+    }));
+
+    this.logger.info('Available repositories retrieved', {
+      projectId,
+      count: availableRepositories.length,
+    });
+
+    return {
+      availableRepositories,
+      hasGitHubApp: true,
+    };
+  }
 }

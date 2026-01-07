@@ -4,7 +4,7 @@
  */
 
 import { createLogger } from '@devflow/common';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, TaskStatus, TaskPriority } from '@prisma/client';
 import type {
   RefinementOutput,
   UserStoryGenerationOutput,
@@ -68,6 +68,59 @@ async function resolveLinearApiKey(projectId: string): Promise<string> {
       `No Linear OAuth connection configured for project ${projectId}. Linear OAuth Device Flow coming in Phase 6. Please configure via: POST /api/v1/auth/linear/device/initiate`,
     );
   }
+}
+
+// ============================================
+// Status/Priority Mapping Functions
+// ============================================
+
+/**
+ * Map Linear status string to Prisma TaskStatus enum
+ */
+function mapLinearStatusToPrisma(status?: string): TaskStatus {
+  if (!status) return TaskStatus.TODO;
+
+  const statusLower = status.toLowerCase();
+  if (statusLower.includes('refinement') || statusLower.includes('backlog')) {
+    return TaskStatus.SPECIFICATION;
+  }
+  if (statusLower.includes('user story') || statusLower.includes('plan')) {
+    return TaskStatus.SPECIFICATION;
+  }
+  if (statusLower.includes('progress') || statusLower.includes('doing')) {
+    return TaskStatus.IN_PROGRESS;
+  }
+  if (statusLower.includes('review')) {
+    return TaskStatus.IN_REVIEW;
+  }
+  if (statusLower.includes('test')) {
+    return TaskStatus.TESTING;
+  }
+  if (statusLower.includes('done') || statusLower.includes('complete')) {
+    return TaskStatus.DONE;
+  }
+  if (statusLower.includes('block')) {
+    return TaskStatus.BLOCKED;
+  }
+  if (statusLower.includes('cancel')) {
+    return TaskStatus.CANCELLED;
+  }
+  return TaskStatus.TODO;
+}
+
+/**
+ * Map Linear priority number to Prisma TaskPriority enum
+ */
+function mapLinearPriorityToPrisma(priority?: string | number): TaskPriority {
+  if (!priority) return TaskPriority.MEDIUM;
+
+  // Linear priority: 0 = none, 1 = urgent, 2 = high, 3 = medium, 4 = low
+  const priorityNum = typeof priority === 'string' ? parseInt(priority, 10) : priority;
+
+  if (priorityNum <= 1) return TaskPriority.CRITICAL;
+  if (priorityNum === 2) return TaskPriority.HIGH;
+  if (priorityNum === 3) return TaskPriority.MEDIUM;
+  return TaskPriority.LOW;
 }
 
 // ============================================
@@ -209,15 +262,15 @@ export async function syncLinearTask(input: SyncLinearTaskInput): Promise<SyncLi
         linearId: task.linearId,
         title: task.title,
         description: task.description || '',
-        status: task.status || 'To Refinement',
-        priority: task.priority,
+        status: mapLinearStatusToPrisma(task.status),
+        priority: mapLinearPriorityToPrisma(task.priority),
         projectId: input.projectId,
       },
       update: {
         title: task.title,
         description: task.description || '',
-        status: task.status || 'To Refinement',
-        priority: task.priority,
+        status: mapLinearStatusToPrisma(task.status),
+        priority: mapLinearPriorityToPrisma(task.priority),
       },
     });
 

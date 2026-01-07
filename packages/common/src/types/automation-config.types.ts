@@ -64,25 +64,61 @@ export interface TechnicalPlanFeatures {
 }
 
 // ============================================
+// Feature Model Overrides
+// ============================================
+
+/**
+ * Per-feature AI model overrides for Refinement phase
+ * If not set, falls back to phase's aiModel
+ */
+export interface RefinementFeatureModels {
+  /** Model for PO Questions generation */
+  poQuestions?: string;
+  /** Model for Auto Subtask Creation */
+  subtaskCreation?: string;
+}
+
+/**
+ * Per-feature AI model overrides for User Story phase
+ * If not set, falls back to phase's aiModel
+ */
+export interface UserStoryFeatureModels {
+  /** Model for Task Splitting */
+  taskSplitting?: string;
+}
+
+/**
+ * Per-feature AI model overrides for Technical Plan phase
+ * If not set, falls back to phase's aiModel or specific defaults
+ */
+export interface TechnicalPlanFeatureModels {
+  /** Model for Best Practices Query (default: perplexity/sonar-pro) */
+  bestPractices?: string;
+}
+
+// ============================================
 // Phase Configuration
 // ============================================
 
 /**
  * Base configuration for a workflow phase
  */
-export interface BasePhaseConfig<T> {
+export interface BasePhaseConfig<T, M = Record<string, never>> {
   /** Whether this phase is enabled */
   enabled: boolean;
   /** AI model ID to use for this phase (e.g., 'anthropic/claude-sonnet-4') */
   aiModel: string;
   /** Feature flags for this phase */
   features: T;
+  /** Per-feature AI model overrides */
+  featureModels?: M;
 }
 
-export type RefinementPhaseConfig = BasePhaseConfig<RefinementFeatures>;
-export type UserStoryPhaseConfig = BasePhaseConfig<UserStoryFeatures>;
+export interface RefinementPhaseConfig extends BasePhaseConfig<RefinementFeatures, RefinementFeatureModels> {}
 
-export interface TechnicalPlanPhaseConfig extends BasePhaseConfig<TechnicalPlanFeatures> {
+export interface UserStoryPhaseConfig extends BasePhaseConfig<UserStoryFeatures, UserStoryFeatureModels> {}
+
+export interface TechnicalPlanPhaseConfig extends BasePhaseConfig<TechnicalPlanFeatures, TechnicalPlanFeatureModels> {
   /** Models to use for Council AI (if enableCouncilAI is true) */
   councilModels?: string[];
   /** Chairman model for Council AI final decision */
@@ -151,6 +187,7 @@ export interface FeatureOAuthRequirement {
 // ============================================
 
 export const DEFAULT_AI_MODEL = 'anthropic/claude-sonnet-4';
+export const DEFAULT_BEST_PRACTICES_MODEL = 'perplexity/sonar-pro';
 
 export const DEFAULT_REFINEMENT_FEATURES: RefinementFeatures = {
   enableAutoStatusUpdate: true,

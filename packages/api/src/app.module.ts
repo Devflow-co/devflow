@@ -15,6 +15,7 @@ import { AuthModule } from '@/auth/auth.module';
 import { IntegrationsModule } from '@/integrations/integrations.module';
 import { UserAuthModule } from '@/user-auth/user-auth.module';
 import { ConfigAppModule } from '@/config/config.module';
+import { RagModule } from '@/rag/rag.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { ConfigAppModule } from '@/config/config.module';
     TasksModule,
     WorkflowsModule,
     WebhooksModule,
+    RagModule,
   ],
 })
 export class AppModule {}

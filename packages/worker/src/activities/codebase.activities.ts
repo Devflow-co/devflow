@@ -41,6 +41,29 @@ export interface AnalyzeRepositoryInput {
 }
 
 /**
+ * Parse owner and repo from a GitHub URL
+ */
+function parseGitHubUrl(url: string): { owner: string; repo: string } | null {
+  if (!url) return null;
+
+  // Match patterns like:
+  // - https://github.com/owner/repo
+  // - https://github.com/owner/repo.git
+  // - git@github.com:owner/repo.git
+  const httpsMatch = url.match(/github\.com\/([^\/]+)\/([^\/\.]+)/);
+  if (httpsMatch) {
+    return { owner: httpsMatch[1], repo: httpsMatch[2] };
+  }
+
+  const sshMatch = url.match(/github\.com:([^\/]+)\/([^\/\.]+)/);
+  if (sshMatch) {
+    return { owner: sshMatch[1], repo: sshMatch[2] };
+  }
+
+  return null;
+}
+
+/**
  * Analyze repository context using GitHub API
  */
 export async function analyzeRepositoryContext(
@@ -60,12 +83,22 @@ export async function analyzeRepositoryContext(
 
     const config = project.config as any;
 
-    // Extract repository info from config
-    const owner = config?.vcs?.owner || config?.project?.owner;
-    const repo = config?.vcs?.repo || config?.project?.repo;
+    // Extract repository info from config or parse from repository URL
+    let owner = config?.vcs?.owner || config?.project?.owner;
+    let repo = config?.vcs?.repo || config?.project?.repo;
+
+    // Fallback: parse from project.repository URL
+    if ((!owner || !repo) && project.repository) {
+      const parsed = parseGitHubUrl(project.repository);
+      if (parsed) {
+        owner = parsed.owner;
+        repo = parsed.repo;
+        logger.info('Parsed repository info from URL', { owner, repo, url: project.repository });
+      }
+    }
 
     if (!owner || !repo) {
-      throw new Error(`Repository owner/repo not configured for project ${input.projectId}`);
+      throw new Error(`Repository owner/repo not configured for project ${input.projectId}. Please set a valid GitHub repository URL.`);
     }
 
     logger.info('Repository info extracted', { owner, repo });
@@ -156,12 +189,22 @@ export async function getProjectRepositoryConfig(projectId: string): Promise<{
 
   const config = project.config as any;
 
-  const owner = config?.vcs?.owner || config?.project?.owner;
-  const repo = config?.vcs?.repo || config?.project?.repo;
+  let owner = config?.vcs?.owner || config?.project?.owner;
+  let repo = config?.vcs?.repo || config?.project?.repo;
   const provider = config?.vcs?.provider || 'github';
 
+  // Fallback: parse from project.repository URL
+  if ((!owner || !repo) && project.repository) {
+    const parsed = parseGitHubUrl(project.repository);
+    if (parsed) {
+      owner = parsed.owner;
+      repo = parsed.repo;
+      logger.info('Parsed repository info from URL', { owner, repo, url: project.repository });
+    }
+  }
+
   if (!owner || !repo) {
-    throw new Error(`Repository not configured for project ${projectId}`);
+    throw new Error(`Repository not configured for project ${projectId}. Please set a valid GitHub repository URL.`);
   }
 
   return {
@@ -231,17 +274,61 @@ export async function analyzeProjectContext(
     });
 
     if (!project) {
-      throw new Error(`Project ${input.projectId} not found`);
+      logger.warn('Project not found, returning empty context', { projectId: input.projectId });
+      return {
+        projectStructure: {
+          language: 'unknown',
+          directories: [],
+          mainPaths: {},
+        },
+        dependencies: {
+          production: {},
+          dev: {},
+          mainLibraries: [],
+        },
+        documentation: {
+          conventions: [],
+          patterns: [],
+        },
+        relevantDocs: [],
+      };
     }
 
     const config = project.config as any;
 
-    // Extract repository info
-    const owner = config?.vcs?.owner || config?.project?.owner;
-    const repo = config?.vcs?.repo || config?.project?.repo;
+    // Extract repository info from config or parse from repository URL
+    let owner = config?.vcs?.owner || config?.project?.owner;
+    let repo = config?.vcs?.repo || config?.project?.repo;
+
+    // Fallback: parse from project.repository URL
+    if ((!owner || !repo) && project.repository) {
+      const parsed = parseGitHubUrl(project.repository);
+      if (parsed) {
+        owner = parsed.owner;
+        repo = parsed.repo;
+        logger.info('Parsed repository info from URL', { owner, repo, url: project.repository });
+      }
+    }
 
     if (!owner || !repo) {
-      throw new Error(`Repository not configured for project ${input.projectId}`);
+      logger.warn('Repository not configured, returning empty context', { projectId: input.projectId });
+      return {
+        projectStructure: {
+          language: 'unknown',
+          directories: [],
+          mainPaths: {},
+        },
+        dependencies: {
+          production: {},
+          dev: {},
+          mainLibraries: [],
+        },
+        documentation: {
+          conventions: [],
+          patterns: [],
+        },
+        relevantDocs: [],
+      };
     }
 
     // Resolve GitHub token via OAuth

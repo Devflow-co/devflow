@@ -596,6 +596,7 @@ export async function technicalPlanOrchestrator(
                   framework: undefined,
                 }
               : undefined,
+            aiModel: automation.featureModels?.bestPractices,
           },
         ],
       });

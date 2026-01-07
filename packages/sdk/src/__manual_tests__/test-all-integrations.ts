@@ -46,7 +46,14 @@ interface TestResult {
 }
 
 async function testAllIntegrations() {
-  const projectId = process.env.PROJECT_ID || 'indy-promocode-prod';
+  // PROJECT_ID is required
+  const projectId = process.env.PROJECT_ID;
+  if (!projectId) {
+    console.error('❌ PROJECT_ID environment variable is required');
+    console.log('\nUsage:');
+    console.log('  DATABASE_URL="postgresql://..." PROJECT_ID="your-project-id" npx tsx src/__manual_tests__/test-all-integrations.ts');
+    process.exit(1);
+  }
 
   console.log('\n🔌 DevFlow Integration Status Check\n');
   console.log(`Project: ${projectId}`);

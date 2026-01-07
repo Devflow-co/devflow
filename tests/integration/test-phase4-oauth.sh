@@ -4,7 +4,15 @@
 # Tests Token Refresh Service and OAuth flow
 
 API_URL="http://localhost:3000/api/v1"
-PROJECT_ID="indy-promocode-prod"
+
+# PROJECT_ID is required
+if [ -z "$PROJECT_ID" ]; then
+  echo "❌ PROJECT_ID environment variable is required"
+  echo ""
+  echo "Usage:"
+  echo "  PROJECT_ID=\"your-project-id\" ./tests/integration/test-phase4-oauth.sh"
+  exit 1
+fi
 
 echo "========================================="
 echo "Phase 4 OAuth Testing"

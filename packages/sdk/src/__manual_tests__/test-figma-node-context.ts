@@ -15,9 +15,16 @@ const prisma = new PrismaClient({
 });
 
 async function testFigmaNodeContext() {
-  const projectId = 'indy-promocode-prod';
-  const fileKey = 'TfJw2zsGB11mbievCt5c3n';
-  const nodeId = '12252-33902';
+  // PROJECT_ID is required
+  const projectId = process.env.PROJECT_ID;
+  if (!projectId) {
+    console.error('❌ PROJECT_ID environment variable is required');
+    console.log('\nUsage:');
+    console.log('  DATABASE_URL="postgresql://..." PROJECT_ID="your-project-id" FIGMA_FILE_KEY="xxx" FIGMA_NODE_ID="xxx" npx tsx src/__manual_tests__/test-figma-node-context.ts');
+    process.exit(1);
+  }
+  const fileKey = process.env.FIGMA_FILE_KEY || 'TfJw2zsGB11mbievCt5c3n';
+  const nodeId = process.env.FIGMA_NODE_ID || '12252-33902';
 
   console.log('\n🎨 Figma Node Context Extractor\n');
   console.log(`Project: ${projectId}`);

@@ -6,7 +6,7 @@ POST http://localhost:3001/api/v1/figma/extract-context
 Content-Type: application/json
 
 {
-  "projectId": "indy-promocode-prod",
+  "projectId": "<your-project-id>",
   "fileKey": "TfJw2zsGB11mbievCt5c3n",
   "nodeId": "12252-33902"
 }

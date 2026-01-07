@@ -61,3 +61,12 @@ export {
   type SaveExternalContextDocumentsInput,
   type SaveExternalContextDocumentsOutput,
 } from '@/activities/context-extraction.activities';
+
+// Workflow progress tracking activities
+export {
+  logWorkflowProgress,
+  logWorkflowFailure,
+  type WorkflowPhase,
+  type StepStatus,
+  type LogWorkflowProgressParams,
+} from '@/activities/workflow-progress.activities';

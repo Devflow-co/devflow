@@ -34,8 +34,14 @@ const redis = createClient({
 });
 
 async function testFigmaIntegration() {
-  // Configuration
-  const projectId = process.env.PROJECT_ID || 'indy-promocode-prod';
+  // Configuration - PROJECT_ID is required
+  const projectId = process.env.PROJECT_ID;
+  if (!projectId) {
+    console.error('❌ PROJECT_ID environment variable is required');
+    console.log('\nUsage:');
+    console.log('  DATABASE_URL="postgresql://..." PROJECT_ID="your-project-id" npx tsx src/__manual_tests__/test-figma-integration.ts');
+    process.exit(1);
+  }
   const fileKey = process.env.FIGMA_FILE_KEY || 'TfJw2zsGB11mbievCt5c3n';
   const nodeId = process.env.FIGMA_NODE_ID || '12252-33902';
 

@@ -10,6 +10,7 @@ import type { Ref } from 'vue'
 
 // Types mirroring @devflow/common (avoiding direct import for web compatibility)
 interface RefinementFeatures {
+  enableAutoStatusUpdate: boolean
   enableRagContext: boolean
   enableDocumentationAnalysis: boolean
   enableFigmaContext: boolean
@@ -20,26 +21,42 @@ interface RefinementFeatures {
   enableSubtaskCreation: boolean
 }
 
+interface RefinementFeatureModels {
+  poQuestions?: string
+  subtaskCreation?: string
+}
+
 interface UserStoryFeatures {
+  enableAutoStatusUpdate: boolean
   enableTaskSplitting: boolean
   reuseCodebaseContext: boolean
   reuseDocumentationContext: boolean
 }
 
+interface UserStoryFeatureModels {
+  taskSplitting?: string
+}
+
 interface TechnicalPlanFeatures {
+  enableAutoStatusUpdate: boolean
   enableBestPracticesQuery: boolean
   enableCouncilAI: boolean
   reuseCodebaseContext: boolean
   reuseDocumentationContext: boolean
 }
 
-interface PhaseConfig<T> {
+interface TechnicalPlanFeatureModels {
+  bestPractices?: string
+}
+
+interface PhaseConfig<T, M = Record<string, never>> {
   enabled: boolean
   aiModel: string
   features: T
+  featureModels?: M
 }
 
-interface TechnicalPlanPhaseConfig extends PhaseConfig<TechnicalPlanFeatures> {
+interface TechnicalPlanPhaseConfig extends PhaseConfig<TechnicalPlanFeatures, TechnicalPlanFeatureModels> {
   councilModels?: string[]
   councilChairmanModel?: string
 }
@@ -47,8 +64,8 @@ interface TechnicalPlanPhaseConfig extends PhaseConfig<TechnicalPlanFeatures> {
 export interface AutomationConfig {
   version: 1
   phases: {
-    refinement: PhaseConfig<RefinementFeatures>
-    userStory: PhaseConfig<UserStoryFeatures>
+    refinement: PhaseConfig<RefinementFeatures, RefinementFeatureModels>
+    userStory: PhaseConfig<UserStoryFeatures, UserStoryFeatureModels>
     technicalPlan: TechnicalPlanPhaseConfig
   }
 }
@@ -70,6 +87,7 @@ export interface OAuthConnection {
 
 // Default configuration (matches @devflow/common defaults)
 const DEFAULT_AI_MODEL = 'anthropic/claude-sonnet-4'
+const DEFAULT_BEST_PRACTICES_MODEL = 'perplexity/sonar-pro'
 
 const DEFAULT_CONFIG: AutomationConfig = {
   version: 1,
@@ -78,6 +96,7 @@ const DEFAULT_CONFIG: AutomationConfig = {
       enabled: true,
       aiModel: DEFAULT_AI_MODEL,
       features: {
+        enableAutoStatusUpdate: true,
         enableRagContext: true,
         enableDocumentationAnalysis: true,
         enableFigmaContext: true,
@@ -87,33 +106,51 @@ const DEFAULT_CONFIG: AutomationConfig = {
         enableContextDocuments: true,
         enableSubtaskCreation: true,
       },
+      featureModels: {},
     },
     userStory: {
       enabled: true,
       aiModel: DEFAULT_AI_MODEL,
       features: {
+        enableAutoStatusUpdate: true,
         enableTaskSplitting: true,
         reuseCodebaseContext: true,
         reuseDocumentationContext: true,
       },
+      featureModels: {},
     },
     technicalPlan: {
       enabled: true,
       aiModel: DEFAULT_AI_MODEL,
       features: {
+        enableAutoStatusUpdate: true,
         enableBestPracticesQuery: true,
         enableCouncilAI: false,
         reuseCodebaseContext: true,
         reuseDocumentationContext: true,
       },
+      featureModels: {
+        bestPractices: DEFAULT_BEST_PRACTICES_MODEL,
+      },
+      councilModels: [
+        'anthropic/claude-sonnet-4',
+        'openai/gpt-4o',
+        'google/gemini-2.0-flash-exp',
+      ],
+      councilChairmanModel: 'anthropic/claude-sonnet-4',
     },
   },
 }
 
 export function useWorkflowConfig(projectId: Ref<string>) {
   // State
-  const config = ref<AutomationConfig>(structuredClone(DEFAULT_CONFIG))
-  const originalConfig = ref<AutomationConfig>(structuredClone(DEFAULT_CONFIG))
+  // Deep clone helper that handles reactive proxies
+  const deepClone = <T>(obj: T): T => {
+    return JSON.parse(JSON.stringify(obj))
+  }
+
+  const config = ref<AutomationConfig>(deepClone(DEFAULT_CONFIG))
+  const originalConfig = ref<AutomationConfig>(deepClone(DEFAULT_CONFIG))
   const aiModels = ref<AIModelInfo[]>([])
   const loading = ref(false)
   const saving = ref(false)
@@ -170,11 +207,11 @@ export function useWorkflowConfig(projectId: Ref<string>) {
   // Initialize config from project data
   const initializeConfig = (initialConfig?: AutomationConfig | null) => {
     if (initialConfig) {
-      config.value = structuredClone(initialConfig)
-      originalConfig.value = structuredClone(initialConfig)
+      config.value = deepClone(initialConfig)
+      originalConfig.value = deepClone(initialConfig)
     } else {
-      config.value = structuredClone(DEFAULT_CONFIG)
-      originalConfig.value = structuredClone(DEFAULT_CONFIG)
+      config.value = deepClone(DEFAULT_CONFIG)
+      originalConfig.value = deepClone(DEFAULT_CONFIG)
     }
   }
 
@@ -213,6 +250,24 @@ export function useWorkflowConfig(projectId: Ref<string>) {
     ;(phaseConfig.features as any)[featureKey] = value
   }
 
+  // Update a feature-specific model override
+  const updateFeatureModel = <K extends keyof AutomationConfig['phases']>(
+    phase: K,
+    featureModelKey: string,
+    model: string
+  ) => {
+    const phaseConfig = config.value.phases[phase]
+    if (!phaseConfig.featureModels) {
+      ;(phaseConfig as any).featureModels = {}
+    }
+    if (model) {
+      ;(phaseConfig.featureModels as any)[featureModelKey] = model
+    } else {
+      // Remove the override if empty (use phase default)
+      delete (phaseConfig.featureModels as any)[featureModelKey]
+    }
+  }
+
   // Save config to API
   const save = async () => {
     try {
@@ -229,7 +284,7 @@ export function useWorkflowConfig(projectId: Ref<string>) {
       })
 
       // Update original to match saved
-      originalConfig.value = structuredClone(config.value)
+      originalConfig.value = deepClone(config.value)
     } catch (e: any) {
       error.value = e.message
       throw e
@@ -240,7 +295,7 @@ export function useWorkflowConfig(projectId: Ref<string>) {
 
   // Reset to original config
   const reset = () => {
-    config.value = structuredClone(originalConfig.value)
+    config.value = deepClone(originalConfig.value)
   }
 
   // Check if OAuth is connected for a feature
@@ -269,6 +324,7 @@ export function useWorkflowConfig(projectId: Ref<string>) {
     load,
     updatePhase,
     updateFeature,
+    updateFeatureModel,
     save,
     reset,
     isOAuthConnected,
