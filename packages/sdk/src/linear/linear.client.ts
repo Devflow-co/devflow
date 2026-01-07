@@ -410,7 +410,7 @@ export class LinearClient {
   /**
    * Get available workflow states for a team
    */
-  async getWorkflowStates(teamId: string): Promise<Array<{ id: string; name: string; type: string }>> {
+  async getWorkflowStates(teamId: string): Promise<Array<{ id: string; name: string; type: string; color?: string }>> {
     const team = await this.client.team(teamId);
     const states = await team.states();
 
@@ -418,7 +418,67 @@ export class LinearClient {
       id: s.id,
       name: s.name,
       type: s.type,
+      color: s.color,
     }));
+  }
+
+  /**
+   * Create a workflow state in a team
+   * @param teamId - The team ID
+   * @param name - State name (e.g., "To Refinement")
+   * @param type - Linear workflow state type (triage, backlog, unstarted, started, completed, canceled)
+   * @param color - Optional hex color for the state
+   */
+  async createWorkflowState(
+    teamId: string,
+    name: string,
+    type: 'triage' | 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled',
+    color?: string
+  ): Promise<{ id: string; name: string; type: string }> {
+    this.logger.info('Creating workflow state', { teamId, name, type });
+
+    try {
+      const mutation = `
+        mutation WorkflowStateCreate($input: WorkflowStateCreateInput!) {
+          workflowStateCreate(input: $input) {
+            success
+            workflowState {
+              id
+              name
+              type
+              color
+            }
+          }
+        }
+      `;
+
+      const result = await this.client.client.rawRequest(mutation, {
+        input: {
+          teamId,
+          name,
+          type,
+          color: color || undefined,
+        },
+      });
+
+      const data = result.data as any;
+      const workflowState = data?.workflowStateCreate?.workflowState;
+
+      if (!workflowState) {
+        throw new Error('Workflow state creation failed');
+      }
+
+      this.logger.info('Workflow state created', { teamId, name, id: workflowState.id });
+
+      return {
+        id: workflowState.id,
+        name: workflowState.name,
+        type: workflowState.type,
+      };
+    } catch (error) {
+      this.logger.error('Failed to create workflow state', error as Error, { teamId, name });
+      throw error;
+    }
   }
 
   /**

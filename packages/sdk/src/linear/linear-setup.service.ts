@@ -3,7 +3,7 @@
  *
  * Handles automatic setup of Linear workspace for DevFlow integration:
  * - Custom Fields (Figma URL, Sentry URL, GitHub Issue URL)
- * - Workflow States validation
+ * - Workflow States validation and creation
  */
 
 import { createLogger } from '@devflow/common';
@@ -22,6 +22,47 @@ export const DEVFLOW_CUSTOM_FIELDS = {
 
 export type DevFlowCustomFieldKey = keyof typeof DEVFLOW_CUSTOM_FIELDS;
 
+/**
+ * Linear workflow state type
+ */
+export type LinearWorkflowStateType = 'triage' | 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled';
+
+/**
+ * DevFlow workflow states that should exist in Linear
+ * Maps each state to its Linear type and optional color
+ */
+export const DEVFLOW_WORKFLOW_STATES: Array<{
+  name: string;
+  type: LinearWorkflowStateType;
+  color?: string;
+}> = [
+  // Backlog
+  { name: 'Backlog', type: 'backlog', color: '#bec2c8' },
+
+  // Phase 1: Refinement
+  { name: 'To Refinement', type: 'unstarted', color: '#e2e2e2' },
+  { name: 'Refinement In Progress', type: 'started', color: '#f2c94c' },
+  { name: 'Refinement Ready', type: 'started', color: '#27ae60' },
+  { name: 'Refinement Failed', type: 'canceled', color: '#eb5757' },
+
+  // Phase 2: User Story
+  { name: 'To User Story', type: 'unstarted', color: '#e2e2e2' },
+  { name: 'UserStory In Progress', type: 'started', color: '#56ccf2' },
+  { name: 'UserStory Ready', type: 'started', color: '#6fcf97' },
+  { name: 'UserStory Failed', type: 'canceled', color: '#eb5757' },
+
+  // Phase 3: Technical Plan
+  { name: 'To Plan', type: 'unstarted', color: '#e2e2e2' },
+  { name: 'Plan In Progress', type: 'started', color: '#bb6bd9' },
+  { name: 'Plan Ready', type: 'completed', color: '#27ae60' },
+  { name: 'Plan Failed', type: 'canceled', color: '#eb5757' },
+
+  // Generic states
+  { name: 'In Review', type: 'started', color: '#9b51e0' },
+  { name: 'Done', type: 'completed', color: '#219653' },
+  { name: 'Blocked', type: 'started', color: '#eb5757' },
+];
+
 export interface SetupCustomFieldsResult {
   created: string[];
   existing: string[];
@@ -32,6 +73,19 @@ export interface ValidateSetupResult {
   valid: boolean;
   missing: string[];
   fieldIds: Record<string, string>;
+}
+
+export interface ValidateWorkflowStatesResult {
+  valid: boolean;
+  existingStates: Array<{ name: string; id: string; type: string; color?: string }>;
+  missingStates: string[];
+  totalRequired: number;
+}
+
+export interface CreateWorkflowStatesResult {
+  created: string[];
+  existing: string[];
+  errors: Array<{ name: string; error: string }>;
 }
 
 export class LinearSetupService {
@@ -139,6 +193,94 @@ export class LinearSetupService {
       sentryUrl: customFields.get(DEVFLOW_CUSTOM_FIELDS.SENTRY_URL),
       githubIssueUrl: customFields.get(DEVFLOW_CUSTOM_FIELDS.GITHUB_ISSUE_URL),
     };
+  }
+
+  // ============================================
+  // Workflow States Operations
+  // ============================================
+
+  /**
+   * Validate which DevFlow workflow states exist in a Linear team
+   */
+  async validateWorkflowStates(teamId: string): Promise<ValidateWorkflowStatesResult> {
+    logger.info('Validating DevFlow workflow states', { teamId });
+
+    const existingStates = await this.client.getWorkflowStates(teamId);
+    const missingStates: string[] = [];
+    const foundStates: Array<{ name: string; id: string; type: string; color?: string }> = [];
+
+    for (const requiredState of DEVFLOW_WORKFLOW_STATES) {
+      const existing = existingStates.find(
+        (s) => s.name.toLowerCase() === requiredState.name.toLowerCase()
+      );
+
+      if (existing) {
+        foundStates.push({
+          name: existing.name,
+          id: existing.id,
+          type: existing.type,
+          color: existing.color,
+        });
+      } else {
+        missingStates.push(requiredState.name);
+      }
+    }
+
+    const valid = missingStates.length === 0;
+
+    logger.info('Workflow states validation complete', {
+      teamId,
+      valid,
+      existingCount: foundStates.length,
+      missingCount: missingStates.length,
+    });
+
+    return {
+      valid,
+      existingStates: foundStates,
+      missingStates,
+      totalRequired: DEVFLOW_WORKFLOW_STATES.length,
+    };
+  }
+
+  /**
+   * Create missing DevFlow workflow states in a Linear team
+   */
+  async createMissingWorkflowStates(teamId: string): Promise<CreateWorkflowStatesResult> {
+    logger.info('Creating missing DevFlow workflow states', { teamId });
+
+    const validation = await this.validateWorkflowStates(teamId);
+    const created: string[] = [];
+    const existing: string[] = validation.existingStates.map((s) => s.name);
+    const errors: Array<{ name: string; error: string }> = [];
+
+    for (const requiredState of DEVFLOW_WORKFLOW_STATES) {
+      if (validation.missingStates.includes(requiredState.name)) {
+        try {
+          await this.client.createWorkflowState(
+            teamId,
+            requiredState.name,
+            requiredState.type,
+            requiredState.color
+          );
+          created.push(requiredState.name);
+          logger.info('Created workflow state', { name: requiredState.name });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          errors.push({ name: requiredState.name, error: errorMessage });
+          logger.error('Failed to create workflow state', error as Error, { name: requiredState.name });
+        }
+      }
+    }
+
+    logger.info('Workflow states creation complete', {
+      teamId,
+      created: created.length,
+      existing: existing.length,
+      errors: errors.length,
+    });
+
+    return { created, existing, errors };
   }
 }
 
