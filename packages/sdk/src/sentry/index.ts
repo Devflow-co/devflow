@@ -17,4 +17,6 @@ export type {
   SentryStackFrame,
   SentryTag,
   SentryProject,
+  SentryOrganization,
+  SentryProjectDetail,
 } from './sentry.types';

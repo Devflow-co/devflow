@@ -107,3 +107,44 @@ export interface SentryIssueContext {
   errorMessage?: string;
   errorType?: string;
 }
+
+/**
+ * Sentry Organization
+ * Represents an organization the user has access to
+ */
+export interface SentryOrganization {
+  id: string;
+  slug: string;
+  name: string;
+  status: {
+    id: string;
+    name: string;
+  };
+  avatar?: {
+    avatarType: string;
+    avatarUuid?: string;
+  };
+  dateCreated?: string;
+}
+
+/**
+ * Sentry Project Detail
+ * Extended project info returned by organizations/{org}/projects endpoint
+ */
+export interface SentryProjectDetail {
+  id: string;
+  slug: string;
+  name: string;
+  platform?: string;
+  dateCreated: string;
+  isBookmarked: boolean;
+  isMember: boolean;
+  hasAccess: boolean;
+  organization: {
+    id: string;
+    slug: string;
+    name: string;
+  };
+  color?: string;
+  features?: string[];
+}

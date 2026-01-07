@@ -12,6 +12,8 @@ import {
   SentryIssueContext,
   SentryStacktrace,
   SentryStackFrame,
+  SentryOrganization,
+  SentryProjectDetail,
 } from './sentry.types';
 
 export class SentryClient {
@@ -155,6 +157,27 @@ export class SentryClient {
     }
 
     return context;
+  }
+
+  /**
+   * List all organizations the user has access to
+   * @returns Array of organizations
+   */
+  async listOrganizations(): Promise<SentryOrganization[]> {
+    const response = await this.client.get<SentryOrganization[]>('/organizations/');
+    return response.data;
+  }
+
+  /**
+   * List all projects in an organization
+   * @param orgSlug - Organization slug
+   * @returns Array of projects
+   */
+  async listProjects(orgSlug: string): Promise<SentryProjectDetail[]> {
+    const response = await this.client.get<SentryProjectDetail[]>(
+      `/organizations/${orgSlug}/projects/`,
+    );
+    return response.data;
   }
 }
 

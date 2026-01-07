@@ -1,6 +1,12 @@
 import { ITokenResolver } from '../auth/token-resolver.interface';
 import { createSentryClient } from './sentry.client';
-import { SentryIssue, SentryEvent, SentryIssueContext } from './sentry.types';
+import {
+  SentryIssue,
+  SentryEvent,
+  SentryIssueContext,
+  SentryOrganization,
+  SentryProjectDetail,
+} from './sentry.types';
 
 /**
  * Sentry Integration Service
@@ -67,6 +73,32 @@ export class SentryIntegrationService {
     const client = createSentryClient(token);
     // SentryClient doesn't have getUserInfo yet, but we can add it or call directly
     throw new Error('getUserInfo not yet implemented in SentryClient');
+  }
+
+  /**
+   * List all organizations the user has access to
+   *
+   * @param projectId - Project ID for token resolution
+   */
+  async listOrganizations(projectId: string): Promise<SentryOrganization[]> {
+    const token = await this.tokenResolver.getAccessToken(projectId, 'SENTRY');
+    const client = createSentryClient(token);
+    return await client.listOrganizations();
+  }
+
+  /**
+   * List all projects in an organization
+   *
+   * @param projectId - Project ID for token resolution
+   * @param orgSlug - Sentry organization slug
+   */
+  async listProjects(
+    projectId: string,
+    orgSlug: string,
+  ): Promise<SentryProjectDetail[]> {
+    const token = await this.tokenResolver.getAccessToken(projectId, 'SENTRY');
+    const client = createSentryClient(token);
+    return await client.listProjects(orgSlug);
   }
 }
 
