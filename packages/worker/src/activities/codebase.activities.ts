@@ -20,17 +20,19 @@ const logger = createLogger('CodebaseActivities');
 const prisma = new PrismaClient();
 
 /**
- * Resolve GitHub token for a project via OAuth
- * No fallback - OAuth required
+ * Resolve GitHub token for a project via GitHub App Installation
  */
 async function resolveGitHubToken(projectId: string): Promise<string> {
   try {
     const token = await oauthResolver.resolveGitHubToken(projectId);
-    logger.info('Using OAuth token for GitHub', { projectId });
+    logger.info('Using GitHub App token', { projectId });
     return token;
   } catch (error) {
+    logger.error('Failed to resolve GitHub App token', error as Error, { projectId });
     throw new Error(
-      `No GitHub OAuth connection configured for project ${projectId}. Please configure OAuth via: POST /api/v1/auth/github/device/initiate`,
+      `No GitHub App installation found for project ${projectId}. ` +
+      `Please install the DevFlow GitHub App for this project. ` +
+      `Error: ${(error as Error).message}`,
     );
   }
 }
