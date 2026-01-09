@@ -54,6 +54,8 @@ devflow/
 - REST endpoints: `/health`, `/projects`, `/tasks`, `/webhooks/*`, `/workflows/*`
 - OAuth endpoints: `/auth/{provider}/*` (GitHub, Linear, Figma, Sentry)
 - User auth: `/user-auth/*` (signup, login, OAuth, email verification)
+- User settings: `/user/settings/*` (profile, avatar, password)
+- Organizations: `/organizations/*` (settings, logo, members)
 
 ### @devflow/worker
 - Main workflow: `devflowWorkflow` (router)
@@ -67,6 +69,7 @@ devflow/
 - **Integrations:** FigmaIntegrationService, SentryIntegrationService
 - **RAG:** Indexing, retrieval, embeddings
 - **Auth:** Token encryption, storage, refresh
+- **Storage:** SupabaseStorageService (avatar, logo uploads)
 
 ### @devflow/cli
 - Project: `init`, `project:create`, `project:list`
@@ -77,10 +80,10 @@ devflow/
 ### @devflow/web
 - **Framework:** Nuxt 4, Vue 3, Pinia, Tailwind CSS
 - **Authentication:** Session-based with httpOnly cookies, SSO (Google, GitHub)
-- **Pages:** `/login`, `/signup`, `/dashboard`, `/projects`, `/projects/{id}`, `/forgot-password`, `/reset-password`, `/verify-email`
-- **Features:** Project management, OAuth integration management (connect/test/disconnect), real-time stats
+- **Pages:** `/login`, `/signup`, `/dashboard`, `/projects`, `/projects/{id}`, `/settings/profile`, `/settings/organization`, `/forgot-password`, `/reset-password`, `/verify-email`
+- **Features:** Project management, OAuth integration management (connect/test/disconnect), user & org settings, real-time stats
 - **OAuth Flow:** Automatic popup with 1s polling (60s timeout)
-- **State:** Pinia stores for projects and integrations with localStorage persistence
+- **State:** Pinia stores for projects, integrations, and settings with localStorage persistence
 
 **Details:** [.docs/WEB_INTERFACE.md](.docs/WEB_INTERFACE.md)
 

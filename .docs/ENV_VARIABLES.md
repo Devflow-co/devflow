@@ -187,6 +187,29 @@ QDRANT_COLLECTION_NAME=devflow_codebase
 
 ---
 
+## Supabase Storage
+
+Used for avatar and logo uploads.
+
+```bash
+# Supabase project URL
+SUPABASE_URL=https://xxx.supabase.co
+
+# Service role key (server-side only, has full access)
+SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# Storage bucket name
+SUPABASE_BUCKET=devflow
+```
+
+**Setup Instructions:**
+1. Create a Supabase project at https://supabase.com
+2. Go to Project Settings > API to get URL and service key
+3. Create a bucket named "devflow" in Storage
+4. Configure bucket policies for public read access (optional)
+
+---
+
 ## Application
 
 ```bash
@@ -245,6 +268,11 @@ SMTP_FROM=noreply@devflow.local
 
 # Frontend
 FRONTEND_URL=http://localhost:3001
+
+# Supabase Storage (for avatar/logo uploads)
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_SERVICE_KEY=eyJ...
+SUPABASE_BUCKET=devflow
 ```
 
 ---

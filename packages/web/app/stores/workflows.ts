@@ -15,6 +15,10 @@ export interface WorkflowSummary {
     title: string
     linearId: string
   }
+  project?: {
+    id: string
+    name: string
+  }
   startedAt?: string
   completedAt?: string
   duration?: number
@@ -109,8 +113,13 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   // State
   const workflows = ref<Map<string, WorkflowSummary>>(new Map())
   const workflowProgress = ref<Map<string, WorkflowProgress>>(new Map())
+  const allWorkflows = ref<WorkflowSummary[]>([])
+  const allWorkflowsTotal = ref(0)
   const loading = ref(false)
   const error = ref<string | null>(null)
+
+  // Polling state
+  let listPollingInterval: ReturnType<typeof setInterval> | null = null
 
   // Computed
   const workflowsList = computed(() => Array.from(workflows.value.values()))
@@ -125,6 +134,10 @@ export const useWorkflowsStore = defineStore('workflows', () => {
 
   const failedWorkflows = computed(() =>
     workflowsList.value.filter((w) => w.status === 'FAILED')
+  )
+
+  const hasRunningWorkflows = computed(() =>
+    allWorkflows.value.some((w) => w.status === 'RUNNING' || w.status === 'PENDING')
   )
 
   // API helper
@@ -150,6 +163,42 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   }
 
   // Actions
+
+  /**
+   * Fetch all workflows for the authenticated user
+   */
+  const fetchAllWorkflows = async (options?: { limit?: number; status?: string; offset?: number }) => {
+    try {
+      loading.value = true
+      error.value = null
+
+      const params = new URLSearchParams()
+      if (options?.limit) params.append('limit', options.limit.toString())
+      if (options?.status) params.append('status', options.status)
+      if (options?.offset) params.append('offset', options.offset.toString())
+
+      const queryString = params.toString() ? `?${params.toString()}` : ''
+      const response = await apiFetch<{ workflows: WorkflowSummary[]; total: number }>(
+        `/workflows${queryString}`
+      )
+
+      // Update state
+      allWorkflows.value = response.workflows
+      allWorkflowsTotal.value = response.total
+
+      // Also update workflows map
+      response.workflows.forEach((workflow) => {
+        workflows.value.set(workflow.workflowId, workflow)
+      })
+
+      return response
+    } catch (e: any) {
+      error.value = e.message || 'Failed to fetch workflows'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
 
   /**
    * Fetch workflows for a project
@@ -299,17 +348,46 @@ export const useWorkflowsStore = defineStore('workflows', () => {
   }
 
   /**
+   * Start polling the workflow list
+   */
+  const startListPolling = (fetchFn: () => Promise<void>, intervalMs: number = 5000) => {
+    stopListPolling()
+    listPollingInterval = setInterval(async () => {
+      try {
+        await fetchFn()
+      } catch (e) {
+        console.error('List polling error:', e)
+      }
+    }, intervalMs)
+  }
+
+  /**
+   * Stop polling the workflow list
+   */
+  const stopListPolling = () => {
+    if (listPollingInterval) {
+      clearInterval(listPollingInterval)
+      listPollingInterval = null
+    }
+  }
+
+  /**
    * Clear all cached workflows
    */
   const clearCache = () => {
     workflows.value.clear()
     workflowProgress.value.clear()
+    allWorkflows.value = []
+    allWorkflowsTotal.value = 0
+    stopListPolling()
   }
 
   return {
     // State
     workflows,
     workflowProgress,
+    allWorkflows,
+    allWorkflowsTotal,
     loading,
     error,
 
@@ -318,8 +396,10 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     runningWorkflows,
     completedWorkflows,
     failedWorkflows,
+    hasRunningWorkflows,
 
     // Actions
+    fetchAllWorkflows,
     fetchProjectWorkflows,
     fetchWorkflowProgress,
     fetchWorkflowTimeline,
@@ -327,6 +407,8 @@ export const useWorkflowsStore = defineStore('workflows', () => {
     cancelWorkflow,
     getWorkflow,
     getWorkflowProgress,
+    startListPolling,
+    stopListPolling,
     clearCache,
   }
 })

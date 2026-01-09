@@ -189,10 +189,13 @@
           </p>
         </NuxtLink>
 
-        <!-- Workflows Card (Coming Soon) -->
-        <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm opacity-60">
+        <!-- Workflows Card -->
+        <NuxtLink
+          to="/workflows"
+          class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm hover:shadow-lg transition-all group"
+        >
           <div class="flex items-center justify-between mb-4">
-            <div class="w-12 h-12 rounded-lg bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
+            <div class="w-12 h-12 rounded-lg bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center group-hover:scale-110 transition-transform">
               <svg class="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   stroke-linecap="round"
@@ -202,15 +205,15 @@
                 />
               </svg>
             </div>
-            <span class="px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded">
-              Coming Soon
-            </span>
+            <svg class="w-5 h-5 text-gray-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
           </div>
           <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Workflows</h3>
           <p class="text-sm text-gray-600 dark:text-gray-400">
             Monitor and manage your automated DevFlow workflows
           </p>
-        </div>
+        </NuxtLink>
 
         <!-- Analytics Card (Coming Soon) -->
         <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm opacity-60">

@@ -14,10 +14,11 @@
 5. [Authentication](#authentication)
 6. [Project Management](#project-management)
 7. [OAuth Integration Management](#oauth-integration-management)
-8. [Components Reference](#components-reference)
-9. [State Management](#state-management)
-10. [Security](#security)
-11. [Troubleshooting](#troubleshooting)
+8. [Settings](#settings)
+9. [Components Reference](#components-reference)
+10. [State Management](#state-management)
+11. [Security](#security)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -540,6 +541,108 @@ Content-Type: application/json
   "sentryProjectSlug": "my-project"
 }
 ```
+
+---
+
+## Settings
+
+The settings interface allows users to manage their profile and organization settings.
+
+### Accessing Settings
+
+Settings can be accessed from the user dropdown menu in the navbar:
+- **Profile Settings** - `/settings/profile`
+- **Organization** - `/settings/organization`
+
+### Profile Settings (`/settings/profile`)
+
+**Features:**
+- **Avatar Upload** - Upload profile picture with drag & drop support
+  - Supported formats: PNG, JPG, WebP, GIF
+  - Maximum size: 5MB
+  - Preview before upload
+- **Profile Information** - Update display name
+- **Email Display** - View email (SSO users cannot change)
+- **Password Change** - Update password (non-SSO users only)
+  - Requires current password
+  - Password strength validation
+  - All sessions invalidated on change
+- **SSO Information** - Shows connected SSO provider (Google/GitHub)
+- **Account Info** - Member since date, last login
+
+**API Endpoints:**
+```
+GET    /api/v1/user/settings/profile     # Get user profile
+PUT    /api/v1/user/settings/profile     # Update profile (name)
+POST   /api/v1/user/settings/avatar      # Upload avatar (multipart)
+DELETE /api/v1/user/settings/avatar      # Remove avatar
+PUT    /api/v1/user/settings/email       # Update email (requires password)
+PUT    /api/v1/user/settings/password    # Change password
+```
+
+### Organization Settings (`/settings/organization`)
+
+**Features:**
+- **Organization Logo** - Upload organization logo
+  - Supported formats: PNG, JPG, WebP, GIF
+  - Maximum size: 10MB
+  - Requires OWNER or ADMIN role
+- **Organization Information** - Update name and billing email
+- **Team Members** - View and manage organization members
+  - Invite new members by email
+  - Change member roles (ADMIN, MAINTAINER, VIEWER)
+  - Remove members
+  - Role-based permissions (see below)
+- **Danger Zone** - Delete organization (OWNER only)
+
+**Role Permissions:**
+
+| Permission | OWNER | ADMIN | MAINTAINER | VIEWER |
+|------------|-------|-------|------------|--------|
+| View organization info | ✅ | ✅ | ✅ | ✅ |
+| Update organization | ✅ | ✅ | ❌ | ❌ |
+| Upload/remove logo | ✅ | ✅ | ❌ | ❌ |
+| View members | ✅ | ✅ | ✅ | ✅ |
+| Invite members | ✅ | ✅ | ❌ | ❌ |
+| Change member roles | ✅ | ✅* | ❌ | ❌ |
+| Remove members | ✅ | ✅* | ❌ | ❌ |
+| Delete organization | ✅ | ❌ | ❌ | ❌ |
+
+*ADMIN cannot manage OWNER or other ADMINs
+
+**API Endpoints:**
+```
+GET    /api/v1/organizations/current              # Get current organization
+GET    /api/v1/organizations/:id                  # Get organization by ID
+PUT    /api/v1/organizations/:id                  # Update organization
+POST   /api/v1/organizations/:id/logo             # Upload logo (multipart)
+DELETE /api/v1/organizations/:id/logo             # Remove logo
+GET    /api/v1/organizations/:id/members          # List members
+POST   /api/v1/organizations/:id/members          # Invite member
+PUT    /api/v1/organizations/:id/members/:mid/role # Update member role
+DELETE /api/v1/organizations/:id/members/:mid     # Remove member
+```
+
+### Image Upload
+
+Both avatar and logo uploads use Supabase Storage:
+
+**Configuration (Environment Variables):**
+```bash
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_SERVICE_KEY=eyJ...
+SUPABASE_BUCKET=devflow
+```
+
+**Upload Flow:**
+1. User selects or drops image file
+2. Client-side validation (type, size)
+3. Preview displayed
+4. User clicks "Save"
+5. File sent as multipart/form-data
+6. Server validates and uploads to Supabase
+7. Public URL stored in database
+8. Old image deleted if replacing
 
 ---
 

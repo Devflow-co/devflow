@@ -607,7 +607,8 @@ model Organization {
   id          String   @id @default(cuid())
   slug        String   @unique
   name        String
-  
+  logo        String?  // Supabase Storage public URL
+
   // Quotas (Phase 10 - Billing)
   tokenQuota  Int      @default(1000000) @map("token_quota")  // 1M tokens
   costQuota   Float    @default(100.0) @map("cost_quota")     // $100

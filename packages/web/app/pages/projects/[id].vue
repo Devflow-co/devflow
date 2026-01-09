@@ -70,6 +70,17 @@
               Integrations
             </button>
             <button
+              @click="activeTab = 'workflows'"
+              :class="[
+                'py-4 px-1 border-b-2 font-medium text-sm transition-colors',
+                activeTab === 'workflows'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
+              ]"
+            >
+              Workflows
+            </button>
+            <button
               @click="activeTab = 'workflow'"
               :class="[
                 'py-4 px-1 border-b-2 font-medium text-sm transition-colors',
@@ -78,7 +89,7 @@
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200'
               ]"
             >
-              Workflow
+              Config
             </button>
             <button
               @click="activeTab = 'settings'"
@@ -615,7 +626,73 @@
           </IntegrationCard>
         </div>
 
-        <!-- Tab Content: Workflow -->
+        <!-- Tab Content: Workflows List -->
+        <div v-if="activeTab === 'workflows'" class="space-y-6">
+          <!-- Header with polling indicator -->
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Project Workflows</h2>
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                {{ projectWorkflowsTotal }} workflows in this project
+              </p>
+            </div>
+            <div class="flex items-center gap-3">
+              <div
+                v-if="isWorkflowsPolling"
+                class="flex items-center gap-2 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg"
+              >
+                <span class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+                <span class="text-xs text-blue-600 dark:text-blue-400">Live updates</span>
+              </div>
+              <button
+                @click="fetchProjectWorkflows"
+                :disabled="workflowsLoading"
+                class="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+              >
+                <svg
+                  class="w-4 h-4"
+                  :class="{ 'animate-spin': workflowsLoading }"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Workflow List -->
+          <WorkflowList
+            :workflows="projectWorkflows"
+            :loading="workflowsLoading && projectWorkflows.length === 0"
+            @select="openProjectWorkflowDetail"
+            @cancel="handleCancelProjectWorkflow"
+          />
+
+          <!-- Slide Over for Workflow Detail -->
+          <WorkflowSlideOver :open="!!selectedWorkflowId" @close="closeProjectWorkflowDetail">
+            <WorkflowDetail
+              v-if="selectedWorkflowProgress"
+              :progress="selectedWorkflowProgress"
+              :is-polling="isWorkflowDetailPolling"
+              @close="closeProjectWorkflowDetail"
+            />
+            <div
+              v-else-if="workflowDetailLoading"
+              class="flex items-center justify-center h-full"
+            >
+              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+          </WorkflowSlideOver>
+        </div>
+
+        <!-- Tab Content: Workflow Config -->
         <div v-if="activeTab === 'workflow'">
           <WorkflowConfig
             :project-id="selectedProject.id"
@@ -741,7 +818,12 @@ import { storeToRefs } from 'pinia'
 import IntegrationCard from '@/components/IntegrationCard.vue'
 import GitHubAppSelector from '@/components/GitHubAppSelector.vue'
 import WorkflowConfig from '@/components/workflow/WorkflowConfig.vue'
+import WorkflowList from '@/components/workflow/WorkflowList.vue'
+import WorkflowDetail from '@/components/workflow/WorkflowDetail.vue'
+import WorkflowSlideOver from '@/components/workflow/WorkflowSlideOver.vue'
 import RagTab from '@/components/rag/RagTab.vue'
+import { useWorkflowsStore, type WorkflowProgress } from '@/stores/workflows'
+import { useWorkflowPolling } from '@/composables/useWorkflowPolling'
 
 definePageMeta({
   middleware: 'auth',
@@ -752,8 +834,29 @@ const projectId = computed(() => route.params.id as string)
 
 const projectsStore = useProjectsStore()
 const integrationsStore = useIntegrationsStore()
+const workflowsStore = useWorkflowsStore()
 const { selectedProject, loading: projectsLoading } = storeToRefs(projectsStore)
 const { integrationConfig, connections, githubAppInstallation, loading: integrationsLoading } = storeToRefs(integrationsStore)
+
+// Workflows state
+const projectWorkflows = ref<any[]>([])
+const projectWorkflowsTotal = ref(0)
+const workflowsLoading = ref(false)
+const selectedWorkflowId = ref<string | null>(null)
+const workflowDetailLoading = ref(false)
+const isWorkflowsPolling = ref(false)
+let workflowsPollingInterval: ReturnType<typeof setInterval> | null = null
+
+// Workflow detail polling
+const {
+  progress: selectedWorkflowProgress,
+  isPolling: isWorkflowDetailPolling,
+  startPolling: startWorkflowDetailPolling,
+  stopPolling: stopWorkflowDetailPolling,
+} = useWorkflowPolling(
+  computed(() => selectedWorkflowId.value || ''),
+  { interval: 2000, autoStart: false }
+)
 
 // OAuth connections formatted for WorkflowConfig component
 const oauthConnections = computed(() => {
@@ -763,7 +866,7 @@ const oauthConnections = computed(() => {
   }))
 })
 
-const activeTab = ref<'integrations' | 'workflow' | 'settings' | 'context'>('integrations')
+const activeTab = ref<'integrations' | 'workflows' | 'workflow' | 'settings' | 'context'>('integrations')
 
 // Available GitHub repositories from GitHub App
 const availableRepos = ref<Array<{ fullName: string; url: string }>>([])
@@ -1110,4 +1213,97 @@ const openSlackChannelPicker = () => {
     `width=${width},height=${height},left=${left},top=${top},scrollbars=yes`
   )
 }
+
+// ============================================
+// Workflows Tab Methods
+// ============================================
+
+const fetchProjectWorkflows = async () => {
+  try {
+    workflowsLoading.value = true
+    const response = await workflowsStore.fetchProjectWorkflows(projectId.value, { limit: 100 })
+    projectWorkflows.value = response.workflows
+    projectWorkflowsTotal.value = response.total
+  } catch (e) {
+    console.error('Failed to fetch project workflows:', e)
+  } finally {
+    workflowsLoading.value = false
+  }
+}
+
+const hasRunningProjectWorkflows = computed(() =>
+  projectWorkflows.value.some((w) => w.status === 'RUNNING' || w.status === 'PENDING')
+)
+
+const openProjectWorkflowDetail = async (workflowId: string) => {
+  selectedWorkflowId.value = workflowId
+  workflowDetailLoading.value = true
+
+  try {
+    await workflowsStore.fetchWorkflowProgress(workflowId)
+    const progress = workflowsStore.getWorkflowProgress(workflowId)
+
+    if (progress && (progress.workflow.status === 'RUNNING' || progress.workflow.status === 'PENDING')) {
+      startWorkflowDetailPolling()
+    }
+  } catch (e) {
+    console.error('Failed to fetch workflow progress:', e)
+  } finally {
+    workflowDetailLoading.value = false
+  }
+}
+
+const closeProjectWorkflowDetail = () => {
+  stopWorkflowDetailPolling()
+  selectedWorkflowId.value = null
+}
+
+const handleCancelProjectWorkflow = async (workflowId: string) => {
+  if (!confirm('Are you sure you want to cancel this workflow?')) return
+
+  try {
+    await workflowsStore.cancelWorkflow(workflowId)
+    await fetchProjectWorkflows()
+  } catch (e: any) {
+    alert(`Failed to cancel workflow: ${e.message}`)
+  }
+}
+
+const startWorkflowsPolling = () => {
+  if (workflowsPollingInterval) return
+  isWorkflowsPolling.value = true
+  workflowsPollingInterval = setInterval(async () => {
+    await fetchProjectWorkflows()
+    if (!hasRunningProjectWorkflows.value) {
+      stopWorkflowsPolling()
+    }
+  }, 5000)
+}
+
+const stopWorkflowsPolling = () => {
+  if (workflowsPollingInterval) {
+    clearInterval(workflowsPollingInterval)
+    workflowsPollingInterval = null
+  }
+  isWorkflowsPolling.value = false
+}
+
+// Watch for tab changes to fetch workflows
+watch(activeTab, async (newTab) => {
+  if (newTab === 'workflows' && projectWorkflows.value.length === 0) {
+    await fetchProjectWorkflows()
+    if (hasRunningProjectWorkflows.value) {
+      startWorkflowsPolling()
+    }
+  } else if (newTab !== 'workflows') {
+    stopWorkflowsPolling()
+    closeProjectWorkflowDetail()
+  }
+})
+
+// Cleanup on unmount
+onUnmounted(() => {
+  stopWorkflowsPolling()
+  stopWorkflowDetailPolling()
+})
 </script>

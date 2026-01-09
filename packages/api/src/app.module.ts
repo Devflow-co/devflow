@@ -14,6 +14,8 @@ import { HealthModule } from '@/health/health.module';
 import { AuthModule } from '@/auth/auth.module';
 import { IntegrationsModule } from '@/integrations/integrations.module';
 import { UserAuthModule } from '@/user-auth/user-auth.module';
+import { UserSettingsModule } from '@/user-settings/user-settings.module';
+import { OrganizationsModule } from '@/organizations/organizations.module';
 import { ConfigAppModule } from '@/config/config.module';
 import { RagModule } from '@/rag/rag.module';
 
@@ -45,6 +47,8 @@ import { RagModule } from '@/rag/rag.module';
     HealthModule,
     AuthModule,
     UserAuthModule,
+    UserSettingsModule,
+    OrganizationsModule,
     IntegrationsModule,
     ConfigAppModule,
     ProjectsModule,

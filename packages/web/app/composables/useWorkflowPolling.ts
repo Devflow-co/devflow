@@ -22,7 +22,7 @@ export interface WorkflowProgress {
   workflow: {
     id: string
     workflowId: string
-    status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+    status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'TIMED_OUT'
     currentPhase?: string
     currentStepName?: string
     currentStepNumber?: number
@@ -44,7 +44,7 @@ export interface WorkflowProgress {
     steps: Array<{
       stepNumber: number
       stepName: string
-      status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+      status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'TIMED_OUT'
       startedAt?: string
       completedAt?: string
       duration?: number
@@ -69,7 +69,7 @@ export interface UseWorkflowPollingOptions {
   autoStart?: boolean
 }
 
-const TERMINAL_STATUSES = ['COMPLETED', 'FAILED', 'CANCELLED'] as const
+const TERMINAL_STATUSES = ['COMPLETED', 'FAILED', 'CANCELLED', 'TIMED_OUT'] as const
 
 export const useWorkflowPolling = (
   workflowId: Ref<string> | string,

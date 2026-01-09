@@ -112,5 +112,8 @@ export * from './sentry';
 // Slack
 export * from './slack';
 
+// Storage (Supabase)
+export * from './storage';
+
 // Factory functions
 export * from './factories';

@@ -11,6 +11,16 @@
   - Comprehensive unit and integration tests for authentication features
   - Docker and environment configurations for email service integration
 
+- **User & Organization Settings** - Complete settings interface
+  - User profile management (name, avatar, email)
+  - Password change for non-SSO users
+  - Organization settings (name, logo, billing email)
+  - Team member management (invite, role change, remove)
+  - Supabase Storage integration for avatar and logo uploads
+  - Role-based access control (OWNER, ADMIN, MAINTAINER, VIEWER)
+  - New pages: `/settings/profile`, `/settings/organization`
+  - Settings links added to user dropdown menu in navbar
+
 ## [2.5.1] - 2025-12-28
 ### Changed
 - **Documentation Reorganization** - Complete restructure of project documentation

@@ -122,6 +122,91 @@ export class WorkflowsService {
   }
 
   /**
+   * List all workflows for a user (across all accessible projects)
+   */
+  async listAllWorkflows(
+    userId: string,
+    options?: { limit?: number; status?: string; offset?: number },
+  ) {
+    this.logger.info('Listing all workflows for user', { userId, options });
+
+    const limit = options?.limit ? parseInt(options.limit.toString(), 10) : 50;
+    const offset = options?.offset ? parseInt(options.offset.toString(), 10) : 0;
+    const statusFilter = options?.status ? { status: options.status as any } : {};
+
+    // Get all project IDs the user has access to via their organizations
+    const userOrgs = await this.prisma.organizationMember.findMany({
+      where: { userId },
+      select: { organizationId: true },
+    });
+    const orgIds = userOrgs.map((o) => o.organizationId);
+
+    const orgProjects = await this.prisma.organizationProject.findMany({
+      where: { organizationId: { in: orgIds } },
+      select: { projectId: true },
+    });
+    const projectIds = orgProjects.map((p) => p.projectId);
+
+    // Get total count
+    const total = await this.prisma.workflow.count({
+      where: {
+        projectId: { in: projectIds },
+        ...statusFilter,
+      },
+    });
+
+    // Get workflows
+    const workflows = await this.prisma.workflow.findMany({
+      where: {
+        projectId: { in: projectIds },
+        ...statusFilter,
+      },
+      include: {
+        task: {
+          select: {
+            id: true,
+            title: true,
+            linearId: true,
+          },
+        },
+        project: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        _count: {
+          select: {
+            stages: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: offset,
+      take: limit,
+    });
+
+    return {
+      workflows: workflows.map((w) => ({
+        id: w.id,
+        workflowId: w.workflowId,
+        status: w.status,
+        currentPhase: w.currentPhase,
+        currentStepName: w.currentStepName,
+        currentStepNumber: w.currentStepNumber,
+        progressPercent: w.progressPercent,
+        task: w.task,
+        project: w.project,
+        startedAt: w.startedAt,
+        completedAt: w.completedAt,
+        duration: w.duration,
+        stageCount: w._count.stages,
+      })),
+      total,
+    };
+  }
+
+  /**
    * List workflows for a project
    */
   async listProjectWorkflows(projectId: string, options?: { limit?: number; status?: string }) {
@@ -129,6 +214,14 @@ export class WorkflowsService {
 
     const limit = options?.limit ? parseInt(options.limit.toString(), 10) : 50;
     const statusFilter = options?.status ? { status: options.status as any } : {};
+
+    // Get total count
+    const total = await this.prisma.workflow.count({
+      where: {
+        projectId,
+        ...statusFilter,
+      },
+    });
 
     const workflows = await this.prisma.workflow.findMany({
       where: {
@@ -168,7 +261,7 @@ export class WorkflowsService {
         duration: w.duration,
         stageCount: w._count.stages,
       })),
-      total: workflows.length,
+      total,
     };
   }
 
