@@ -28,6 +28,7 @@ import { PrismaModule } from '@/prisma/prisma.module';
   exports: [
     UserAuthService,
     SessionService,
+    PasswordService,
     EmailService,
     AuthGuard,
   ],
