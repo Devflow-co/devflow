@@ -31,7 +31,7 @@ export class OpenAIEmbeddingsProvider implements EmbeddingsProvider {
       maxRetries: config.maxRetries || 3,
       timeout: config.timeout || 60000,
     });
-    this.model = config.model || 'text-embedding-3-large';
+    this.model = config.model || 'openai/text-embedding-3-large';
     this.dimensions = config.dimensions || 3072;
     this.maxRetries = config.maxRetries || 3;
 

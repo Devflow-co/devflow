@@ -63,6 +63,23 @@ export interface TechnicalPlanFeatures {
   reuseDocumentationContext: boolean;
 }
 
+/**
+ * Feature flags for the Code Generation phase (Phase 4)
+ * Uses local LLM (Ollama) - no cloud fallback for privacy
+ */
+export interface CodeGenerationFeatures {
+  /** Automatically update Linear issue status (In Progress, Code Review, Failed) */
+  enableAutoStatusUpdate: boolean;
+  /** Reuse codebase context document from Phase 1 */
+  reuseCodebaseContext: boolean;
+  /** Reuse technical plan document from Phase 3 */
+  reuseTechnicalPlan: boolean;
+  /** Enable guardrails validation for file paths (prevent sensitive file access) */
+  enableGuardrails: boolean;
+  /** Create PR as draft (always true for safety - requires human review) */
+  createDraftPR: boolean;
+}
+
 // ============================================
 // Feature Model Overrides
 // ============================================
@@ -125,6 +142,10 @@ export interface TechnicalPlanPhaseConfig extends BasePhaseConfig<TechnicalPlanF
   councilChairmanModel?: string;
 }
 
+export interface CodeGenerationPhaseConfig extends BasePhaseConfig<CodeGenerationFeatures> {
+  /** Note: Uses local Ollama model, aiModel specifies Ollama model name (e.g., 'deepseek-coder:6.7b') */
+}
+
 // ============================================
 // Full Automation Configuration
 // ============================================
@@ -141,6 +162,7 @@ export interface AutomationConfig {
     refinement: RefinementPhaseConfig;
     userStory: UserStoryPhaseConfig;
     technicalPlan: TechnicalPlanPhaseConfig;
+    codeGeneration: CodeGenerationPhaseConfig;
   };
 }
 
@@ -151,7 +173,7 @@ export interface AutomationConfig {
 export type AIProvider = 'anthropic' | 'openai' | 'google' | 'meta';
 export type ModelTier = 'fast' | 'balanced' | 'premium';
 export type CostTier = 1 | 2 | 3;
-export type PhaseName = 'refinement' | 'userStory' | 'technicalPlan';
+export type PhaseName = 'refinement' | 'userStory' | 'technicalPlan' | 'codeGeneration';
 
 export interface AIModelInfo {
   /** Model ID used in API calls (e.g., 'anthropic/claude-sonnet-4') */
@@ -216,6 +238,17 @@ export const DEFAULT_TECHNICAL_PLAN_FEATURES: TechnicalPlanFeatures = {
   reuseDocumentationContext: true,
 };
 
+export const DEFAULT_CODE_GENERATION_FEATURES: CodeGenerationFeatures = {
+  enableAutoStatusUpdate: true,
+  reuseCodebaseContext: true,
+  reuseTechnicalPlan: true,
+  enableGuardrails: true,
+  createDraftPR: true, // Always true for safety - requires human review
+};
+
+/** Default Ollama model for code generation (local LLM) */
+export const DEFAULT_OLLAMA_CODE_MODEL = 'deepseek-coder:6.7b';
+
 export const DEFAULT_AUTOMATION_CONFIG: AutomationConfig = {
   version: 1,
   phases: {
@@ -233,6 +266,11 @@ export const DEFAULT_AUTOMATION_CONFIG: AutomationConfig = {
       enabled: true,
       aiModel: DEFAULT_AI_MODEL,
       features: DEFAULT_TECHNICAL_PLAN_FEATURES,
+    },
+    codeGeneration: {
+      enabled: true,
+      aiModel: DEFAULT_OLLAMA_CODE_MODEL, // Local Ollama model
+      features: DEFAULT_CODE_GENERATION_FEATURES,
     },
   },
 };

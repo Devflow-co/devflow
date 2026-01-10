@@ -1,10 +1,11 @@
 /**
- * Main DevFlow Orchestration Workflow - Three-Phase Agile Router
+ * Main DevFlow Orchestration Workflow - Four-Phase Agile Router
  *
  * Routes to appropriate orchestrator based on Linear task status:
  * - To Refinement → Refinement Orchestrator (Phase 1)
  * - To User Story / Refinement Ready → User Story Orchestrator (Phase 2)
  * - To Plan / UserStory Ready → Technical Plan Orchestrator (Phase 3)
+ * - To Code / Plan Ready → Code Generation Orchestrator (Phase 4)
  *
  * Uses atomic workflow architecture where each orchestrator coordinates
  * multiple step workflows for better observability and retry isolation.
@@ -18,6 +19,7 @@ import { DEFAULT_WORKFLOW_CONFIG } from '@devflow/common';
 import { refinementOrchestrator } from './orchestrators/refinement.orchestrator';
 import { userStoryOrchestrator } from './orchestrators/user-story.orchestrator';
 import { technicalPlanOrchestrator } from './orchestrators/technical-plan.orchestrator';
+import { codeGenerationOrchestrator } from './orchestrators/code-generation.orchestrator';
 
 // Import activity types
 import type * as activities from '@/activities';
@@ -123,14 +125,39 @@ export async function devflowWorkflow(input: WorkflowInput): Promise<WorkflowRes
       };
     }
 
+    // Phase 4: Code Generation (Ollama - local LLM, no cloud fallback)
+    if (
+      task.status === LINEAR_STATUSES.toCode ||
+      task.status === LINEAR_STATUSES.codeInProgress
+    ) {
+      const result = await executeChild(codeGenerationOrchestrator, {
+        workflowId: `code-generation-${input.taskId}-${Date.now()}`,
+        args: [
+          {
+            taskId: input.taskId,
+            projectId: input.projectId,
+            config,
+          },
+        ],
+      });
+
+      return {
+        success: true,
+        stage: 'code_generation' as any,
+        data: result,
+        timestamp: new Date(),
+      };
+    }
+
     // No matching workflow trigger found
     throw ApplicationFailure.create({
       message:
-        `Status "${task.status}" is not a valid workflow trigger for the three-phase Agile system. ` +
+        `Status "${task.status}" is not a valid workflow trigger for the four-phase Agile system. ` +
         `Expected one of: ` +
         `"${LINEAR_STATUSES.toRefinement}" (Phase 1), ` +
         `"${LINEAR_STATUSES.toUserStory}" (Phase 2), ` +
-        `"${LINEAR_STATUSES.toPlan}" (Phase 3)`,
+        `"${LINEAR_STATUSES.toPlan}" (Phase 3), ` +
+        `"${LINEAR_STATUSES.toCode}" (Phase 4)`,
       type: 'InvalidWorkflowTrigger',
     });
   } catch (error) {

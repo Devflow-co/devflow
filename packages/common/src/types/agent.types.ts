@@ -18,15 +18,28 @@ export interface AgentPrompt {
   images?: AgentImage[];
 }
 
+/**
+ * Token usage and cost metrics from AI providers
+ */
+export interface AgentUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  // Cost metrics (from OpenRouter API response)
+  inputCost?: number; // Cost for input tokens (USD)
+  outputCost?: number; // Cost for output tokens (USD)
+  totalCost?: number; // Total cost for the call (USD)
+  // Performance metrics
+  latencyMs?: number; // API response time in milliseconds
+  cached?: boolean; // Whether the response came from cache
+}
+
 export interface AgentResponse {
   content: string;
-  usage: {
-    inputTokens: number;
-    outputTokens: number;
-    totalTokens: number;
-  };
+  usage: AgentUsage;
   model: string;
   finishReason?: string;
+  requestId?: string; // OpenRouter request ID for tracking
 }
 
 export interface SpecGenerationInput {
@@ -169,4 +182,70 @@ export interface TechnicalPlanGenerationOutput {
   dependencies?: string[];
   technicalDecisions?: string[];
   filesAffected?: string[]; // Files that will be modified
+}
+
+/**
+ * Step Metadata Types for Workflow Logging
+ * Used to enrich workflow step logs with detailed metrics
+ */
+
+// AI metrics extracted from AgentResponse for workflow logging
+export interface StepAIMetrics {
+  model: string;
+  provider: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalCost: number;
+  latencyMs: number;
+  cached?: boolean;
+  requestId?: string;
+}
+
+// Result summary for workflow step (without full content)
+export interface StepResultSummary {
+  type: 'refinement' | 'user_story' | 'technical_plan' | 'code_generation' | 'context' | 'linear' | 'figma' | 'sentry' | 'github';
+  summary?: string;
+  itemsCount?: number;
+  wordCount?: number;
+}
+
+// External API call tracking
+export interface StepExternalCall {
+  service: 'linear' | 'figma' | 'sentry' | 'github' | 'slack' | 'qdrant';
+  action: string;
+  success: boolean;
+  latencyMs?: number;
+  details?: string;
+}
+
+// Context statistics
+export interface StepContextStats {
+  ragChunks?: number;
+  figmaFrames?: number;
+  sentryIssues?: number;
+  filesAnalyzed?: number;
+  docsRetrieved?: number;
+}
+
+// Full step metadata for logging
+export interface StepMetadata {
+  ai?: StepAIMetrics;
+  result?: StepResultSummary;
+  externalCalls?: StepExternalCall[];
+  context?: StepContextStats;
+  [key: string]: unknown;
+}
+
+// Helper to extract AI metrics from AgentResponse
+export function extractAIMetrics(response: AgentResponse, provider: string = 'openrouter'): StepAIMetrics {
+  return {
+    model: response.model,
+    provider,
+    inputTokens: response.usage.inputTokens,
+    outputTokens: response.usage.outputTokens,
+    totalCost: response.usage.totalCost || 0,
+    latencyMs: response.usage.latencyMs || 0,
+    cached: response.usage.cached,
+    requestId: response.requestId,
+  };
 }

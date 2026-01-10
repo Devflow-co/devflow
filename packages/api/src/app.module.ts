@@ -18,6 +18,7 @@ import { UserSettingsModule } from '@/user-settings/user-settings.module';
 import { OrganizationsModule } from '@/organizations/organizations.module';
 import { ConfigAppModule } from '@/config/config.module';
 import { RagModule } from '@/rag/rag.module';
+import { AnalyticsModule } from '@/analytics/analytics.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { RagModule } from '@/rag/rag.module';
     WorkflowsModule,
     WebhooksModule,
     RagModule,
+    AnalyticsModule,
   ],
 })
 export class AppModule {}

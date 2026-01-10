@@ -256,18 +256,55 @@
                   {{ step.error }}
                 </div>
 
-                <!-- Step Data (Collapsed) -->
-                <details v-if="step.data" class="mt-2">
-                  <summary
-                    class="text-xs text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
-                  >
-                    View step data
-                  </summary>
-                  <pre
-                    class="mt-2 p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded text-xs overflow-x-auto"
-                    >{{ JSON.stringify(step.data, null, 2) }}</pre
-                  >
-                </details>
+                <!-- Step Data (Enriched) -->
+                <div v-if="step.data" class="mt-2 space-y-2">
+                  <!-- AI Metrics -->
+                  <div v-if="step.data.ai" class="flex flex-wrap gap-2">
+                    <span class="inline-flex items-center px-2 py-1 text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded">
+                      {{ formatModelName(step.data.ai.model) }}
+                    </span>
+                    <span class="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded">
+                      {{ (step.data.ai.inputTokens || 0) + (step.data.ai.outputTokens || 0) }} tokens
+                    </span>
+                    <span class="inline-flex items-center px-2 py-1 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded">
+                      ${{ (step.data.ai.totalCost || 0).toFixed(4) }}
+                    </span>
+                    <span class="inline-flex items-center px-2 py-1 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded">
+                      {{ step.data.ai.latencyMs || 0 }}ms
+                    </span>
+                    <span v-if="step.data.ai.cached" class="inline-flex items-center px-2 py-1 text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded">
+                      Cached
+                    </span>
+                  </div>
+
+                  <!-- Result Summary -->
+                  <p v-if="step.data.result?.summary" class="text-sm text-gray-600 dark:text-gray-400">
+                    {{ step.data.result.summary }}
+                  </p>
+
+                  <!-- Council Info (for Technical Plan) -->
+                  <div v-if="step.data.council" class="flex flex-wrap gap-2">
+                    <span class="inline-flex items-center px-2 py-1 text-xs font-medium bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded">
+                      Council: {{ step.data.council.modelsCount }} models
+                    </span>
+                    <span class="inline-flex items-center px-2 py-1 text-xs font-medium bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded">
+                      {{ step.data.council.agreementLevel }} agreement
+                    </span>
+                    <span class="inline-flex items-center px-2 py-1 text-xs font-medium bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded">
+                      Top: {{ formatModelName(step.data.council.topRankedModel) }}
+                    </span>
+                  </div>
+
+                  <!-- Raw Data (Collapsed) -->
+                  <details class="text-xs group">
+                    <summary class="text-blue-600 dark:text-blue-400 cursor-pointer hover:underline">
+                      View raw data
+                    </summary>
+                    <div class="mt-2 p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-x-auto font-mono text-xs">
+                      <UiJsonViewer :data="step.data" />
+                    </div>
+                  </details>
+                </div>
               </div>
             </div>
           </div>
@@ -417,5 +454,11 @@ const formatDuration = (ms: number): string => {
   if (hours > 0) return `${hours}h ${minutes % 60}m`
   if (minutes > 0) return `${minutes}m ${seconds % 60}s`
   return `${seconds}s`
+}
+
+const formatModelName = (model: string | undefined): string => {
+  if (!model) return 'Unknown'
+  // Remove provider prefix (anthropic/, openai/, google/, etc.)
+  return model.replace(/^(anthropic|openai|google|perplexity)\//, '')
 }
 </script>

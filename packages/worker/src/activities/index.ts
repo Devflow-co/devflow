@@ -32,6 +32,9 @@ export * from '@/activities/qa.activities';
 // Phase 4: Security activities
 export * from '@/activities/security.activities';
 
+// Phase 4: Code Generation activities (Ollama - local LLM)
+export * from '@/activities/code-generation.activities';
+
 // RAG activities
 export {
   indexRepository,

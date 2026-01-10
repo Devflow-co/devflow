@@ -225,7 +225,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
-import { useAuthStore } from '@/stores/auth'
+import { useAuth } from '@/composables/auth'
 import { storeToRefs } from 'pinia'
 
 definePageMeta({
@@ -233,7 +233,7 @@ definePageMeta({
 })
 
 const settingsStore = useSettingsStore()
-const authStore = useAuthStore()
+const { user } = useAuth()
 
 const { organization, members, loading, error, canManageMembers, canDeleteOrg } =
   storeToRefs(settingsStore)
@@ -248,7 +248,7 @@ const {
   removeMember,
 } = settingsStore
 
-const currentUserId = computed(() => authStore.user?.id)
+const currentUserId = computed(() => user.value?.id)
 
 const logoUploadRef = ref<{ clear: () => void; setUploading: (v: boolean) => void } | null>(null)
 const inviteModalRef = ref<{ setError: (msg: string) => void; setLoading: (v: boolean) => void } | null>(null)

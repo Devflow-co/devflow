@@ -5,12 +5,15 @@
  * Focus: User story format, acceptance criteria, definition of done, story points
  */
 
-import { createLogger } from '@devflow/common';
+import { createLogger, extractAIMetrics } from '@devflow/common';
 import type {
   RefinementOutput,
   UserStoryGenerationOutput,
+  StepAIMetrics,
+  StepResultSummary,
 } from '@devflow/common';
 import { createCodeAgentDriver, loadPrompts } from '@devflow/sdk';
+import { trackLLMUsage, getOrganizationIdFromProject } from '../utils/usage-tracking';
 
 const logger = createLogger('UserStoryActivities');
 
@@ -22,6 +25,12 @@ export interface GenerateUserStoryInput {
   };
   refinement: RefinementOutput;
   projectId: string;
+  /** Task ID for usage tracking aggregation */
+  taskId?: string;
+  /** Organization ID for usage tracking (will be looked up if not provided) */
+  organizationId?: string;
+  /** Workflow ID for usage tracking */
+  workflowId?: string;
   /** Codebase context markdown (from Phase 1 document) */
   codebaseContext?: string;
   /** Documentation context markdown (from Phase 1 document) */
@@ -32,6 +41,10 @@ export interface GenerateUserStoryInput {
 
 export interface GenerateUserStoryOutput {
   userStory: UserStoryGenerationOutput;
+  /** AI metrics for workflow step logging */
+  aiMetrics?: StepAIMetrics;
+  /** Result summary for workflow step logging */
+  resultSummary?: StepResultSummary;
 }
 
 /**
@@ -83,9 +96,46 @@ export async function generateUserStory(
     const response = await agent.generate(prompts);
     const userStory = parseUserStoryResponse(response.content);
 
-    logger.info('User story generated successfully', { model: modelToUse });
+    // Track LLM usage for billing/analytics
+    const orgId = input.organizationId || await getOrganizationIdFromProject(input.projectId);
+    if (orgId && input.workflowId) {
+      await trackLLMUsage({
+        organizationId: orgId,
+        workflowId: input.workflowId,
+        provider: 'openrouter',
+        model: modelToUse,
+        response,
+        context: {
+          taskId: input.taskId,
+          projectId: input.projectId,
+          phase: 'user_story',
+        },
+      });
+    }
 
-    return { userStory };
+    // Extract AI metrics for logging
+    const aiMetrics = extractAIMetrics(response, 'openrouter');
+
+    // Build result summary
+    const resultSummary: StepResultSummary = {
+      type: 'user_story',
+      summary: `Generated user story with ${userStory.acceptanceCriteria?.length || 0} acceptance criteria, ${userStory.storyPoints || 0} story points`,
+      itemsCount: userStory.acceptanceCriteria?.length || 0,
+      wordCount: response.content.split(/\s+/).length,
+    };
+
+    logger.info('User story generated successfully', {
+      model: modelToUse,
+      usageTracked: !!(orgId && input.workflowId),
+      aiMetrics: {
+        inputTokens: aiMetrics.inputTokens,
+        outputTokens: aiMetrics.outputTokens,
+        totalCost: aiMetrics.totalCost,
+        latencyMs: aiMetrics.latencyMs,
+      },
+    });
+
+    return { userStory, aiMetrics, resultSummary };
   } catch (error) {
     logger.error('Failed to generate user story', error);
     throw error;

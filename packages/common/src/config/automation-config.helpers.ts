@@ -14,6 +14,7 @@ import {
   RefinementFeatures,
   UserStoryFeatures,
   TechnicalPlanFeatures,
+  CodeGenerationFeatures,
 } from '../types/automation-config.types';
 
 // ============================================
@@ -190,6 +191,14 @@ export function mergeWithDefaults(
         } as TechnicalPlanFeatures,
         councilModels: partial.phases?.technicalPlan?.councilModels,
         councilChairmanModel: partial.phases?.technicalPlan?.councilChairmanModel,
+      },
+      codeGeneration: {
+        enabled: partial.phases?.codeGeneration?.enabled ?? defaults.phases.codeGeneration.enabled,
+        aiModel: partial.phases?.codeGeneration?.aiModel ?? defaults.phases.codeGeneration.aiModel,
+        features: {
+          ...defaults.phases.codeGeneration.features,
+          ...partial.phases?.codeGeneration?.features,
+        } as CodeGenerationFeatures,
       },
     },
   };

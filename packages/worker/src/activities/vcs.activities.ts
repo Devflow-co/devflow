@@ -84,22 +84,41 @@ export interface CreatePullRequestInput {
   branchName: string;
   title: string;
   description: string;
+  /** Target branch for the PR (defaults to 'main') */
+  targetBranch?: string;
+  /** Create as draft PR (defaults to false) */
+  draft?: boolean;
+  /** Labels to add to the PR */
+  labels?: string[];
+  /** Linear issue identifier for linking */
+  linearIdentifier?: string;
 }
 
 export interface CreatePullRequestOutput {
   number: number;
   url: string;
+  /** Whether the PR was created as a draft */
+  draft: boolean;
+  /** Branch name */
+  branchName: string;
 }
 
 export async function createPullRequest(
   input: CreatePullRequestInput,
 ): Promise<CreatePullRequestOutput> {
-  logger.info('Creating pull request', input);
+  const isDraft = input.draft ?? false;
+  logger.info('Creating pull request', {
+    projectId: input.projectId,
+    branchName: input.branchName,
+    title: input.title,
+    draft: isDraft,
+    targetBranch: input.targetBranch || 'main',
+  });
 
   // Get repository config from project
   const repoConfig = await getProjectRepositoryConfig(input.projectId);
 
-  // Resolve GitHub token (OAuth or env var fallback)
+  // Resolve GitHub token (OAuth required)
   const token = await resolveGitHubToken(input.projectId);
 
   const vcs = createVCSDriver({
@@ -107,16 +126,37 @@ export async function createPullRequest(
     token,
   });
 
+  // Build PR description with Linear link if provided
+  let description = input.description;
+  if (input.linearIdentifier) {
+    description += `\n\n---\n\n**Linear Issue:** ${input.linearIdentifier}`;
+  }
+
+  // Add draft badge to description if draft PR
+  if (isDraft) {
+    description = `> ⚠️ **Draft PR** - This PR was auto-generated and requires human review before merging.\n\n${description}`;
+  }
+
   const pr = await vcs.createPullRequest(repoConfig.owner, repoConfig.repo, {
     title: input.title,
-    body: input.description,
+    body: description,
     sourceBranch: input.branchName,
-    targetBranch: 'main',
+    targetBranch: input.targetBranch || 'main',
+    draft: isDraft,
+    labels: input.labels,
+  });
+
+  logger.info('Pull request created successfully', {
+    number: pr.number,
+    url: pr.url,
+    draft: isDraft,
   });
 
   return {
     number: pr.number,
     url: pr.url,
+    draft: isDraft,
+    branchName: input.branchName,
   };
 }
 

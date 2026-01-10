@@ -108,6 +108,7 @@ services:
       - DATABASE_PASSWORD=changeme
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - REDIS_URL=redis://redis:6379
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - TEMPORAL_ADDRESS=temporal:7233
@@ -141,9 +142,10 @@ services:
       dockerfile: ./packages/worker/Dockerfile
     container_name: devflow-worker
     restart: unless-stopped
-    # env_file:  # Commented out - all vars defined in environment below
-    #   - .env
+    env_file:
+      - .env
     environment:
+      # Docker-specific overrides (hostnames inside Docker network)
       - NODE_ENV=development
       - DATABASE_URL=postgresql://devflow:changeme@postgres:5432/devflow?schema=public
       - DATABASE_HOST=postgres
@@ -153,24 +155,20 @@ services:
       - DATABASE_PASSWORD=changeme
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - REDIS_URL=redis://redis:6379
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - TEMPORAL_ADDRESS=temporal:7233
-      - OAUTH_ENCRYPTION_KEY=${OAUTH_ENCRYPTION_KEY}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - DEFAULT_PROJECT_ID=${DEFAULT_PROJECT_ID}
-      - LINEAR_API_KEY=${LINEAR_API_KEY}
-      # GitHub App credentials
-      - GITHUB_APP_ID=${GITHUB_APP_ID}
-      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
-      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
-      - GITHUB_PRIVATE_KEY=${GITHUB_PRIVATE_KEY}
-      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
       # LLM Council - Multi-model deliberation
       - ENABLE_COUNCIL=true
       - COUNCIL_MODELS=anthropic/claude-sonnet-4,openai/gpt-4o,google/gemini-2.0-flash-exp
       - COUNCIL_CHAIRMAN_MODEL=anthropic/claude-sonnet-4
       - COUNCIL_TIMEOUT=120000
+      # Ollama - Local LLM for code generation (Phase 4)
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_CODE_MODEL=deepseek-coder:6.7b
+      - OLLAMA_EMBEDDINGS_MODEL=nomic-embed-text
+      - ENABLE_OLLAMA=true
     depends_on:
       postgres:
         condition: service_healthy
@@ -180,6 +178,8 @@ services:
         condition: service_healthy
       temporal:
         condition: service_started
+      ollama:
+        condition: service_healthy
     # volumes:
     #   - ./packages/worker:/app/packages/worker
     #   - ./packages/common:/app/packages/common
@@ -222,6 +222,51 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # Ollama - Local LLM inference (privacy-first, no cloud fallback)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: devflow-ollama
+    restart: unless-stopped
+    ports:
+      - '11434:11434'
+    volumes:
+      - ollama-models:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+    # GPU passthrough (uncomment for NVIDIA GPU support)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -sf http://localhost:11434/api/tags || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Ollama model initialization (pulls models on first run)
+  ollama-init:
+    image: curlimages/curl:latest
+    container_name: devflow-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Pulling Ollama models for code generation..."
+        curl -X POST http://ollama:11434/api/pull -d '{"name":"deepseek-coder:6.7b"}' && \
+        echo "deepseek-coder:6.7b pulled successfully" && \
+        curl -X POST http://ollama:11434/api/pull -d '{"name":"nomic-embed-text"}' && \
+        echo "nomic-embed-text pulled successfully" && \
+        echo "All models ready!"
+    restart: "no"
 
   # Ngrok tunnel for webhooks (development only)
   ngrok:
@@ -286,4 +331,5 @@ volumes:
   temporal-data:
   prometheus-data:
   grafana-data:
+  ollama-models:
 

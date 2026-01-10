@@ -36,6 +36,15 @@
             >
               Projects
             </NuxtLink>
+            <NuxtLink
+              to="/workflows"
+              class="px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+              :class="isActive('/workflows')
+                ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-white'"
+            >
+              Workflows
+            </NuxtLink>
           </div>
         </div>
 
@@ -175,6 +184,15 @@
             : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'"
         >
           Projects
+        </NuxtLink>
+        <NuxtLink
+          to="/workflows"
+          class="flex-1 px-3 py-2 rounded-lg text-sm font-medium text-center transition-colors"
+          :class="isActive('/workflows')
+            ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
+            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'"
+        >
+          Workflows
         </NuxtLink>
       </div>
     </div>

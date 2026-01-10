@@ -12,11 +12,13 @@
     "typecheck": "nuxt typecheck"
   },
   "dependencies": {
-    "nuxt": "^4.2.2",
-    "vue": "^3.5.26",
-    "vue-router": "^4.6.4",
     "@pinia/nuxt": "^0.11.3",
-    "pinia": "^2.3.0"
+    "chart.js": "^4.5.1",
+    "nuxt": "^4.2.2",
+    "pinia": "^2.3.0",
+    "vue": "^3.5.26",
+    "vue-chartjs": "^5.3.3",
+    "vue-router": "^4.6.4"
   },
   "devDependencies": {
     "@nuxtjs/tailwindcss": "^6.14.0",

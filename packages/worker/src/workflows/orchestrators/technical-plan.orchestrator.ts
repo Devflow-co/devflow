@@ -226,7 +226,7 @@ export async function technicalPlanOrchestrator(
   const features = automation.features;
 
   // Configure progress logging activities
-  const { logWorkflowProgress, logWorkflowFailure } = proxyActivities<typeof progressActivities>({
+  const { logWorkflowProgress, logWorkflowFailure, logWorkflowCompletion } = proxyActivities<typeof progressActivities>({
     startToCloseTimeout: '10 seconds',
     retry: { maximumAttempts: 3 },
   });
@@ -236,6 +236,7 @@ export async function technicalPlanOrchestrator(
   const PHASE = 'technical_plan' as const;
   const projectId = input.projectId;
   const taskId = input.taskId;
+  const workflowStartTime = new Date();
 
   try {
     // Step 1: Sync task from Linear
@@ -590,6 +591,8 @@ export async function technicalPlanOrchestrator(
               description: task.description,
             },
             projectId: input.projectId,
+            taskId: input.taskId, // Pass for LLM usage tracking aggregation
+            workflowId, // Pass for LLM usage tracking
             context: taskLanguage
               ? {
                   language: taskLanguage,
@@ -726,6 +729,8 @@ export async function technicalPlanOrchestrator(
         {
           task,
           projectId: input.projectId,
+          taskId: input.taskId, // Pass for LLM usage tracking aggregation
+          workflowId, // Pass for LLM usage tracking
           userStory,
           ragContext,
           bestPractices: bestPracticesResult,
@@ -755,6 +760,13 @@ export async function technicalPlanOrchestrator(
         hasRagContext: !!ragContext,
         hasBestPractices: !!bestPracticesResult,
         hasDocContext: !!documentationContext,
+        ai: result.aiMetrics,
+        result: result.resultSummary,
+        council: result.council ? {
+          topRankedModel: result.council.topRankedModel,
+          agreementLevel: result.council.agreementLevel,
+          modelsCount: result.council.models?.length || 0,
+        } : undefined,
       },
     });
 
@@ -852,6 +864,15 @@ export async function technicalPlanOrchestrator(
         completedAt: new Date(),
       });
     }
+
+    // Mark workflow as completed with duration
+    await logWorkflowCompletion({
+      workflowId,
+      projectId,
+      taskId,
+      phase: PHASE,
+      startedAt: workflowStartTime,
+    });
 
     return {
       success: true,

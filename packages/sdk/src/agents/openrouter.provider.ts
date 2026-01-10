@@ -64,6 +64,9 @@ export class OpenRouterProvider implements CodeAgentDriver {
       userContent = prompt.user;
     }
 
+    // Measure API latency
+    const startTime = Date.now();
+
     const response = await axios.post(
       OPENROUTER_ENDPOINT,
       {
@@ -79,6 +82,8 @@ export class OpenRouterProvider implements CodeAgentDriver {
             content: userContent,
           },
         ],
+        // Enable detailed usage tracking from OpenRouter
+        usage: { include: true },
       },
       {
         headers: {
@@ -90,17 +95,34 @@ export class OpenRouterProvider implements CodeAgentDriver {
       },
     );
 
+    const latencyMs = Date.now() - startTime;
     const data = response.data;
+    const usage = data.usage || {};
+
+    this.logger.debug('OpenRouter response usage', {
+      promptTokens: usage.prompt_tokens,
+      completionTokens: usage.completion_tokens,
+      totalCost: usage.total_cost,
+      latencyMs,
+    });
 
     return {
       content: data.choices[0].message.content,
       usage: {
-        inputTokens: data.usage.prompt_tokens,
-        outputTokens: data.usage.completion_tokens,
-        totalTokens: data.usage.total_tokens,
+        inputTokens: usage.prompt_tokens || 0,
+        outputTokens: usage.completion_tokens || 0,
+        totalTokens: usage.total_tokens || 0,
+        // Cost metrics from OpenRouter (USD)
+        inputCost: usage.prompt_cost || usage.input_cost,
+        outputCost: usage.completion_cost || usage.output_cost,
+        totalCost: usage.total_cost,
+        // Performance metrics
+        latencyMs,
+        cached: usage.cache_hit || false,
       },
       model: data.model,
       finishReason: data.choices[0].finish_reason,
+      requestId: data.id,
     };
   }
 

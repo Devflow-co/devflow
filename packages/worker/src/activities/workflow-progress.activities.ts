@@ -11,7 +11,7 @@ import { PrismaClient, WorkflowStatus } from '@prisma/client';
 const logger = createLogger('WorkflowProgressActivities');
 const prisma = new PrismaClient();
 
-export type WorkflowPhase = 'refinement' | 'user_story' | 'technical_plan';
+export type WorkflowPhase = 'refinement' | 'user_story' | 'technical_plan' | 'code_generation';
 
 export type StepStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
 
@@ -241,6 +241,81 @@ export async function logWorkflowProgress(params: LogWorkflowProgressParams): Pr
       workflowId,
       phase,
       stepName,
+    });
+    // Don't throw - logging failure should not fail the workflow
+  }
+}
+
+/**
+ * Mark workflow as completed with duration
+ *
+ * This function should be called at the end of each orchestrator
+ * to properly mark the workflow as COMPLETED and calculate duration.
+ */
+export async function logWorkflowCompletion(params: {
+  workflowId: string;
+  projectId: string;
+  taskId: string;
+  phase: WorkflowPhase;
+  startedAt: Date;
+}): Promise<void> {
+  const { workflowId, projectId, taskId, phase, startedAt } = params;
+
+  try {
+    const completedAt = new Date();
+    // Handle date deserialization from Temporal (dates come as ISO strings)
+    const parsedStartedAt = new Date(startedAt);
+    const duration = completedAt.getTime() - parsedStartedAt.getTime();
+
+    // First, get the task to ensure we have the correct reference
+    const task = await prisma.task.findFirst({
+      where: {
+        OR: [{ id: taskId }, { linearId: taskId }],
+      },
+      select: { id: true, projectId: true },
+    });
+
+    if (!task) {
+      logger.warn('Task not found for workflow completion, skipping', {
+        workflowId,
+        taskId,
+        projectId,
+      });
+      return;
+    }
+
+    await prisma.workflow.upsert({
+      where: { workflowId },
+      create: {
+        workflowId,
+        project: { connect: { id: task.projectId } },
+        task: { connect: { id: task.id } },
+        status: 'COMPLETED',
+        currentPhase: phase,
+        progressPercent: 100,
+        startedAt: parsedStartedAt,
+        completedAt,
+        duration,
+      },
+      update: {
+        status: 'COMPLETED',
+        progressPercent: 100,
+        completedAt,
+        duration,
+        updatedAt: new Date(),
+      },
+    });
+
+    logger.info('Workflow marked as completed', {
+      workflowId,
+      phase,
+      duration,
+      durationSeconds: Math.round(duration / 1000),
+    });
+  } catch (err) {
+    logger.error('Failed to log workflow completion', err as Error, {
+      workflowId,
+      phase,
     });
     // Don't throw - logging failure should not fail the workflow
   }

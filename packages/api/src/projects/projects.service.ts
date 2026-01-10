@@ -87,18 +87,57 @@ export class ProjectsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Enrich with active workflows count
+    // Enrich with active workflows count and GitHub App status
     const enrichedProjects = await Promise.all(
       projects.map(async (project) => {
-        const activeWorkflowsCount = await this.prisma.workflow.count({
-          where: {
+        const [activeWorkflowsCount, githubAppInstallation] = await Promise.all([
+          this.prisma.workflow.count({
+            where: {
+              projectId: project.id,
+              status: { in: ['PENDING', 'RUNNING'] },
+            },
+          }),
+          this.prisma.gitHubAppInstallation.findFirst({
+            where: {
+              projectId: project.id,
+              isActive: true,
+              isSuspended: false,
+            },
+            select: {
+              id: true,
+              installationId: true,
+              accountLogin: true,
+              selectedRepos: true,
+            },
+          }),
+        ]);
+
+        // Add a virtual GITHUB OAuth connection if GitHub App is installed
+        const oauthConnections = [...project.oauthConnections];
+        if (githubAppInstallation) {
+          oauthConnections.push({
+            id: `github-app-${githubAppInstallation.id}`,
             projectId: project.id,
-            status: { in: ['PENDING', 'RUNNING'] },
-          },
-        });
+            provider: 'GITHUB',
+            scopes: ['repo', 'read:org'],
+            providerUserId: githubAppInstallation.accountLogin,
+            providerEmail: null,
+            isActive: true,
+            refreshFailed: false,
+            failureReason: null,
+            lastRefreshed: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as any);
+        }
 
         return {
           ...project,
+          oauthConnections,
+          githubAppInstallation: githubAppInstallation ? {
+            accountLogin: githubAppInstallation.accountLogin,
+            repoCount: githubAppInstallation.selectedRepos.length,
+          } : null,
           _count: {
             ...project._count,
             activeWorkflows: activeWorkflowsCount,

@@ -55,7 +55,7 @@ export class IncrementalIndexer {
     this.embeddings = new OpenAIEmbeddingsProvider({
       apiKey: config.embeddingsApiKey,
       baseURL: config.embeddingsBaseURL, // Defaults to OpenRouter
-      model: 'text-embedding-3-large',
+      model: 'openai/text-embedding-3-large', // OpenRouter requires provider prefix
       dimensions: 3072,
     });
     this.vectorStore = new QdrantVectorStore({

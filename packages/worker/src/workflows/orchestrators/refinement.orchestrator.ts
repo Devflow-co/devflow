@@ -73,7 +73,7 @@ export async function refinementOrchestrator(
   const features = automation.features;
 
   // Configure progress logging activity
-  const { logWorkflowProgress, logWorkflowFailure } = proxyActivities<typeof progressActivities>({
+  const { logWorkflowProgress, logWorkflowFailure, logWorkflowCompletion } = proxyActivities<typeof progressActivities>({
     startToCloseTimeout: '10 seconds',
     retry: { maximumAttempts: 3 },
   });
@@ -81,6 +81,7 @@ export async function refinementOrchestrator(
   const workflowId = workflowInfo().workflowId;
   const TOTAL_STEPS = 15;
   const PHASE = 'refinement' as const;
+  const workflowStartTime = new Date();
 
   try {
     // Step 1: Sync task from Linear
@@ -486,6 +487,8 @@ export async function refinementOrchestrator(
             labels: task.labels,
           },
           projectId: input.projectId,
+          taskId: input.taskId, // Pass for LLM usage tracking aggregation
+          workflowId, // Pass for LLM usage tracking
           externalLinks: task.externalLinks,
           poAnswers: poAnswersResult.answers.length > 0 ? poAnswersResult.answers : undefined,
           ragContext,
@@ -509,7 +512,11 @@ export async function refinementOrchestrator(
       status: 'completed',
       startedAt: new Date(step8StartTime),
       completedAt: new Date(),
-      metadata: { taskType: result.refinement.taskType },
+      metadata: {
+        taskType: result.refinement.taskType,
+        ai: result.aiMetrics,
+        result: result.resultSummary,
+      },
     });
 
     // Step 9: Add task type label (non-blocking)
@@ -901,6 +908,15 @@ export async function refinementOrchestrator(
         status: 'skipped',
       });
 
+      // Mark workflow as completed (even when blocked, it's a successful completion)
+      await logWorkflowCompletion({
+        workflowId,
+        projectId: input.projectId,
+        taskId: input.taskId,
+        phase: PHASE,
+        startedAt: workflowStartTime,
+      });
+
       // Return blocked - don't update status to Ready
       return {
         success: true,
@@ -977,6 +993,15 @@ export async function refinementOrchestrator(
     }
 
     const previouslyAnsweredCount = poAnswersResult.answers.length;
+
+    // Mark workflow as completed with duration
+    await logWorkflowCompletion({
+      workflowId,
+      projectId: input.projectId,
+      taskId: input.taskId,
+      phase: PHASE,
+      startedAt: workflowStartTime,
+    });
 
     return {
       success: true,

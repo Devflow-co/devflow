@@ -5,8 +5,8 @@
  * Focus: Business context, objectives, questions for PO, complexity estimation
  */
 
-import { createLogger } from '@devflow/common';
-import type { RefinementOutput, AgentImage } from '@devflow/common';
+import { createLogger, extractAIMetrics } from '@devflow/common';
+import type { RefinementOutput, AgentImage, StepAIMetrics, StepResultSummary } from '@devflow/common';
 import { createCodeAgentDriver, loadPrompts } from '@devflow/sdk';
 import { detectTaskType } from './helpers/task-type-detector';
 import {
@@ -15,6 +15,7 @@ import {
   hasAnyLink,
   type ExternalContextLinks,
 } from './context-extraction.activities';
+import { trackLLMUsage, getOrganizationIdFromProject } from '../utils/usage-tracking';
 
 const logger = createLogger('RefinementActivities');
 
@@ -26,6 +27,12 @@ export interface GenerateRefinementInput {
     labels?: string[];
   };
   projectId: string;
+  /** Task ID for usage tracking aggregation */
+  taskId?: string;
+  /** Organization ID for usage tracking (will be looked up if not provided) */
+  organizationId?: string;
+  /** Workflow ID for usage tracking */
+  workflowId?: string;
   /** External links to Figma, Sentry, GitHub Issues */
   externalLinks?: ExternalContextLinks;
   /** Previous PO answers (from re-run after questions were answered) */
@@ -89,6 +96,10 @@ export interface GenerateRefinementOutput {
     sentry?: import('@devflow/sdk').SentryIssueContext;
     githubIssue?: import('@devflow/sdk').GitHubIssueContext;
   };
+  /** AI metrics for workflow step logging */
+  aiMetrics?: StepAIMetrics;
+  /** Result summary for workflow step logging */
+  resultSummary?: StepResultSummary;
 }
 
 /**
@@ -316,9 +327,44 @@ ${uniqueFiles.map((f) => `- \`${f}\``).join('\n')}
     });
     const refinement = parseRefinementResponse(response.content);
 
+    // Track LLM usage for billing/analytics
+    const orgId = input.organizationId || await getOrganizationIdFromProject(input.projectId);
+    if (orgId && input.workflowId) {
+      await trackLLMUsage({
+        organizationId: orgId,
+        workflowId: input.workflowId,
+        provider: 'openrouter',
+        model: modelToUse,
+        response,
+        context: {
+          taskId: input.taskId,
+          projectId: input.projectId,
+          phase: 'refinement',
+        },
+      });
+    }
+
+    // Extract AI metrics for logging
+    const aiMetrics = extractAIMetrics(response, 'openrouter');
+
+    // Build result summary
+    const resultSummary: StepResultSummary = {
+      type: 'refinement',
+      summary: `Generated ${refinement.preliminaryAcceptanceCriteria?.length || 0} acceptance criteria, ${refinement.questionsForPO?.length || 0} PO questions`,
+      itemsCount: refinement.preliminaryAcceptanceCriteria?.length || 0,
+      wordCount: response.content.split(/\s+/).length,
+    };
+
     logger.info('Refinement generated successfully', {
       model: modelToUse,
       hasImages: figmaImages.length > 0,
+      usageTracked: !!(orgId && input.workflowId),
+      aiMetrics: {
+        inputTokens: aiMetrics.inputTokens,
+        outputTokens: aiMetrics.outputTokens,
+        totalCost: aiMetrics.totalCost,
+        latencyMs: aiMetrics.latencyMs,
+      },
     });
 
     return {
@@ -327,6 +373,8 @@ ${uniqueFiles.map((f) => `- \`${f}\``).join('\n')}
         taskType,
       },
       externalContext: extractedExternalContext,
+      aiMetrics,
+      resultSummary,
     };
   } catch (error) {
     logger.error('Failed to generate refinement', error);

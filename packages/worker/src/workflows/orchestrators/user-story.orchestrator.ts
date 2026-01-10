@@ -290,7 +290,7 @@ export async function userStoryOrchestrator(
   const features = automation.features;
 
   // Configure progress logging activities
-  const { logWorkflowProgress, logWorkflowFailure } = proxyActivities<typeof progressActivities>({
+  const { logWorkflowProgress, logWorkflowFailure, logWorkflowCompletion } = proxyActivities<typeof progressActivities>({
     startToCloseTimeout: '10 seconds',
     retry: { maximumAttempts: 3 },
   });
@@ -300,6 +300,7 @@ export async function userStoryOrchestrator(
   const PHASE = 'user_story' as const;
   const projectId = input.projectId;
   const taskId = input.taskId;
+  const workflowStartTime = new Date();
 
   try {
     // Step 1: Sync task from Linear
@@ -685,6 +686,15 @@ export async function userStoryOrchestrator(
         });
       }
 
+      // Mark workflow as completed with duration
+      await logWorkflowCompletion({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        startedAt: workflowStartTime,
+      });
+
       return {
         success: true,
         phase: 'user_story',
@@ -733,6 +743,8 @@ export async function userStoryOrchestrator(
           },
           refinement,
           projectId: input.projectId,
+          taskId: input.taskId, // Pass for LLM usage tracking aggregation
+          workflowId, // Pass for LLM usage tracking
           codebaseContext,
           documentationContext,
           aiModel: automation.aiModel,
@@ -751,7 +763,13 @@ export async function userStoryOrchestrator(
       status: 'completed',
       startedAt: new Date(step7Start),
       completedAt: new Date(),
-      metadata: { aiModel: automation.aiModel, hasCodebaseContext: !!codebaseContext, hasDocContext: !!documentationContext },
+      metadata: {
+        aiModel: automation.aiModel,
+        hasCodebaseContext: !!codebaseContext,
+        hasDocContext: !!documentationContext,
+        ai: result.aiMetrics,
+        result: result.resultSummary,
+      },
     });
 
     // Step 8: Append user story to issue
@@ -845,6 +863,15 @@ export async function userStoryOrchestrator(
         completedAt: new Date(),
       });
     }
+
+    // Mark workflow as completed with duration
+    await logWorkflowCompletion({
+      workflowId,
+      projectId,
+      taskId,
+      phase: PHASE,
+      startedAt: workflowStartTime,
+    });
 
     return {
       success: true,

@@ -4,6 +4,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import type { AgentUsage } from '@devflow/common';
 
 // Local type definitions (normally from Prisma schema)
 export enum UsageType {
@@ -176,6 +177,72 @@ export class UsageMeteringService {
       resourceType: 'workflow',
       metadata: { provider, model },
     });
+  }
+
+  /**
+   * Record LLM usage from an AI provider response (unified method)
+   * Uses cost from OpenRouter response instead of internal pricing
+   */
+  async recordLLMUsage(params: {
+    organizationId: string;
+    workflowId: string;
+    provider: string;
+    model: string;
+    usage: AgentUsage;
+    requestId?: string;
+  }): Promise<void> {
+    const { organizationId, workflowId, provider, model, usage, requestId } = params;
+    const now = new Date();
+
+    // Common metadata for both records
+    const metadata = {
+      provider,
+      model,
+      requestId,
+      latencyMs: usage.latencyMs,
+      cached: usage.cached,
+    };
+
+    // Calculate unit prices from OpenRouter costs (or fallback to internal pricing)
+    const inputUnitPrice = usage.inputCost && usage.inputTokens > 0
+      ? usage.inputCost / usage.inputTokens
+      : USAGE_PRICING[UsageType.LLM_TOKENS_INPUT].price;
+
+    const outputUnitPrice = usage.outputCost && usage.outputTokens > 0
+      ? usage.outputCost / usage.outputTokens
+      : USAGE_PRICING[UsageType.LLM_TOKENS_OUTPUT].price;
+
+    // Record input tokens
+    if (usage.inputTokens > 0) {
+      await this.record({
+        organizationId,
+        type: UsageType.LLM_TOKENS_INPUT,
+        quantity: usage.inputTokens,
+        unit: 'tokens',
+        unitPrice: inputUnitPrice,
+        resourceId: workflowId,
+        resourceType: 'workflow',
+        metadata,
+        periodStart: now,
+        periodEnd: now,
+      });
+    }
+
+    // Record output tokens
+    if (usage.outputTokens > 0) {
+      await this.record({
+        organizationId,
+        type: UsageType.LLM_TOKENS_OUTPUT,
+        quantity: usage.outputTokens,
+        unit: 'tokens',
+        unitPrice: outputUnitPrice,
+        resourceId: workflowId,
+        resourceType: 'workflow',
+        metadata,
+        periodStart: now,
+        periodEnd: now,
+      });
+    }
   }
 
   /**

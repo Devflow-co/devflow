@@ -7,12 +7,14 @@
  */
 
 import axios from 'axios';
-import { createLogger } from '@devflow/common';
+import { createLogger, extractAIMetrics } from '@devflow/common';
 import type {
   TechnicalPlanGenerationInput,
   TechnicalPlanGenerationOutput,
   UserStoryGenerationOutput,
   CouncilSummary,
+  StepAIMetrics,
+  StepResultSummary,
 } from '@devflow/common';
 import {
   createCodeAgentDriver,
@@ -23,6 +25,7 @@ import {
 } from '@devflow/sdk';
 import type { CodebaseContext } from '@devflow/sdk';
 import { analyzeRepositoryContext } from '@/activities/codebase.activities';
+import { trackLLMUsage, getOrganizationIdFromProject } from '../utils/usage-tracking';
 
 const logger = createLogger('TechnicalPlanActivities');
 
@@ -30,6 +33,12 @@ export interface GenerateTechnicalPlanInput {
   task: any;
   userStory: UserStoryGenerationOutput;
   projectId: string;
+  /** Task ID for usage tracking aggregation */
+  taskId?: string;
+  /** Organization ID for usage tracking (will be looked up if not provided) */
+  organizationId?: string;
+  /** Workflow ID for usage tracking */
+  workflowId?: string;
   ragContext?: {
     chunks: Array<{
       filePath: string;
@@ -64,6 +73,10 @@ export interface GenerateTechnicalPlanOutput {
     usingRAG: boolean;
   };
   council?: CouncilSummary;
+  /** AI metrics for workflow step logging */
+  aiMetrics?: StepAIMetrics;
+  /** Result summary for workflow step logging */
+  resultSummary?: StepResultSummary;
 }
 
 /**
@@ -75,6 +88,12 @@ export interface FetchBestPracticesInput {
     description: string;
   };
   projectId: string;
+  /** Task ID for usage tracking aggregation */
+  taskId?: string;
+  /** Organization ID for usage tracking (will be looked up if not provided) */
+  organizationId?: string;
+  /** Workflow ID for usage tracking */
+  workflowId?: string;
   context?: {
     language: string;
     framework?: string;
@@ -123,6 +142,9 @@ Provide a concise summary (max 500 words) with:
 
 Be specific and actionable. Skip generic advice.`;
 
+    // Measure API latency
+    const startTime = Date.now();
+
     // Call model via OpenRouter
     const response = await axios.post(
       'https://openrouter.ai/api/v1/chat/completions',
@@ -135,6 +157,8 @@ Be specific and actionable. Skip generic advice.`;
           },
         ],
         max_tokens: 2048,
+        // Enable detailed usage tracking from OpenRouter
+        usage: { include: true },
       },
       {
         headers: {
@@ -146,13 +170,50 @@ Be specific and actionable. Skip generic advice.`;
       }
     );
 
-    const bestPractices = response.data.choices[0].message.content;
-    const model = response.data.model;
+    const latencyMs = Date.now() - startTime;
+    const data = response.data;
+    const usage = data.usage || {};
+
+    const bestPractices = data.choices[0].message.content;
+    const model = data.model;
 
     logger.info('Best practices fetched successfully', {
       length: bestPractices.length,
       model,
+      latencyMs,
     });
+
+    // Track LLM usage for billing/analytics
+    const orgId = input.organizationId || await getOrganizationIdFromProject(input.projectId);
+    if (orgId && input.workflowId) {
+      await trackLLMUsage({
+        organizationId: orgId,
+        workflowId: input.workflowId,
+        provider: 'openrouter',
+        model: modelToUse,
+        response: {
+          content: bestPractices,
+          usage: {
+            inputTokens: usage.prompt_tokens || 0,
+            outputTokens: usage.completion_tokens || 0,
+            totalTokens: usage.total_tokens || 0,
+            inputCost: usage.prompt_cost || usage.input_cost,
+            outputCost: usage.completion_cost || usage.output_cost,
+            totalCost: usage.total_cost,
+            latencyMs,
+            cached: usage.cache_hit || false,
+          },
+          model,
+          finishReason: data.choices[0].finish_reason,
+          requestId: data.id,
+        },
+        context: {
+          taskId: input.taskId,
+          projectId: input.projectId,
+          phase: 'technical_plan',
+        },
+      });
+    }
 
     return {
       bestPractices,
@@ -275,6 +336,8 @@ export async function generateTechnicalPlan(
 
     let plan: TechnicalPlanGenerationOutput;
     let councilSummary: CouncilSummary | undefined = undefined;
+    let aiMetrics: StepAIMetrics | undefined = undefined;
+    let resultSummary: StepResultSummary | undefined = undefined;
 
     if (useCouncil) {
       // Use councilModels from automation config, fallback to env var or defaults
@@ -315,6 +378,22 @@ export async function generateTechnicalPlan(
 
       plan = result.finalOutput;
       councilSummary = result.summary;
+
+      // Build metrics from council summary (detailed model metrics not in CouncilSummary)
+      aiMetrics = {
+        model: councilSummary.topRankedModel,
+        provider: 'openrouter',
+        inputTokens: 0, // Not available in council summary
+        outputTokens: 0, // Not available in council summary
+        totalCost: 0, // Not available in council summary
+        latencyMs: 0, // Not available in council summary
+        cached: false,
+      };
+      resultSummary = {
+        type: 'technical_plan',
+        summary: `Council deliberation: ${councilSummary.agreementLevel} agreement, ${plan.implementationSteps?.length || 0} steps, top model: ${councilSummary.topRankedModel}`,
+        itemsCount: plan.implementationSteps?.length || 0,
+      };
     } else {
       // Single model generation
       // Use aiModel from automation config, fallback to env var or default
@@ -330,7 +409,42 @@ export async function generateTechnicalPlan(
       const response = await agent.generate(prompts);
       plan = parseTechnicalPlanResponse(response.content);
 
-      logger.info('Technical plan generated successfully', { model: modelToUse });
+      // Extract AI metrics for logging (single model mode)
+      aiMetrics = extractAIMetrics(response, 'openrouter');
+      resultSummary = {
+        type: 'technical_plan',
+        summary: `Generated ${plan.implementationSteps?.length || 0} implementation steps, ${plan.risks?.length || 0} risks identified`,
+        itemsCount: plan.implementationSteps?.length || 0,
+        wordCount: response.content.split(/\s+/).length,
+      };
+
+      // Track LLM usage for billing/analytics
+      const orgId = input.organizationId || await getOrganizationIdFromProject(input.projectId);
+      if (orgId && input.workflowId) {
+        await trackLLMUsage({
+          organizationId: orgId,
+          workflowId: input.workflowId,
+          provider: 'openrouter',
+          model: modelToUse,
+          response,
+          context: {
+            taskId: input.taskId,
+            projectId: input.projectId,
+            phase: 'technical_plan',
+          },
+        });
+      }
+
+      logger.info('Technical plan generated successfully', {
+        model: modelToUse,
+        usageTracked: !!(orgId && input.workflowId),
+        aiMetrics: {
+          inputTokens: aiMetrics.inputTokens,
+          outputTokens: aiMetrics.outputTokens,
+          totalCost: aiMetrics.totalCost,
+          latencyMs: aiMetrics.latencyMs,
+        },
+      });
     }
 
     return {
@@ -344,6 +458,8 @@ export async function generateTechnicalPlan(
         usingRAG,
       },
       council: councilSummary,
+      aiMetrics,
+      resultSummary,
     };
   } catch (error) {
     logger.error('Failed to generate technical plan', error);

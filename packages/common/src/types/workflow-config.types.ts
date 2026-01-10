@@ -34,6 +34,13 @@ export interface WorkflowConfig {
       planReady: string;
       planFailed: string;
 
+      // Phase 4: Code Generation (local LLM + PR creation)
+      toCode: string;
+      codeInProgress: string;
+      codeReview: string;
+      codeReady: string;
+      codeFailed: string;
+
       // Legacy statuses (for backward compatibility with spec-generation workflow)
       specInProgress?: string;
       specReady?: string;
@@ -108,6 +115,13 @@ export const DEFAULT_WORKFLOW_CONFIG: WorkflowConfig = {
       planReady: 'Plan Ready',
       planFailed: 'Plan Failed',
 
+      // Code Generation (Phase 4)
+      toCode: 'To Code', // Explicit trigger (no auto-chain)
+      codeInProgress: 'Code In Progress',
+      codeReview: 'Code Review', // Draft PR created, awaiting human review
+      codeReady: 'Code Ready', // PR approved/merged
+      codeFailed: 'Code Failed',
+
       // Legacy (backward compatibility)
       specInProgress: 'Spec In Progress',
       specReady: 'Spec Ready',
@@ -131,18 +145,23 @@ export const DEFAULT_WORKFLOW_CONFIG: WorkflowConfig = {
       'Plan In Progress',
       'Plan Failed',
       'Plan Ready',
+      'To Code',
+      'Code In Progress',
+      'Code Failed',
+      'Code Review',
+      'Code Ready',
       'Done',
     ],
 
     workflow: {
       // Statuses that trigger a workflow
-      triggerStatuses: ['To Refinement', 'To User Story', 'To Plan'],
+      triggerStatuses: ['To Refinement', 'To User Story', 'To Plan', 'To Code'],
 
       // Statuses that cascade to children (not To Refinement - children don't exist yet)
-      cascadeStatuses: ['To User Story', 'To Plan'],
+      cascadeStatuses: ['To User Story', 'To Plan', 'To Code'],
 
       // Statuses that trigger parent rollup
-      rollupStatuses: ['Refinement Ready', 'UserStory Ready', 'Plan Ready', 'Done'],
+      rollupStatuses: ['Refinement Ready', 'UserStory Ready', 'Plan Ready', 'Code Ready', 'Done'],
     },
 
     features: {

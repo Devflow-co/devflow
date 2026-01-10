@@ -148,7 +148,7 @@ export interface CodeAgentDriver {
 // ============================================
 
 export interface AgentConfig {
-  provider: 'openrouter' | 'anthropic' | 'openai' | 'cursor';
+  provider: 'openrouter' | 'anthropic' | 'openai' | 'cursor' | 'ollama';
   apiKey: string;
   model?: string;
   temperature?: number;

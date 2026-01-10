@@ -27,6 +27,7 @@ export enum WorkflowStatus {
 export interface WorkflowInput {
   taskId: string;
   projectId: string;
+  organizationId?: string; // Optional for backwards compatibility - activities can look it up if not provided
   options?: {
     skipTests?: boolean;
     skipCI?: boolean;
