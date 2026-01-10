@@ -31,10 +31,12 @@
     "@temporalio/workflow": "^1.9.0",
     "axios": "^1.6.5",
     "dotenv": "^16.3.1",
-    "redis": "^4.6.12"
+    "redis": "^4.6.12",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.5",
+    "@types/uuid": "^11.0.0",
     "ts-node": "^10.9.2",
     "tsc-alias": "^1.8.16",
     "tsx": "^4.7.0",

@@ -155,6 +155,19 @@ export interface SyncLinearTaskOutput {
 }
 
 // ============================================
+// Linear Client Helper
+// ============================================
+
+/**
+ * Get a Linear client for a project (resolves OAuth token)
+ * Exported for use by other activities like interactive.activities
+ */
+export async function getLinearClient(projectId: string) {
+  const apiKey = await resolveLinearApiKey(projectId);
+  return createLinearClient(apiKey);
+}
+
+// ============================================
 // Activities
 // ============================================
 

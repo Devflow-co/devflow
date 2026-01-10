@@ -14,12 +14,31 @@ interface LoadedPrompts {
 const promptCache = new Map<string, { system: string; user: string }>();
 
 /**
+ * Supported prompt phases
+ * - refinement: Phase 1 refinement analysis
+ * - user-story: Phase 2 user story generation
+ * - technical-plan: Phase 3 technical planning
+ * - code-generation: Phase 4 code generation
+ * - code-generation-retry: Phase 4 retry after validation failure
+ * - ambiguity-detection: V3 pre-generation ambiguity detection
+ * - solution-detection: V3 post-failure solution options
+ */
+export type PromptPhase =
+  | 'refinement'
+  | 'user-story'
+  | 'technical-plan'
+  | 'code-generation'
+  | 'code-generation-retry'
+  | 'ambiguity-detection'
+  | 'solution-detection';
+
+/**
  * Charge les prompts depuis les fichiers markdown et substitue les variables
- * @param phase - Phase du workflow ('refinement', 'user-story', 'technical-plan', 'code-generation', 'code-generation-retry')
+ * @param phase - Phase du workflow
  * @param variables - Variables à substituer dans les templates
  */
 export async function loadPrompts(
-  phase: 'refinement' | 'user-story' | 'technical-plan' | 'code-generation' | 'code-generation-retry',
+  phase: PromptPhase,
   variables: PromptVariables
 ): Promise<LoadedPrompts> {
   // Charger les templates depuis le cache ou les fichiers

@@ -97,6 +97,20 @@ export interface CodeGenerationFeatures {
   containerImage: string;
   /** Memory limit for container (e.g., '2g', '512m') */
   containerMemory: string;
+
+  // V3: Interactive Features
+  /** Enable pre-generation ambiguity detection - ask questions when plan is unclear */
+  enableAmbiguityDetection: boolean;
+  /** Enable multiple solution choice when retry fails - ask developer which fix to apply */
+  enableSolutionChoice: boolean;
+  /** Enable human approval before PR creation - show preview and wait for confirmation */
+  enablePrePRApproval: boolean;
+  /** Timeout for waiting human response (hours) */
+  humanResponseTimeoutHours: number;
+  /** Auto-proceed if no response after timeout */
+  autoProceedOnTimeout: boolean;
+  /** Default option to use on timeout: 'first' | 'recommended' | 'cancel' */
+  timeoutDefaultOption: 'first' | 'recommended' | 'cancel';
 }
 
 // ============================================
@@ -272,6 +286,13 @@ export const DEFAULT_CODE_GENERATION_FEATURES: CodeGenerationFeatures = {
   containerTimeoutMinutes: 10,
   containerImage: 'node:20-alpine',
   containerMemory: '2g',
+  // V3: Interactive Features (enabled by default except pre-PR approval)
+  enableAmbiguityDetection: true,
+  enableSolutionChoice: true,
+  enablePrePRApproval: false, // Off by default - opt-in for more control
+  humanResponseTimeoutHours: 24,
+  autoProceedOnTimeout: true,
+  timeoutDefaultOption: 'recommended',
 };
 
 /** Default Ollama model for code generation (local LLM) */

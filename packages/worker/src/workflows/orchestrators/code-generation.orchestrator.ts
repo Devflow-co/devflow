@@ -1,11 +1,16 @@
 /**
- * Code Generation Orchestrator - Phase 4 V2 of Four-Phase Agile Workflow
+ * Code Generation Orchestrator - Phase 4 V3 of Four-Phase Agile Workflow
  *
  * Coordinates code generation from technical plan using local LLM (Ollama).
  * Privacy-first: All inference runs locally, no cloud fallback.
  *
- * V2 Steps (14 steps with container execution and retry loop):
- * Phase A: Setup
+ * V3 adds interactive features for human-in-the-loop code generation:
+ * - Ambiguity detection before generation
+ * - Solution choice when validation fails with multiple fixes
+ * - Optional pre-PR approval
+ *
+ * V3 Steps (up to 23 steps with all features enabled):
+ * Phase A: Setup (Steps 1-6)
  * 1. Sync task from Linear
  * 2. Update status to Code In Progress
  * 3. Get technical plan document (Phase 3)
@@ -13,30 +18,45 @@
  * 5. Get codebase context document (optional - RAG chunks)
  * 6. Fetch full file contents from GitHub (for files to be modified)
  *
- * Phase B: Generation Loop (with retry)
- * 7. Generate code (Ollama - local LLM)
+ * Phase B: Pre-Generation Analysis (V3 - Steps 7-9)
+ * 7. Detect ambiguities in technical plan
+ * 8. Post clarification question (if ambiguities found)
+ * 9. Wait for response signal (with timeout)
  *
- * Phase C: Container Execution (V2)
- * 8. Execute in container (clone, apply files, lint, typecheck, test)
- * 9. Analyze failures with AI (if failed, retry up to maxRetries)
+ * Phase C: Generation Loop (Steps 10-15)
+ * 10. Generate code (Ollama - local LLM)
+ * 11. Execute in container (clone, apply files, lint, typecheck, test)
+ * 12. Analyze failures (if failed)
+ * 13. Detect multiple solutions (V3)
+ * 14. Post solution choice question (if multiple solutions)
+ * 15. Wait for response signal (with timeout)
  *
- * Phase D: Commit & PR
- * 10. Create branch
- * 11. Commit files
- * 12. Create draft PR
+ * Phase D: Pre-PR Approval (V3 - Steps 16-18)
+ * 16. Generate code preview
+ * 17. Post approval question
+ * 18. Wait for approval signal (with timeout)
  *
- * Phase E: Finalization
- * 13. Update status to Code Review
- * 14. Log completion metrics
+ * Phase E: Commit & PR (Steps 19-21)
+ * 19. Create branch
+ * 20. Commit files
+ * 21. Create draft PR
+ *
+ * Phase F: Finalization (Steps 22-23)
+ * 22. Update status to Code Review
+ * 23. Log completion metrics
  */
 
-import { executeChild, ApplicationFailure, proxyActivities, workflowInfo } from '@temporalio/workflow';
+import { executeChild, ApplicationFailure, proxyActivities, workflowInfo, setHandler, condition } from '@temporalio/workflow';
 import type { WorkflowConfig, CodeGenerationPhaseConfig, TechnicalPlanGenerationOutput, GeneratedFile, ExecuteInContainerOutput } from '@devflow/common';
 import { DEFAULT_WORKFLOW_CONFIG, DEFAULT_AUTOMATION_CONFIG } from '@devflow/common';
 import type * as progressActivities from '../../activities/workflow-progress.activities';
 import type * as codeGenActivities from '../../activities/code-generation.activities';
 import type * as containerActivities from '../../activities/container-execution.activities';
 import type * as vcsActivities from '../../activities/vcs.activities';
+import type * as interactiveActivities from '../../activities/interactive.activities';
+
+// V3: Import signal definition
+import { codeQuestionResponseSignal, CodeQuestionResponsePayload } from '../signals/code-question-response.signal';
 
 // Import common step workflows
 import { syncLinearTaskWorkflow } from '../steps/common/sync-linear-task.workflow';
@@ -69,6 +89,14 @@ export interface CodeGenerationOrchestratorResult {
   retryMetrics?: {
     totalAttempts: number;
     validationRetries: number;
+  };
+  /** V3: Interactive metrics */
+  interactiveMetrics?: {
+    ambiguitiesDetected: number;
+    clarificationQuestions: number;
+    solutionChoices: number;
+    approvalRequested: boolean;
+    humanResponsesReceived: number;
   };
 }
 
@@ -244,8 +272,25 @@ export async function codeGenerationOrchestrator(
     retry: { maximumAttempts: 3 },
   });
 
+  // V3: Configure interactive activities
+  const { postCodeQuestion, generateCodePreview } = proxyActivities<typeof interactiveActivities>({
+    startToCloseTimeout: '30 seconds',
+    retry: { maximumAttempts: 2 },
+  });
+
+  // V3: Configure ambiguity/solution detection activities
+  const { detectAmbiguityBeforeGeneration, detectMultipleSolutions } = proxyActivities<typeof codeGenActivities>({
+    startToCloseTimeout: '3 minutes',
+    retry: { maximumAttempts: 2 },
+  });
+
   const workflowId = workflowInfo().workflowId;
-  const TOTAL_STEPS = features.enableContainerExecution ? 14 : 9; // V2 has 14 steps with container
+
+  // V3: Calculate total steps based on enabled features
+  let TOTAL_STEPS = 14; // Base V2 steps
+  if (features.enableAmbiguityDetection) TOTAL_STEPS += 3; // Steps 7-9
+  if (features.enableSolutionChoice) TOTAL_STEPS += 3; // Steps in retry loop
+  if (features.enablePrePRApproval) TOTAL_STEPS += 3; // Steps 16-18
   const PHASE = 'code_generation' as const;
   const projectId = input.projectId;
   const taskId = input.taskId;
@@ -255,6 +300,38 @@ export async function codeGenerationOrchestrator(
   let retryCount = 0;
   let errorContext = '';
   let lastContainerResult: ExecuteInContainerOutput | null = null;
+
+  // V3: Track interactive metrics
+  let interactiveMetrics = {
+    ambiguitiesDetected: 0,
+    clarificationQuestions: 0,
+    solutionChoices: 0,
+    approvalRequested: false,
+    humanResponsesReceived: 0,
+  };
+
+  // V3: Signal handler state
+  let questionResponse: CodeQuestionResponsePayload | null = null;
+
+  // V3: Set up signal handler for code question responses
+  setHandler(codeQuestionResponseSignal, (payload: CodeQuestionResponsePayload) => {
+    questionResponse = payload;
+  });
+
+  // V3: Helper to wait for question response with timeout
+  async function waitForQuestionResponse(timeoutHours: number): Promise<CodeQuestionResponsePayload | null> {
+    const timeoutMs = timeoutHours * 60 * 60 * 1000;
+    questionResponse = null; // Reset before waiting
+
+    const gotResponse = await condition(() => questionResponse !== null, timeoutMs);
+
+    if (gotResponse && questionResponse) {
+      interactiveMetrics.humanResponsesReceived++;
+      return questionResponse;
+    }
+
+    return null; // Timeout
+  }
 
   try {
     // ========================================
@@ -550,7 +627,207 @@ export async function codeGenerationOrchestrator(
     }
 
     // ========================================
-    // Phase B & C: Generation Loop with Container Execution (Steps 7-9)
+    // Phase B: Pre-Generation Analysis (V3 - Steps 7-9)
+    // ========================================
+
+    // V3: Track step offset based on enabled features
+    let stepOffset = 6; // After Phase A setup steps
+
+    // V3: Ambiguity detection before code generation
+    let selectedAmbiguityOption: string | null = null;
+    if (features.enableAmbiguityDetection) {
+      stepOffset++;
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Detect Ambiguities in Technical Plan',
+        stepNumber: stepOffset,
+        totalSteps: TOTAL_STEPS,
+        status: 'in_progress',
+        startedAt: new Date(),
+      });
+
+      const ambiguityStart = Date.now();
+      const ambiguityResult = await detectAmbiguityBeforeGeneration({
+        task: {
+          id: task.id,
+          linearId: task.linearId,
+          title: task.title,
+          description: task.description,
+          identifier: task.identifier,
+        },
+        technicalPlan,
+        projectId: input.projectId,
+        codebaseContext: ragContext?.chunks?.map(c => `${c.filePath}:\n${c.content}`).join('\n\n'),
+        workflowId,
+      });
+
+      interactiveMetrics.ambiguitiesDetected = ambiguityResult.ambiguities.length;
+
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Detect Ambiguities in Technical Plan',
+        stepNumber: stepOffset,
+        totalSteps: TOTAL_STEPS,
+        status: 'completed',
+        startedAt: new Date(ambiguityStart),
+        completedAt: new Date(),
+        metadata: {
+          hasAmbiguities: ambiguityResult.hasAmbiguities,
+          ambiguityCount: ambiguityResult.ambiguities.length,
+          confidence: ambiguityResult.confidence,
+        },
+      });
+
+      // V3: If ambiguities found, post question and wait for response
+      if (ambiguityResult.hasAmbiguities && ambiguityResult.ambiguities.length > 0) {
+        stepOffset++;
+        await logWorkflowProgress({
+          workflowId,
+          projectId,
+          taskId,
+          phase: PHASE,
+          stepName: 'Post Clarification Question',
+          stepNumber: stepOffset,
+          totalSteps: TOTAL_STEPS,
+          status: 'in_progress',
+          startedAt: new Date(),
+        });
+
+        const questionStart = Date.now();
+        const firstAmbiguity = ambiguityResult.ambiguities[0];
+
+        // Build options from ambiguity
+        const options = firstAmbiguity.options.map(opt => ({
+          id: opt.id,
+          label: opt.label,
+          description: opt.description,
+          pros: opt.pros,
+          cons: opt.cons,
+          recommended: opt.recommended,
+        }));
+
+        const questionResult = await postCodeQuestion({
+          projectId: input.projectId,
+          taskId: task.id,
+          linearId: task.linearId,
+          questionType: 'clarification',
+          question: `**${firstAmbiguity.title}**\n\n${firstAmbiguity.description}`,
+          options,
+          metadata: {
+            workflowId,
+            stepNumber: stepOffset,
+            totalSteps: TOTAL_STEPS,
+            timeoutHours: features.humanResponseTimeoutHours || 24,
+            context: `Ambiguity detected in technical plan: ${firstAmbiguity.type}`,
+            postedAt: new Date(),
+            taskIdentifier: task.identifier,
+          },
+        });
+
+        interactiveMetrics.clarificationQuestions++;
+
+        await logWorkflowProgress({
+          workflowId,
+          projectId,
+          taskId,
+          phase: PHASE,
+          stepName: 'Post Clarification Question',
+          stepNumber: stepOffset,
+          totalSteps: TOTAL_STEPS,
+          status: 'completed',
+          startedAt: new Date(questionStart),
+          completedAt: new Date(),
+          metadata: {
+            questionId: questionResult.questionId,
+            commentId: questionResult.commentId,
+            ambiguityType: firstAmbiguity.type,
+          },
+        });
+
+        // V3: Wait for response
+        stepOffset++;
+        await logWorkflowProgress({
+          workflowId,
+          projectId,
+          taskId,
+          phase: PHASE,
+          stepName: 'Waiting for Clarification Response',
+          stepNumber: stepOffset,
+          totalSteps: TOTAL_STEPS,
+          status: 'in_progress',
+          startedAt: new Date(),
+          metadata: { timeoutHours: features.humanResponseTimeoutHours || 24 },
+        });
+
+        const waitStart = Date.now();
+        const response = await waitForQuestionResponse(features.humanResponseTimeoutHours || 24);
+
+        if (response) {
+          selectedAmbiguityOption = response.selectedOption || null;
+
+          await logWorkflowProgress({
+            workflowId,
+            projectId,
+            taskId,
+            phase: PHASE,
+            stepName: 'Waiting for Clarification Response',
+            stepNumber: stepOffset,
+            totalSteps: TOTAL_STEPS,
+            status: 'completed',
+            startedAt: new Date(waitStart),
+            completedAt: new Date(),
+            metadata: {
+              responseType: response.responseType,
+              selectedOption: response.selectedOption,
+              respondedBy: response.respondedBy,
+            },
+          });
+
+          // Add selected option context to error context for code generation
+          if (selectedAmbiguityOption) {
+            const selectedOpt = firstAmbiguity.options.find(o => o.id === selectedAmbiguityOption);
+            if (selectedOpt) {
+              errorContext += `\n\nUser selected option for "${firstAmbiguity.title}": ${selectedOpt.label}\n${selectedOpt.description}`;
+            }
+          } else if (response.customText) {
+            errorContext += `\n\nUser provided custom clarification for "${firstAmbiguity.title}": ${response.customText}`;
+          }
+        } else {
+          // Timeout - use recommended option or auto-proceed
+          await logWorkflowProgress({
+            workflowId,
+            projectId,
+            taskId,
+            phase: PHASE,
+            stepName: 'Waiting for Clarification Response',
+            stepNumber: stepOffset,
+            totalSteps: TOTAL_STEPS,
+            status: 'completed',
+            startedAt: new Date(waitStart),
+            completedAt: new Date(),
+            metadata: { timedOut: true, autoProceed: features.autoProceedOnTimeout },
+          });
+
+          if (features.autoProceedOnTimeout) {
+            // Use recommended option
+            const recommendedOpt = firstAmbiguity.options.find(o => o.recommended);
+            if (recommendedOpt) {
+              selectedAmbiguityOption = recommendedOpt.id;
+              errorContext += `\n\nAuto-selected recommended option for "${firstAmbiguity.title}": ${recommendedOpt.label}\n${recommendedOpt.description}`;
+            }
+          }
+        }
+      }
+    }
+
+    // ========================================
+    // Phase C: Generation Loop with Container Execution (Steps 10-15)
     // ========================================
 
     const maxRetries = features.maxRetries ?? 3;
@@ -560,26 +837,28 @@ export async function codeGenerationOrchestrator(
 
     // Generation loop with retry
     while (retryCount <= maxRetries) {
-      // Step 7: Generate code (Ollama - local LLM)
+      stepOffset++;
+      // Step: Generate code (Ollama - local LLM)
       const isRetry = retryCount > 0;
-      const step7Name = isRetry
+      const stepName = isRetry
         ? `Generate Code (Retry ${retryCount}/${maxRetries})`
         : 'Generate Code (Ollama - Local LLM)';
 
+      const genStepNumber = stepOffset;
       await logWorkflowProgress({
         workflowId,
         projectId,
         taskId,
         phase: PHASE,
-        stepName: step7Name,
-        stepNumber: 7,
+        stepName,
+        stepNumber: genStepNumber,
         totalSteps: TOTAL_STEPS,
         status: 'in_progress',
         startedAt: new Date(),
         metadata: isRetry ? { retryCount, errorContext: errorContext.substring(0, 500) } : undefined,
       });
 
-      const step7Start = Date.now();
+      const genStepStart = Date.now();
       codeResult = await generateCodeFromPlan({
         task: {
           id: task.id,
@@ -604,11 +883,11 @@ export async function codeGenerationOrchestrator(
         projectId,
         taskId,
         phase: PHASE,
-        stepName: step7Name,
-        stepNumber: 7,
+        stepName,
+        stepNumber: genStepNumber,
         totalSteps: TOTAL_STEPS,
         status: 'completed',
-        startedAt: new Date(step7Start),
+        startedAt: new Date(genStepStart),
         completedAt: new Date(),
         metadata: {
           filesGenerated: generatedFiles.length,
@@ -621,24 +900,26 @@ export async function codeGenerationOrchestrator(
       });
 
       // ========================================
-      // V2: Container Execution (Step 8)
+      // V2: Container Execution
       // ========================================
 
       if (features.enableContainerExecution) {
+        stepOffset++;
+        const containerStepNumber = stepOffset;
         await logWorkflowProgress({
           workflowId,
           projectId,
           taskId,
           phase: PHASE,
           stepName: 'Execute in Container (Clone, Lint, Typecheck, Test)',
-          stepNumber: 8,
+          stepNumber: containerStepNumber,
           totalSteps: TOTAL_STEPS,
           status: 'in_progress',
           startedAt: new Date(),
           metadata: { retryCount, fileCount: generatedFiles.length },
         });
 
-        const step8Start = Date.now();
+        const containerStepStart = Date.now();
 
         try {
           lastContainerResult = await executeInContainer({
@@ -666,10 +947,10 @@ export async function codeGenerationOrchestrator(
             taskId,
             phase: PHASE,
             stepName: 'Execute in Container (Clone, Lint, Typecheck, Test)',
-            stepNumber: 8,
+            stepNumber: containerStepNumber,
             totalSteps: TOTAL_STEPS,
             status: containerSuccess ? 'completed' : 'failed',
-            startedAt: new Date(step8Start),
+            startedAt: new Date(containerStepStart),
             completedAt: new Date(),
             metadata: {
               success: containerSuccess,
@@ -685,22 +966,24 @@ export async function codeGenerationOrchestrator(
             break;
           }
 
-          // V2: Analyze failures with AI (Step 9)
+          // V2: Analyze failures with AI
           if (retryCount < maxRetries) {
+            stepOffset++;
+            const analysisStepNumber = stepOffset;
             await logWorkflowProgress({
               workflowId,
               projectId,
               taskId,
               phase: PHASE,
               stepName: 'Analyze Failures with AI',
-              stepNumber: 9,
+              stepNumber: analysisStepNumber,
               totalSteps: TOTAL_STEPS,
               status: 'in_progress',
               startedAt: new Date(),
               metadata: { failedPhase: lastContainerResult.failedPhase, retryCount },
             });
 
-            const step9Start = Date.now();
+            const analysisStepStart = Date.now();
             const analysis = await analyzeFailuresWithAI({
               projectId: input.projectId,
               taskId: input.taskId,
@@ -726,10 +1009,10 @@ export async function codeGenerationOrchestrator(
               taskId,
               phase: PHASE,
               stepName: 'Analyze Failures with AI',
-              stepNumber: 9,
+              stepNumber: analysisStepNumber,
               totalSteps: TOTAL_STEPS,
               status: 'completed',
-              startedAt: new Date(step9Start),
+              startedAt: new Date(analysisStepStart),
               completedAt: new Date(),
               metadata: {
                 failedPhase: analysis.failedPhase,
@@ -738,6 +1021,193 @@ export async function codeGenerationOrchestrator(
                 analysis: analysis.analysis.substring(0, 500),
               },
             });
+
+            // V3: Detect multiple solutions (if enabled)
+            if (features.enableSolutionChoice) {
+              stepOffset++;
+              const solutionStepNumber = stepOffset;
+              await logWorkflowProgress({
+                workflowId,
+                projectId,
+                taskId,
+                phase: PHASE,
+                stepName: 'Detect Solution Options',
+                stepNumber: solutionStepNumber,
+                totalSteps: TOTAL_STEPS,
+                status: 'in_progress',
+                startedAt: new Date(),
+              });
+
+              const solutionStart = Date.now();
+              const solutionResult = await detectMultipleSolutions({
+                task: {
+                  id: task.id,
+                  linearId: task.linearId,
+                  title: task.title,
+                  identifier: task.identifier,
+                },
+                generatedFiles,
+                containerResult: lastContainerResult,
+                attemptNumber: retryCount + 1,
+                maxAttempts: maxRetries,
+                technicalPlan,
+                codebaseContext: ragContext?.chunks?.map(c => `${c.filePath}:\n${c.content}`).join('\n\n'),
+                projectId: input.projectId,
+                workflowId,
+              });
+
+              await logWorkflowProgress({
+                workflowId,
+                projectId,
+                taskId,
+                phase: PHASE,
+                stepName: 'Detect Solution Options',
+                stepNumber: solutionStepNumber,
+                totalSteps: TOTAL_STEPS,
+                status: 'completed',
+                startedAt: new Date(solutionStart),
+                completedAt: new Date(),
+                metadata: {
+                  hasMultipleSolutions: solutionResult.hasMultipleSolutions,
+                  solutionCount: solutionResult.solutions?.length || 1,
+                },
+              });
+
+              // V3: If multiple solutions, post question and wait for response
+              if (solutionResult.hasMultipleSolutions && solutionResult.solutions) {
+                stepOffset++;
+                await logWorkflowProgress({
+                  workflowId,
+                  projectId,
+                  taskId,
+                  phase: PHASE,
+                  stepName: 'Post Solution Choice Question',
+                  stepNumber: stepOffset,
+                  totalSteps: TOTAL_STEPS,
+                  status: 'in_progress',
+                  startedAt: new Date(),
+                });
+
+                const questionStart = Date.now();
+
+                // Build options from solutions
+                const options = solutionResult.solutions.map(sol => ({
+                  id: sol.id,
+                  label: sol.label,
+                  description: `${sol.description}\n\nChanges: ${sol.changes}`,
+                  pros: sol.pros,
+                  cons: sol.cons,
+                  recommended: sol.recommended,
+                }));
+
+                const questionResult = await postCodeQuestion({
+                  projectId: input.projectId,
+                  taskId: task.id,
+                  linearId: task.linearId,
+                  questionType: 'solution_choice',
+                  question: `**Validation Failed: ${solutionResult.errorAnalysis.errorType}**\n\nMultiple solutions are available to fix this error. Which approach would you prefer?`,
+                  options,
+                  metadata: {
+                    workflowId,
+                    stepNumber: stepOffset,
+                    totalSteps: TOTAL_STEPS,
+                    timeoutHours: features.humanResponseTimeoutHours || 24,
+                    context: `Validation failed at ${solutionResult.errorAnalysis.phase}: ${solutionResult.errorAnalysis.errorType}`,
+                    postedAt: new Date(),
+                    taskIdentifier: task.identifier,
+                  },
+                });
+
+                interactiveMetrics.solutionChoices++;
+
+                await logWorkflowProgress({
+                  workflowId,
+                  projectId,
+                  taskId,
+                  phase: PHASE,
+                  stepName: 'Post Solution Choice Question',
+                  stepNumber: stepOffset,
+                  totalSteps: TOTAL_STEPS,
+                  status: 'completed',
+                  startedAt: new Date(questionStart),
+                  completedAt: new Date(),
+                  metadata: {
+                    questionId: questionResult.questionId,
+                    commentId: questionResult.commentId,
+                  },
+                });
+
+                // V3: Wait for response
+                stepOffset++;
+                await logWorkflowProgress({
+                  workflowId,
+                  projectId,
+                  taskId,
+                  phase: PHASE,
+                  stepName: 'Waiting for Solution Choice Response',
+                  stepNumber: stepOffset,
+                  totalSteps: TOTAL_STEPS,
+                  status: 'in_progress',
+                  startedAt: new Date(),
+                  metadata: { timeoutHours: features.humanResponseTimeoutHours || 24 },
+                });
+
+                const waitStart = Date.now();
+                const response = await waitForQuestionResponse(features.humanResponseTimeoutHours || 24);
+
+                if (response) {
+                  const selectedSolution = response.selectedOption
+                    ? solutionResult.solutions.find(s => s.id === response.selectedOption)
+                    : null;
+
+                  await logWorkflowProgress({
+                    workflowId,
+                    projectId,
+                    taskId,
+                    phase: PHASE,
+                    stepName: 'Waiting for Solution Choice Response',
+                    stepNumber: stepOffset,
+                    totalSteps: TOTAL_STEPS,
+                    status: 'completed',
+                    startedAt: new Date(waitStart),
+                    completedAt: new Date(),
+                    metadata: {
+                      responseType: response.responseType,
+                      selectedOption: response.selectedOption,
+                      respondedBy: response.respondedBy,
+                    },
+                  });
+
+                  if (selectedSolution) {
+                    errorContext = `User selected solution: ${selectedSolution.label}\n${selectedSolution.description}\n\nApply these changes: ${selectedSolution.changes}`;
+                  } else if (response.customText) {
+                    errorContext = `User provided custom fix instructions: ${response.customText}`;
+                  }
+                } else {
+                  // Timeout - use recommended solution
+                  await logWorkflowProgress({
+                    workflowId,
+                    projectId,
+                    taskId,
+                    phase: PHASE,
+                    stepName: 'Waiting for Solution Choice Response',
+                    stepNumber: stepOffset,
+                    totalSteps: TOTAL_STEPS,
+                    status: 'completed',
+                    startedAt: new Date(waitStart),
+                    completedAt: new Date(),
+                    metadata: { timedOut: true, autoProceed: features.autoProceedOnTimeout },
+                  });
+
+                  if (features.autoProceedOnTimeout && solutionResult.recommendation) {
+                    const recommendedSolution = solutionResult.solutions.find(s => s.id === solutionResult.recommendation);
+                    if (recommendedSolution) {
+                      errorContext = `Auto-selected recommended solution: ${recommendedSolution.label}\n${recommendedSolution.description}\n\nApply these changes: ${recommendedSolution.changes}`;
+                    }
+                  }
+                }
+              }
+            }
 
             retryCount++;
             continue; // Retry generation
@@ -751,10 +1221,10 @@ export async function codeGenerationOrchestrator(
             taskId,
             phase: PHASE,
             stepName: 'Execute in Container (Clone, Lint, Typecheck, Test)',
-            stepNumber: 8,
+            stepNumber: containerStepNumber,
             totalSteps: TOTAL_STEPS,
             status: 'failed',
-            startedAt: new Date(step8Start),
+            startedAt: new Date(containerStepStart),
             completedAt: new Date(),
             metadata: {
               error: containerError instanceof Error ? containerError.message : 'Unknown error',
@@ -767,27 +1237,189 @@ export async function codeGenerationOrchestrator(
     }
 
     // ========================================
-    // Phase D: Commit & PR (Steps 10-12)
+    // Phase D: Pre-PR Approval (V3 - Optional)
     // ========================================
 
     if (!codeResult) {
       throw new Error('Code generation failed - no result');
     }
 
-    // Step 10: Create branch
+    // V3: Pre-PR approval (if enabled)
+    if (features.enablePrePRApproval) {
+      stepOffset++;
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Generate Code Preview',
+        stepNumber: stepOffset,
+        totalSteps: TOTAL_STEPS,
+        status: 'in_progress',
+        startedAt: new Date(),
+      });
+
+      const previewStart = Date.now();
+      const previewResult = await generateCodePreview({
+        files: generatedFiles.map(f => ({
+          path: f.path,
+          action: f.action,
+          content: f.content,
+          originalContent: fullFileContents.find(ff => ff.path === f.path)?.content,
+        })),
+        summary: `Generated ${generatedFiles.length} files for ${task.identifier}`,
+      });
+
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Generate Code Preview',
+        stepNumber: stepOffset,
+        totalSteps: TOTAL_STEPS,
+        status: 'completed',
+        startedAt: new Date(previewStart),
+        completedAt: new Date(),
+        metadata: {
+          totalFiles: previewResult.preview.totalFiles,
+          totalLinesChanged: previewResult.preview.totalLinesChanged,
+        },
+      });
+
+      // Post approval question
+      stepOffset++;
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Post Approval Question',
+        stepNumber: stepOffset,
+        totalSteps: TOTAL_STEPS,
+        status: 'in_progress',
+        startedAt: new Date(),
+      });
+
+      const approvalStart = Date.now();
+      const approvalQuestion = await postCodeQuestion({
+        projectId: input.projectId,
+        taskId: task.id,
+        linearId: task.linearId,
+        questionType: 'approval',
+        question: 'Please review the generated code and approve or reject the PR creation.',
+        preview: previewResult.preview,
+        metadata: {
+          workflowId,
+          stepNumber: stepOffset,
+          totalSteps: TOTAL_STEPS,
+          timeoutHours: features.humanResponseTimeoutHours || 24,
+          context: `Pre-PR approval request for ${generatedFiles.length} files`,
+          postedAt: new Date(),
+          taskIdentifier: task.identifier,
+        },
+      });
+
+      interactiveMetrics.approvalRequested = true;
+
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Post Approval Question',
+        stepNumber: stepOffset,
+        totalSteps: TOTAL_STEPS,
+        status: 'completed',
+        startedAt: new Date(approvalStart),
+        completedAt: new Date(),
+        metadata: {
+          questionId: approvalQuestion.questionId,
+          commentId: approvalQuestion.commentId,
+        },
+      });
+
+      // Wait for approval
+      stepOffset++;
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: 'Waiting for Approval Response',
+        stepNumber: stepOffset,
+        totalSteps: TOTAL_STEPS,
+        status: 'in_progress',
+        startedAt: new Date(),
+        metadata: { timeoutHours: features.humanResponseTimeoutHours || 24 },
+      });
+
+      const approvalWaitStart = Date.now();
+      const approvalResponse = await waitForQuestionResponse(features.humanResponseTimeoutHours || 24);
+
+      if (approvalResponse) {
+        await logWorkflowProgress({
+          workflowId,
+          projectId,
+          taskId,
+          phase: PHASE,
+          stepName: 'Waiting for Approval Response',
+          stepNumber: stepOffset,
+          totalSteps: TOTAL_STEPS,
+          status: 'completed',
+          startedAt: new Date(approvalWaitStart),
+          completedAt: new Date(),
+          metadata: {
+            responseType: approvalResponse.responseType,
+            respondedBy: approvalResponse.respondedBy,
+          },
+        });
+
+        // If rejected, throw error to fail workflow
+        if (approvalResponse.responseType === 'rejected') {
+          throw new Error(`PR rejected by ${approvalResponse.respondedBy}: ${approvalResponse.customText || 'No reason provided'}`);
+        }
+      } else {
+        // Timeout
+        await logWorkflowProgress({
+          workflowId,
+          projectId,
+          taskId,
+          phase: PHASE,
+          stepName: 'Waiting for Approval Response',
+          stepNumber: stepOffset,
+          totalSteps: TOTAL_STEPS,
+          status: 'completed',
+          startedAt: new Date(approvalWaitStart),
+          completedAt: new Date(),
+          metadata: { timedOut: true, autoProceed: features.autoProceedOnTimeout },
+        });
+
+        if (!features.autoProceedOnTimeout || features.timeoutDefaultOption === 'cancel') {
+          throw new Error('PR approval timed out and auto-proceed is disabled');
+        }
+      }
+    }
+
+    // ========================================
+    // Phase E: Commit & PR
+    // ========================================
+
+    // Create branch
+    stepOffset++;
     await logWorkflowProgress({
       workflowId,
       projectId,
       taskId,
       phase: PHASE,
       stepName: 'Create Branch',
-      stepNumber: 10,
+      stepNumber: stepOffset,
       totalSteps: TOTAL_STEPS,
       status: 'in_progress',
       startedAt: new Date(),
     });
 
-    const step10Start = Date.now();
+    const branchStepStart = Date.now();
     await createBranch({
       projectId: input.projectId,
       branchName: codeResult.code.branchName,
@@ -800,28 +1432,29 @@ export async function codeGenerationOrchestrator(
       taskId,
       phase: PHASE,
       stepName: 'Create Branch',
-      stepNumber: 10,
+      stepNumber: stepOffset,
       totalSteps: TOTAL_STEPS,
       status: 'completed',
-      startedAt: new Date(step10Start),
+      startedAt: new Date(branchStepStart),
       completedAt: new Date(),
       metadata: { branchName: codeResult.code.branchName },
     });
 
-    // Step 11: Commit files
+    // Commit files
+    stepOffset++;
     await logWorkflowProgress({
       workflowId,
       projectId,
       taskId,
       phase: PHASE,
       stepName: 'Commit Generated Files',
-      stepNumber: 11,
+      stepNumber: stepOffset,
       totalSteps: TOTAL_STEPS,
       status: 'in_progress',
       startedAt: new Date(),
     });
 
-    const step11Start = Date.now();
+    const commitStepStart = Date.now();
     await commitFiles({
       projectId: input.projectId,
       branchName: codeResult.code.branchName,
@@ -838,28 +1471,29 @@ export async function codeGenerationOrchestrator(
       taskId,
       phase: PHASE,
       stepName: 'Commit Generated Files',
-      stepNumber: 11,
+      stepNumber: stepOffset,
       totalSteps: TOTAL_STEPS,
       status: 'completed',
-      startedAt: new Date(step11Start),
+      startedAt: new Date(commitStepStart),
       completedAt: new Date(),
       metadata: { filesCommitted: generatedFiles.length },
     });
 
-    // Step 12: Create draft PR
+    // Create draft PR
+    stepOffset++;
     await logWorkflowProgress({
       workflowId,
       projectId,
       taskId,
       phase: PHASE,
       stepName: 'Create Draft PR',
-      stepNumber: 12,
+      stepNumber: stepOffset,
       totalSteps: TOTAL_STEPS,
       status: 'in_progress',
       startedAt: new Date(),
     });
 
-    const step12Start = Date.now();
+    const prStepStart = Date.now();
 
     // Build PR description with container results if available
     let prDescription = codeResult.code.prDescription;
@@ -888,33 +1522,34 @@ export async function codeGenerationOrchestrator(
       taskId,
       phase: PHASE,
       stepName: 'Create Draft PR',
-      stepNumber: 12,
+      stepNumber: stepOffset,
       totalSteps: TOTAL_STEPS,
       status: 'completed',
-      startedAt: new Date(step12Start),
+      startedAt: new Date(prStepStart),
       completedAt: new Date(),
       metadata: { prNumber: pr.number, prUrl: pr.url, draft: pr.draft },
     });
 
     // ========================================
-    // Phase E: Finalization (Steps 13-14)
+    // Phase F: Finalization
     // ========================================
 
-    // Step 13: Update status to Code Review
+    // Update status to Code Review
     if (features.enableAutoStatusUpdate) {
+      stepOffset++;
       await logWorkflowProgress({
         workflowId,
         projectId,
         taskId,
         phase: PHASE,
         stepName: 'Update Status to Code Review',
-        stepNumber: 13,
+        stepNumber: stepOffset,
         totalSteps: TOTAL_STEPS,
         status: 'in_progress',
         startedAt: new Date(),
       });
 
-      const step13Start = Date.now();
+      const statusStepStart = Date.now();
       await executeChild(updateLinearStatusWorkflow, {
         workflowId: `status-review-${input.taskId}-${Date.now()}`,
         args: [
@@ -932,21 +1567,22 @@ export async function codeGenerationOrchestrator(
         taskId,
         phase: PHASE,
         stepName: 'Update Status to Code Review',
-        stepNumber: 13,
+        stepNumber: stepOffset,
         totalSteps: TOTAL_STEPS,
         status: 'completed',
-        startedAt: new Date(step13Start),
+        startedAt: new Date(statusStepStart),
         completedAt: new Date(),
         metadata: { status: LINEAR_STATUSES.codeReview },
       });
     } else {
+      stepOffset++;
       await logWorkflowProgress({
         workflowId,
         projectId,
         taskId,
         phase: PHASE,
         stepName: 'Update Status to Code Review (disabled)',
-        stepNumber: 13,
+        stepNumber: stepOffset,
         totalSteps: TOTAL_STEPS,
         status: 'skipped',
         startedAt: new Date(),
@@ -954,7 +1590,7 @@ export async function codeGenerationOrchestrator(
       });
     }
 
-    // Step 14: Log completion metrics
+    // Log completion metrics
     await logWorkflowCompletion({
       workflowId,
       projectId,
@@ -984,6 +1620,8 @@ export async function codeGenerationOrchestrator(
         totalAttempts: retryCount + 1,
         validationRetries: retryCount,
       },
+      // V3: Interactive metrics
+      interactiveMetrics,
     };
   } catch (error) {
     // Log workflow failure

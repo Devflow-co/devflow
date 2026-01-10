@@ -1443,3 +1443,40 @@ model PasswordResetToken {
   @@index([userId])
 }
 
+// ============================================
+// Code Generation Questions (Phase 4 V3)
+// ============================================
+
+model PendingCodeQuestion {
+  id             String   @id @default(cuid())
+  projectId      String   @map("project_id")
+  taskId         String   @map("task_id")
+  workflowId     String   @map("workflow_id")
+
+  // Question details
+  questionType   String   @map("question_type") // clarification, solution_choice, approval
+  commentId      String   @map("comment_id") // Linear comment ID
+
+  // Response tracking
+  status         String   @default("pending") // pending, answered, timeout
+  responseType   String?  @map("response_type") // option_selected, custom_text, approved, rejected
+  selectedOption String?  @map("selected_option")
+  customText     String?  @map("custom_text") @db.Text
+  respondedBy    String?  @map("responded_by")
+  respondedAt    DateTime? @map("responded_at")
+
+  // Timeout
+  timeoutAt      DateTime @map("timeout_at")
+
+  // Timestamps
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("pending_code_questions")
+  @@index([projectId])
+  @@index([taskId])
+  @@index([workflowId])
+  @@index([status])
+  @@index([timeoutAt])
+}
+

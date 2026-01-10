@@ -83,3 +83,16 @@ export {
   type StepStatus,
   type LogWorkflowProgressParams,
 } from '@/activities/workflow-progress.activities';
+
+// Phase 4 V3: Interactive activities (code generation questions)
+export {
+  postCodeQuestion,
+  generateCodePreview,
+  markQuestionAnswered,
+  markQuestionTimedOut,
+  findPendingQuestionByIssue,
+  type PostCodeQuestionInput,
+  type PostCodeQuestionOutput,
+  type GenerateCodePreviewInput,
+  type GenerateCodePreviewOutput,
+} from '@/activities/interactive.activities';

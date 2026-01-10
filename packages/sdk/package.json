@@ -6,7 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc && tsc-alias && npm run copy-prompts",
-    "copy-prompts": "cp -r src/agents/prompts/refinement src/agents/prompts/user-story src/agents/prompts/technical-plan src/agents/prompts/code-generation src/agents/prompts/code-generation-retry dist/agents/prompts/ && mkdir -p dist/agents/council/prompts && cp -r src/agents/council/prompts/* dist/agents/council/prompts/",
+    "copy-prompts": "cp -r src/agents/prompts/refinement src/agents/prompts/user-story src/agents/prompts/technical-plan src/agents/prompts/code-generation src/agents/prompts/code-generation-retry src/agents/prompts/ambiguity-detection src/agents/prompts/solution-detection dist/agents/prompts/ && mkdir -p dist/agents/council/prompts && cp -r src/agents/council/prompts/* dist/agents/council/prompts/",
     "dev": "tsc --watch",
     "clean": "rm -rf dist *.tsbuildinfo",
     "lint": "eslint src --ext .ts",
