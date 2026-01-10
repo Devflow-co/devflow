@@ -1,6 +1,6 @@
 # CLAUDE.md - DevFlow
 
-**Version:** 2.6.0 | **Updated:** January 10, 2026 | **Status:** Production Ready
+**Version:** 2.7.0 | **Updated:** January 11, 2026 | **Status:** Production Ready
 
 ## Agent Reminders
 
@@ -13,7 +13,7 @@
 
 DevFlow is a universal DevOps orchestrator that transforms Linear tasks into deployed code. It uses a Four-Phase Agile workflow: **Refinement → User Story → Technical Plan → Code Generation**.
 
-Phase 4 (Code Generation) uses **Ollama** (local LLM) for privacy-first automated code generation with draft PR creation.
+Phase 4 (Code Generation) uses **Ollama** (local LLM) for privacy-first automated code generation with draft PR creation. **V3** adds interactive human-in-the-loop features: ambiguity detection, solution choice, and pre-PR approval.
 
 **Details:** [.docs/guides/WORKFLOW_GUIDE.md](.docs/guides/WORKFLOW_GUIDE.md)
 
@@ -63,7 +63,8 @@ devflow/
 ### @devflow/worker
 - Main workflow: `devflowWorkflow` (router)
 - Orchestrators: `refinementOrchestrator`, `userStoryOrchestrator`, `technicalPlanOrchestrator`, `codeGenerationOrchestrator`
-- Activities: Linear sync, AI generation, context retrieval, code generation, VCS operations
+- Activities: Linear sync, AI generation, context retrieval, code generation, VCS operations, interactive questions (V3)
+- Signals: `codeQuestionResponseSignal` for human-in-the-loop responses (V3)
 
 ### @devflow/sdk
 - **VCS:** GitHubProvider, GitHubIntegrationService
@@ -114,6 +115,7 @@ Phases do NOT auto-chain. Each must be manually triggered.
 - PO questions posted as Linear comments
 - Context documents created in Phase 1
 - **Phase 4:** Local LLM code generation with Ollama (privacy-first, draft PRs)
+- **Phase 4 V3:** Interactive human-in-the-loop (ambiguity detection, solution choice, pre-PR approval)
 
 **Details:** [.docs/guides/WORKFLOW_GUIDE.md](.docs/guides/WORKFLOW_GUIDE.md)
 
@@ -191,19 +193,23 @@ OPENROUTER_API_KEY=sk-or-xxx
 - `packages/worker/src/workflows/orchestrators/refinement.orchestrator.ts`
 - `packages/worker/src/workflows/orchestrators/user-story.orchestrator.ts`
 - `packages/worker/src/workflows/orchestrators/technical-plan.orchestrator.ts`
-- `packages/worker/src/workflows/orchestrators/code-generation.orchestrator.ts` - Phase 4
+- `packages/worker/src/workflows/orchestrators/code-generation.orchestrator.ts` - Phase 4 V3
+- `packages/worker/src/workflows/signals/code-question-response.signal.ts` - V3 signals
 
 ### Activities
 - `packages/worker/src/activities/refinement.activities.ts`
 - `packages/worker/src/activities/linear.activities.ts`
 - `packages/worker/src/activities/context.activities.ts`
-- `packages/worker/src/activities/code-generation.activities.ts` - Phase 4
+- `packages/worker/src/activities/code-generation.activities.ts` - Phase 4 (ambiguity/solution detection)
+- `packages/worker/src/activities/interactive.activities.ts` - V3 question posting
 - `packages/worker/src/activities/vcs.activities.ts` - Git operations
 
 ### SDK Core
 - `packages/sdk/src/linear/linear.client.ts` - Linear API client
 - `packages/sdk/src/agents/` - AI providers (OpenRouter, Ollama)
 - `packages/sdk/src/agents/ollama.provider.ts` - Local LLM (Phase 4)
+- `packages/sdk/src/agents/prompts/ambiguity-detection/` - V3 ambiguity analysis prompts
+- `packages/sdk/src/agents/prompts/solution-detection/` - V3 solution detection prompts
 - `packages/sdk/src/auth/` - OAuth services
 - `packages/sdk/src/rag/` - RAG system
 

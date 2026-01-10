@@ -124,10 +124,14 @@ COUNCIL_CHAIRMAN_MODEL=anthropic/claude-sonnet-4
 
 1. Retrieves technical plan from Phase 3
 2. Fetches full file contents from GitHub (for files listed in `filesAffected`)
-3. Generates production-ready code using local LLM (Ollama)
-4. Creates a feature branch
-5. Commits generated files
-6. Creates a draft PR for human review
+3. **(V3)** Detects ambiguities and asks clarifying questions
+4. Generates production-ready code using local LLM (Ollama)
+5. **(V3)** Validates code in isolated container (lint, typecheck, tests)
+6. **(V3)** Presents solution choices when validation fails with multiple fixes
+7. **(V3)** Requests pre-PR approval (optional)
+8. Creates a feature branch
+9. Commits generated files
+10. Creates a draft PR for human review
 
 ### Privacy-First Architecture
 
@@ -136,18 +140,89 @@ Phase 4 uses **Ollama** (local LLM) by default:
 - No code or data sent to cloud services
 - No cloud fallback - fails locally if Ollama unavailable
 
-### 9-Step Orchestrator Workflow
+### V3 Interactive Features (Human-in-the-Loop)
+
+Phase 4 V3 adds **interactive code generation** with human feedback:
+
+#### 1. Ambiguity Detection (Pre-Generation)
+
+Before generating code, the AI analyzes the technical plan for:
+- **Architectural ambiguities** - Multiple valid implementation approaches
+- **Missing specifications** - Details needed but not specified
+- **Conflicting patterns** - Existing code that could conflict
+- **Integration uncertainties** - Unclear how new code should integrate
+
+When ambiguities are detected, a **clarification question** is posted to Linear as a comment with options for the developer to choose.
+
+#### 2. Solution Choice (Post-Failure)
+
+When generated code fails validation (lint, typecheck, tests), the AI:
+- Analyzes the error and identifies root cause
+- Determines if multiple valid fixes exist
+- If yes, posts a **solution choice question** to Linear
+- Developer picks the preferred approach
+
+#### 3. Pre-PR Approval (Optional)
+
+Before creating a PR, the workflow can:
+- Generate a code preview showing all changes
+- Post an **approval request** to Linear
+- Wait for `APPROVE` or `REJECT:reason` response
+
+### Question Response Format
+
+Questions are posted as Linear comments. Developers respond by:
+
+| Question Type | Response Format |
+|---------------|-----------------|
+| Clarification | `OPTION:A` or `OPTION:B` or free text |
+| Solution Choice | `OPTION:A` or `OPTION:B` or free text |
+| Approval | `APPROVE` or `REJECT:reason` |
+
+### Timeout Behavior
+
+Each question has a configurable timeout (default: 24 hours):
+- **Clarification:** Uses AI-recommended option on timeout
+- **Solution Choice:** Uses AI-recommended fix on timeout
+- **Approval:** Auto-approves on timeout (creates draft PR)
+
+### V3 Orchestrator Workflow (Up to 23 Steps)
 
 ```
-Step 1: Sync task from Linear
-Step 2: Update status → "Code In Progress"
-Step 3: Get technical plan document
-Step 4: Parse technical plan (extract filesAffected, steps, etc.)
-Step 5: Get codebase context (RAG chunks for patterns)
-Step 6: Fetch full files from GitHub (filesAffected)
-Step 7: Generate code (Ollama with full context)
-Step 8: Create branch + commit + draft PR
-Step 9: Update status → "Code Review"
+Phase A: Setup (Steps 1-6)
+├── Step 1: Sync task from Linear
+├── Step 2: Update status → "Code In Progress"
+├── Step 3: Get technical plan document
+├── Step 4: Parse technical plan (filesAffected, steps)
+├── Step 5: Get codebase context (RAG chunks)
+└── Step 6: Fetch full files from GitHub
+
+Phase B: Pre-Generation Analysis (V3 - Steps 7-9)
+├── Step 7: Detect ambiguities in technical plan
+├── Step 8: Post clarification question (if ambiguities)
+└── Step 9: Wait for response signal (with timeout)
+
+Phase C: Generation Loop (Steps 10-15)
+├── Step 10: Generate code (Ollama - local LLM)
+├── Step 11: Execute in container (lint, typecheck, test)
+├── Step 12: Analyze failures (if failed)
+├── Step 13: Detect multiple solutions (V3)
+├── Step 14: Post solution choice question (if multiple)
+└── Step 15: Wait for response signal (with timeout)
+
+Phase D: Pre-PR Approval (V3 - Steps 16-18)
+├── Step 16: Generate code preview
+├── Step 17: Post approval question
+└── Step 18: Wait for approval signal (with timeout)
+
+Phase E: Commit & PR (Steps 19-21)
+├── Step 19: Create branch
+├── Step 20: Commit files
+└── Step 21: Create draft PR
+
+Phase F: Finalization (Steps 22-23)
+├── Step 22: Update status → "Code Review"
+└── Step 23: Log completion metrics
 ```
 
 ### Context Provided to AI
@@ -158,6 +233,7 @@ Step 9: Update status → "Code Review"
 | Full Files | GitHub API | Complete content of files to modify |
 | Technical Plan | Linear Document | Architecture, steps, testing strategy |
 | User Story | Linear Document | Acceptance criteria, business value |
+| Human Responses | Linear Comments | Clarifications and choices (V3) |
 
 ### Output
 
@@ -181,6 +257,14 @@ OLLAMA_TIMEOUT=300000
 ENABLE_AUTO_STATUS_UPDATE=true
 REUSE_CODEBASE_CONTEXT=true
 CREATE_DRAFT_PR=true
+
+# V3 Interactive Features
+ENABLE_AMBIGUITY_DETECTION=true      # Enable pre-generation analysis
+ENABLE_SOLUTION_CHOICE=true          # Enable multi-solution handling
+ENABLE_PRE_PR_APPROVAL=false         # Require approval before PR
+CLARIFICATION_TIMEOUT_HOURS=24       # Timeout for clarification questions
+SOLUTION_TIMEOUT_HOURS=24            # Timeout for solution choices
+APPROVAL_TIMEOUT_HOURS=48            # Timeout for approval requests
 ```
 
 ### Human Review Required
@@ -364,21 +448,32 @@ The main workflow (`devflowWorkflow`) routes to the appropriate sub-workflow:
 - `packages/worker/src/workflows/orchestrators/refinement.orchestrator.ts`
 - `packages/worker/src/workflows/orchestrators/user-story.orchestrator.ts`
 - `packages/worker/src/workflows/orchestrators/technical-plan.orchestrator.ts`
-- `packages/worker/src/workflows/orchestrators/code-generation.orchestrator.ts` - Phase 4
+- `packages/worker/src/workflows/orchestrators/code-generation.orchestrator.ts` - Phase 4 V3
+
+### Workflow Signals (V3)
+- `packages/worker/src/workflows/signals/code-question-response.signal.ts` - Human response signal
 
 ### Activities
 - `packages/worker/src/activities/refinement.activities.ts`
 - `packages/worker/src/activities/linear.activities.ts`
-- `packages/worker/src/activities/code-generation.activities.ts` - Phase 4
+- `packages/worker/src/activities/code-generation.activities.ts` - Phase 4 (ambiguity/solution detection)
+- `packages/worker/src/activities/interactive.activities.ts` - V3 question posting
 - `packages/worker/src/activities/vcs.activities.ts` - Git operations
 
 ### AI Providers
 - `packages/sdk/src/agents/ollama.provider.ts` - Local LLM (Phase 4)
 - `packages/sdk/src/agents/openrouter.provider.ts` - Cloud LLM (Phases 1-3)
 
+### AI Prompts (V3)
+- `packages/sdk/src/agents/prompts/ambiguity-detection/` - Pre-generation analysis
+- `packages/sdk/src/agents/prompts/solution-detection/` - Multi-solution handling
+
 ### Configuration
 - `packages/common/src/types/workflow-config.types.ts`
 - `packages/common/src/types/automation-config.types.ts`
+
+### Database Schema
+- `packages/api/prisma/schema.prisma` - `PendingCodeQuestion` model (V3)
 
 ---
 

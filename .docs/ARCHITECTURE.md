@@ -1,7 +1,7 @@
 # 🏗️ DevFlow - Architecture & Design Decisions
 
-**Version:** 1.1.0
-**Last Updated:** December 14, 2025
+**Version:** 1.2.0
+**Last Updated:** January 11, 2026
 **Status:** Active
 
 ---
@@ -18,8 +18,9 @@
 8. [Architecture Validation](#architecture-validation)
 9. [OAuth Architecture](#oauth-architecture)
 10. [Configuration Management](#configuration-management)
-11. [Integration Services Pattern](#integration-services-pattern) ⭐ NEW
-12. [Summary](#summary)
+11. [Integration Services Pattern](#integration-services-pattern)
+12. [Workflow Signals Pattern](#workflow-signals-pattern) ⭐ NEW (V3)
+13. [Summary](#summary)
 
 ---
 
@@ -111,6 +112,8 @@ NestJS is a server-side framework for Node.js that provides:
 │ • Temporal workflows (devflowWorkflow)                     │
 │ • Temporal activities (plain async functions)              │
 │ • Activities: VCS, CI, Linear, Spec gen, Code gen, RAG    │
+│ • Signals: codeQuestionResponseSignal (V3 human-in-loop)  │
+│ • Interactive Activities: postCodeQuestion, etc. (V3)     │
 │ • Imports SDK services directly                            │
 └─────────────────────────────────────────────────────────────┘
 
@@ -1170,6 +1173,183 @@ const context = await figmaService.getDesignContext(projectId, fileKey);
 
 ---
 
+## Workflow Signals Pattern
+
+### Overview (Phase 4 V3)
+
+DevFlow V3 introduces **Temporal Signals** for human-in-the-loop interactions during code generation. This pattern enables workflows to pause, wait for human input, and resume based on responses.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Signal Flow (V3)                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │ Workflow (code-generation.orchestrator.ts)          │    │
+│  │                                                      │    │
+│  │ 1. Detect ambiguity or validation failure           │    │
+│  │ 2. Post question to Linear (via activity)           │    │
+│  │ 3. Set up signal handler                            │    │
+│  │ 4. await condition(() => response, timeout)         │    │
+│  │ 5. Process response or use default on timeout       │    │
+│  └────────────────────────────────────────────────────┘    │
+│                           ↑                                  │
+│                           │ Signal                           │
+│                           │                                  │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │ Webhook Handler (webhooks.service.ts)               │    │
+│  │                                                      │    │
+│  │ 1. Receive Linear comment webhook                   │    │
+│  │ 2. Parse response (OPTION:A, APPROVE, etc.)         │    │
+│  │ 3. Look up pending question by Linear issue ID      │    │
+│  │ 4. Send signal to workflow via Temporal client      │    │
+│  └────────────────────────────────────────────────────┘    │
+│                           ↑                                  │
+│                           │ HTTP Webhook                     │
+│                           │                                  │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │ Linear (external)                                   │    │
+│  │                                                      │    │
+│  │ 1. Developer sees question comment                  │    │
+│  │ 2. Developer replies with choice                    │    │
+│  │ 3. Linear sends webhook to DevFlow API              │    │
+│  └────────────────────────────────────────────────────┘    │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Signal Definition
+
+Signals are defined using Temporal's `defineSignal`:
+
+```typescript
+// packages/worker/src/workflows/signals/code-question-response.signal.ts
+import { defineSignal } from '@temporalio/workflow';
+
+export interface CodeQuestionResponsePayload {
+  questionId: string;
+  responseType: 'option_selected' | 'custom_text' | 'approved' | 'rejected' | 'timeout';
+  selectedOption?: string;
+  customText?: string;
+  respondedBy: string;
+  respondedAt: Date;
+}
+
+export const codeQuestionResponseSignal = defineSignal<[CodeQuestionResponsePayload]>(
+  'codeQuestionResponse'
+);
+```
+
+### Workflow Usage
+
+Workflows set up signal handlers and wait with timeout:
+
+```typescript
+// packages/worker/src/workflows/orchestrators/code-generation.orchestrator.ts
+import { setHandler, condition } from '@temporalio/workflow';
+import { codeQuestionResponseSignal, CodeQuestionResponsePayload } from '../signals/code-question-response.signal';
+
+export async function codeGenerationOrchestrator(input: WorkflowInput) {
+  // State for signal handler
+  let questionResponse: CodeQuestionResponsePayload | null = null;
+
+  // Set up signal handler
+  setHandler(codeQuestionResponseSignal, (payload: CodeQuestionResponsePayload) => {
+    questionResponse = payload;
+  });
+
+  // Post question via activity
+  const questionResult = await postCodeQuestion({
+    projectId,
+    linearId,
+    questionType: 'clarification',
+    question: 'Which approach should we use?',
+    options: [
+      { id: 'A', label: 'Option A', ... },
+      { id: 'B', label: 'Option B', ... },
+    ],
+    metadata: { workflowId, timeoutHours: 24, ... },
+  });
+
+  // Wait for response with timeout
+  const timeoutMs = 24 * 60 * 60 * 1000; // 24 hours
+  const gotResponse = await condition(() => questionResponse !== null, timeoutMs);
+
+  if (gotResponse && questionResponse) {
+    // Process human response
+    if (questionResponse.responseType === 'option_selected') {
+      selectedOption = questionResponse.selectedOption;
+    }
+  } else {
+    // Timeout - use AI-recommended option
+    selectedOption = recommendedOption;
+  }
+}
+```
+
+### Database Model
+
+Pending questions are tracked for webhook lookup:
+
+```prisma
+model PendingCodeQuestion {
+  id             String   @id @default(cuid())
+  projectId      String
+  taskId         String
+  workflowId     String
+  questionType   String   // clarification, solution_choice, approval
+  commentId      String   // Linear comment ID
+  status         String   @default("pending") // pending, answered, timeout
+  responseType   String?  // option_selected, custom_text, approved, rejected
+  selectedOption String?
+  customText     String?  @db.Text
+  respondedBy    String?
+  respondedAt    DateTime?
+  timeoutAt      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+```
+
+### Question Types
+
+| Type | When Used | Response Format |
+|------|-----------|-----------------|
+| `clarification` | Pre-generation ambiguity detected | `OPTION:A` or free text |
+| `solution_choice` | Post-failure with multiple fixes | `OPTION:A` or free text |
+| `approval` | Pre-PR review (optional) | `APPROVE` or `REJECT:reason` |
+
+### Implementation Files
+
+**Workflow:**
+- `packages/worker/src/workflows/orchestrators/code-generation.orchestrator.ts`
+
+**Signal Definition:**
+- `packages/worker/src/workflows/signals/code-question-response.signal.ts`
+
+**Activities:**
+- `packages/worker/src/activities/interactive.activities.ts` - Question posting
+- `packages/worker/src/activities/code-generation.activities.ts` - Ambiguity/solution detection
+
+**Prompts:**
+- `packages/sdk/src/agents/prompts/ambiguity-detection/` - Pre-generation analysis
+- `packages/sdk/src/agents/prompts/solution-detection/` - Multi-solution handling
+
+**Webhook Handler:**
+- `packages/api/src/webhooks/webhooks.service.ts` - Receives Linear comment webhooks
+
+### Benefits
+
+1. **Human Oversight** - AI asks before making uncertain decisions
+2. **Async Communication** - Workflows wait for human response without blocking workers
+3. **Graceful Timeouts** - Falls back to AI recommendation if no response
+4. **Audit Trail** - All questions and responses tracked in database
+5. **Linear Integration** - Questions appear as familiar comments
+
+---
+
 ## Summary
 
 **The DevFlow architecture follows these core principles:**
@@ -1196,6 +1376,6 @@ const context = await figmaService.getDesignContext(projectId, fileKey);
 
 ---
 
-**Last Updated:** December 14, 2025
+**Last Updated:** January 11, 2026
 **Maintained By:** DevFlow Team
 **Questions?** See [DOCUMENTATION.md](./DOCUMENTATION.md) or [CLAUDE.md](./CLAUDE.md)
