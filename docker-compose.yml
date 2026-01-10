@@ -169,6 +169,17 @@ services:
       - OLLAMA_CODE_MODEL=deepseek-coder:6.7b
       - OLLAMA_EMBEDDINGS_MODEL=nomic-embed-text
       - ENABLE_OLLAMA=true
+      # Phase 4 V2: Docker-in-Docker for container execution
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - CONTAINER_DEFAULT_MEMORY=2g
+      - CONTAINER_DEFAULT_TIMEOUT=600000
+      - CONTAINER_MAX_CONCURRENT=5
+    # Phase 4 V2: Mount Docker socket for container execution (lint, typecheck, tests)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    # Grant access to Docker socket
+    group_add:
+      - docker
     depends_on:
       postgres:
         condition: service_healthy
@@ -180,6 +191,7 @@ services:
         condition: service_started
       ollama:
         condition: service_healthy
+    # Development volumes (commented out for production builds)
     # volumes:
     #   - ./packages/worker:/app/packages/worker
     #   - ./packages/common:/app/packages/common

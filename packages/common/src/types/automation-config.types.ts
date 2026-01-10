@@ -66,6 +66,7 @@ export interface TechnicalPlanFeatures {
 /**
  * Feature flags for the Code Generation phase (Phase 4)
  * Uses local LLM (Ollama) - no cloud fallback for privacy
+ * V2 adds isolated container execution for validation and tests
  */
 export interface CodeGenerationFeatures {
   /** Automatically update Linear issue status (In Progress, Code Review, Failed) */
@@ -78,6 +79,24 @@ export interface CodeGenerationFeatures {
   enableGuardrails: boolean;
   /** Create PR as draft (always true for safety - requires human review) */
   createDraftPR: boolean;
+
+  // V2: Container Execution Features
+  /** Enable code execution in isolated Docker container (clone, lint, typecheck, tests) */
+  enableContainerExecution: boolean;
+  /** Enable ESLint check in container */
+  enableLintCheck: boolean;
+  /** Enable TypeScript typecheck in container */
+  enableTypecheckCheck: boolean;
+  /** Enable test execution in container */
+  enableTestExecution: boolean;
+  /** Maximum number of retry attempts with AI fix (0 = no retry) */
+  maxRetries: number;
+  /** Container execution timeout in minutes */
+  containerTimeoutMinutes: number;
+  /** Docker image to use for container execution */
+  containerImage: string;
+  /** Memory limit for container (e.g., '2g', '512m') */
+  containerMemory: string;
 }
 
 // ============================================
@@ -244,6 +263,15 @@ export const DEFAULT_CODE_GENERATION_FEATURES: CodeGenerationFeatures = {
   reuseTechnicalPlan: true,
   enableGuardrails: true,
   createDraftPR: true, // Always true for safety - requires human review
+  // V2: Container Execution (enabled by default)
+  enableContainerExecution: true,
+  enableLintCheck: true,
+  enableTypecheckCheck: true,
+  enableTestExecution: true,
+  maxRetries: 3,
+  containerTimeoutMinutes: 10,
+  containerImage: 'node:20-alpine',
+  containerMemory: '2g',
 };
 
 /** Default Ollama model for code generation (local LLM) */

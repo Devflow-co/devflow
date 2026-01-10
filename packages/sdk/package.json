@@ -6,7 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc && tsc-alias && npm run copy-prompts",
-    "copy-prompts": "cp -r src/agents/prompts/refinement src/agents/prompts/user-story src/agents/prompts/technical-plan src/agents/prompts/code-generation dist/agents/prompts/ && mkdir -p dist/agents/council/prompts && cp -r src/agents/council/prompts/* dist/agents/council/prompts/",
+    "copy-prompts": "cp -r src/agents/prompts/refinement src/agents/prompts/user-story src/agents/prompts/technical-plan src/agents/prompts/code-generation src/agents/prompts/code-generation-retry dist/agents/prompts/ && mkdir -p dist/agents/council/prompts && cp -r src/agents/council/prompts/* dist/agents/council/prompts/",
     "dev": "tsc --watch",
     "clean": "rm -rf dist *.tsbuildinfo",
     "lint": "eslint src --ext .ts",
@@ -38,6 +38,7 @@
     "@supabase/supabase-js": "^2.90.1",
     "axios": "^1.6.5",
     "cohere-ai": "^7.7.0",
+    "dockerode": "^4.0.9",
     "ioredis": "^5.3.2",
     "openai": "^4.28.0",
     "redis": "^4.6.12",
@@ -46,6 +47,7 @@
   },
   "devDependencies": {
     "@types/babel__traverse": "^7.20.5",
+    "@types/dockerode": "^3.3.47",
     "@types/jest": "^29.5.11",
     "@types/node": "^20.19.24",
     "dotenv": "^16.6.1",

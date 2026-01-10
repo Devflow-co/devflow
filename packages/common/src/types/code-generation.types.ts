@@ -248,6 +248,121 @@ export interface CodeValidationOutput {
 }
 
 // ============================================
+// Container Execution Types (V2)
+// ============================================
+
+export interface ContainerPhaseResult {
+  /** Whether this phase succeeded */
+  success: boolean;
+  /** Exit code from command */
+  exitCode: number;
+  /** Command output */
+  output: string;
+  /** Duration in milliseconds */
+  duration: number;
+}
+
+export interface ExecuteInContainerInput {
+  /** Project ID for OAuth token resolution */
+  projectId: string;
+  /** Task ID for logging */
+  taskId: string;
+  /** Repository to clone */
+  repository: {
+    owner: string;
+    repo: string;
+    branch: string;
+  };
+  /** Generated files to apply */
+  generatedFiles: GeneratedFile[];
+  /** Commands to run in container */
+  commands: {
+    /** Install command (e.g., "npm ci", "pip install -r requirements.txt") */
+    install?: string;
+    /** Lint command (e.g., "npm run lint") */
+    lint?: string;
+    /** Typecheck command (e.g., "npm run typecheck") */
+    typecheck?: string;
+    /** Test command (e.g., "npm test") */
+    test?: string;
+  };
+  /** Timeout in milliseconds (default: 600000 = 10 min) */
+  timeout?: number;
+  /** Docker image to use (default: node:20-alpine) */
+  image?: string;
+  /** Memory limit (default: 2g) */
+  memory?: string;
+}
+
+export interface ExecuteInContainerOutput {
+  /** Whether all phases succeeded */
+  success: boolean;
+  /** Overall exit code (0 if all passed) */
+  exitCode: number;
+  /** Phase-by-phase results */
+  phases: {
+    clone: ContainerPhaseResult;
+    applyFiles: ContainerPhaseResult;
+    install: ContainerPhaseResult;
+    lint?: ContainerPhaseResult;
+    typecheck?: ContainerPhaseResult;
+    test?: ContainerPhaseResult;
+  };
+  /** Aggregated logs */
+  logs: string;
+  /** Total duration in milliseconds */
+  duration: number;
+  /** Parsed test results (if test phase ran) */
+  testResults?: TestExecutionOutput;
+  /** Which phase failed (if any) */
+  failedPhase?: 'clone' | 'applyFiles' | 'install' | 'lint' | 'typecheck' | 'test';
+}
+
+// ============================================
+// AI Failure Analysis Types (V2)
+// ============================================
+
+export interface AnalyzeFailuresWithAIInput {
+  /** Project ID */
+  projectId: string;
+  /** Task ID */
+  taskId: string;
+  /** Generated files that failed */
+  generatedFiles: GeneratedFile[];
+  /** Container execution result */
+  containerResult: ExecuteInContainerOutput;
+  /** Number of previous retry attempts */
+  previousAttempts: number;
+  /** Original context for regeneration */
+  originalPromptContext: {
+    technicalPlan: CodeGenerationFromPlanInput['technicalPlan'];
+    codebaseContext?: string;
+  };
+}
+
+export interface SuggestedFix {
+  /** File path to fix */
+  file: string;
+  /** Description of the issue */
+  issue: string;
+  /** Suggested fix */
+  suggestion: string;
+}
+
+export interface AnalyzeFailuresWithAIOutput {
+  /** Root cause analysis */
+  analysis: string;
+  /** Which phase failed */
+  failedPhase: 'lint' | 'typecheck' | 'test';
+  /** Suggested fixes */
+  suggestedFixes: SuggestedFix[];
+  /** Enhanced prompt for retry generation */
+  retryPromptEnhancement: string;
+  /** Confidence in the analysis */
+  confidence: 'high' | 'medium' | 'low';
+}
+
+// ============================================
 // Orchestrator Types
 // ============================================
 
@@ -273,6 +388,20 @@ export interface CodeGenerationOrchestratorResult {
     passed: number;
     failed: number;
     retryAttempts: number;
+  };
+
+  /** Container execution results (V2) */
+  containerResult?: {
+    success: boolean;
+    failedPhase?: string;
+    duration: number;
+  };
+
+  /** Retry metrics (V2) */
+  retryMetrics?: {
+    totalAttempts: number;
+    validationRetries: number;
+    testRetries: number;
   };
 
   /** Number of files generated */

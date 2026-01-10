@@ -35,6 +35,16 @@ export * from '@/activities/security.activities';
 // Phase 4: Code Generation activities (Ollama - local LLM)
 export * from '@/activities/code-generation.activities';
 
+// Phase 4 V2: Container Execution activities (Docker isolation)
+export {
+  executeInContainer,
+  checkDockerHealth,
+  getDefaultCommands,
+  getDefaultImage,
+  type ExecuteInContainerActivityInput,
+  type DockerHealthCheckOutput,
+} from '@/activities/container-execution.activities';
+
 // RAG activities
 export {
   indexRepository,

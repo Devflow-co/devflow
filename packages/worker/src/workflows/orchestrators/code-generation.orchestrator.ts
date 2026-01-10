@@ -1,26 +1,41 @@
 /**
- * Code Generation Orchestrator - Phase 4 of Four-Phase Agile Workflow
+ * Code Generation Orchestrator - Phase 4 V2 of Four-Phase Agile Workflow
  *
  * Coordinates code generation from technical plan using local LLM (Ollama).
  * Privacy-first: All inference runs locally, no cloud fallback.
  *
- * MVP Steps (9 steps):
+ * V2 Steps (14 steps with container execution and retry loop):
+ * Phase A: Setup
  * 1. Sync task from Linear
  * 2. Update status to Code In Progress
  * 3. Get technical plan document (Phase 3)
  * 4. Parse technical plan (local function)
  * 5. Get codebase context document (optional - RAG chunks)
  * 6. Fetch full file contents from GitHub (for files to be modified)
- * 7. Generate code (Ollama - local LLM with full file context)
- * 8. Create branch + commit + draft PR
- * 9. Update status to Code Review
+ *
+ * Phase B: Generation Loop (with retry)
+ * 7. Generate code (Ollama - local LLM)
+ *
+ * Phase C: Container Execution (V2)
+ * 8. Execute in container (clone, apply files, lint, typecheck, test)
+ * 9. Analyze failures with AI (if failed, retry up to maxRetries)
+ *
+ * Phase D: Commit & PR
+ * 10. Create branch
+ * 11. Commit files
+ * 12. Create draft PR
+ *
+ * Phase E: Finalization
+ * 13. Update status to Code Review
+ * 14. Log completion metrics
  */
 
 import { executeChild, ApplicationFailure, proxyActivities, workflowInfo } from '@temporalio/workflow';
-import type { WorkflowConfig, CodeGenerationPhaseConfig, TechnicalPlanGenerationOutput } from '@devflow/common';
+import type { WorkflowConfig, CodeGenerationPhaseConfig, TechnicalPlanGenerationOutput, GeneratedFile, ExecuteInContainerOutput } from '@devflow/common';
 import { DEFAULT_WORKFLOW_CONFIG, DEFAULT_AUTOMATION_CONFIG } from '@devflow/common';
 import type * as progressActivities from '../../activities/workflow-progress.activities';
 import type * as codeGenActivities from '../../activities/code-generation.activities';
+import type * as containerActivities from '../../activities/container-execution.activities';
 import type * as vcsActivities from '../../activities/vcs.activities';
 
 // Import common step workflows
@@ -44,6 +59,17 @@ export interface CodeGenerationOrchestratorResult {
     draft: boolean;
   };
   generatedFiles?: number;
+  /** V2: Container execution result */
+  containerResult?: {
+    success: boolean;
+    failedPhase?: string;
+    duration: number;
+  };
+  /** V2: Retry metrics */
+  retryMetrics?: {
+    totalAttempts: number;
+    validationRetries: number;
+  };
 }
 
 /**
@@ -201,9 +227,15 @@ export async function codeGenerationOrchestrator(
   });
 
   // Configure code generation activities (long timeout for Ollama)
-  const { generateCodeFromPlan, fetchFilesFromGitHub } = proxyActivities<typeof codeGenActivities>({
+  const { generateCodeFromPlan, fetchFilesFromGitHub, analyzeFailuresWithAI } = proxyActivities<typeof codeGenActivities>({
     startToCloseTimeout: '15 minutes', // Long timeout for local LLM inference
     retry: { maximumAttempts: 2 },
+  });
+
+  // Configure container execution activities (V2)
+  const { executeInContainer, getDefaultCommands, getDefaultImage } = proxyActivities<typeof containerActivities>({
+    startToCloseTimeout: '15 minutes', // Long timeout for container execution
+    retry: { maximumAttempts: 1 }, // Don't retry container execution - we handle retries in the workflow
   });
 
   // Configure VCS activities
@@ -213,13 +245,22 @@ export async function codeGenerationOrchestrator(
   });
 
   const workflowId = workflowInfo().workflowId;
-  const TOTAL_STEPS = 9; // Added step for fetching full files from GitHub
+  const TOTAL_STEPS = features.enableContainerExecution ? 14 : 9; // V2 has 14 steps with container
   const PHASE = 'code_generation' as const;
   const projectId = input.projectId;
   const taskId = input.taskId;
   const workflowStartTime = new Date();
 
+  // V2: Track retry metrics
+  let retryCount = 0;
+  let errorContext = '';
+  let lastContainerResult: ExecuteInContainerOutput | null = null;
+
   try {
+    // ========================================
+    // Phase A: Setup (Steps 1-6)
+    // ========================================
+
     // Step 1: Sync task from Linear
     await logWorkflowProgress({
       workflowId,
@@ -508,100 +549,287 @@ export async function codeGenerationOrchestrator(
       });
     }
 
-    // Step 7: Generate code (Ollama - local LLM)
+    // ========================================
+    // Phase B & C: Generation Loop with Container Execution (Steps 7-9)
+    // ========================================
+
+    const maxRetries = features.maxRetries ?? 3;
+    let generatedFiles: GeneratedFile[] = [];
+    let codeResult: Awaited<ReturnType<typeof generateCodeFromPlan>> | null = null;
+    let containerSuccess = true;
+
+    // Generation loop with retry
+    while (retryCount <= maxRetries) {
+      // Step 7: Generate code (Ollama - local LLM)
+      const isRetry = retryCount > 0;
+      const step7Name = isRetry
+        ? `Generate Code (Retry ${retryCount}/${maxRetries})`
+        : 'Generate Code (Ollama - Local LLM)';
+
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: step7Name,
+        stepNumber: 7,
+        totalSteps: TOTAL_STEPS,
+        status: 'in_progress',
+        startedAt: new Date(),
+        metadata: isRetry ? { retryCount, errorContext: errorContext.substring(0, 500) } : undefined,
+      });
+
+      const step7Start = Date.now();
+      codeResult = await generateCodeFromPlan({
+        task: {
+          id: task.id,
+          linearId: task.linearId,
+          title: task.title,
+          description: task.description + (errorContext ? `\n\n${errorContext}` : ''),
+          identifier: task.identifier,
+        },
+        technicalPlan,
+        projectId: input.projectId,
+        taskId: input.taskId,
+        workflowId,
+        ragContext: ragContext ?? undefined,
+        fullFileContents: fullFileContents.length > 0 ? fullFileContents : undefined,
+        aiModel: automation.aiModel,
+      });
+
+      generatedFiles = codeResult.code.files;
+
+      await logWorkflowProgress({
+        workflowId,
+        projectId,
+        taskId,
+        phase: PHASE,
+        stepName: step7Name,
+        stepNumber: 7,
+        totalSteps: TOTAL_STEPS,
+        status: 'completed',
+        startedAt: new Date(step7Start),
+        completedAt: new Date(),
+        metadata: {
+          filesGenerated: generatedFiles.length,
+          branchName: codeResult.code.branchName,
+          fullFilesProvided: fullFileContents.length,
+          ai: codeResult.aiMetrics,
+          result: codeResult.resultSummary,
+          retryCount,
+        },
+      });
+
+      // ========================================
+      // V2: Container Execution (Step 8)
+      // ========================================
+
+      if (features.enableContainerExecution) {
+        await logWorkflowProgress({
+          workflowId,
+          projectId,
+          taskId,
+          phase: PHASE,
+          stepName: 'Execute in Container (Clone, Lint, Typecheck, Test)',
+          stepNumber: 8,
+          totalSteps: TOTAL_STEPS,
+          status: 'in_progress',
+          startedAt: new Date(),
+          metadata: { retryCount, fileCount: generatedFiles.length },
+        });
+
+        const step8Start = Date.now();
+
+        try {
+          lastContainerResult = await executeInContainer({
+            projectId: input.projectId,
+            taskId: input.taskId,
+            generatedFiles,
+            commands: {
+              install: 'npm ci',
+              lint: features.enableLintCheck ? 'npm run lint --if-present' : undefined,
+              typecheck: features.enableTypecheckCheck ? 'npm run typecheck --if-present' : undefined,
+              test: features.enableTestExecution ? 'npm test --if-present' : undefined,
+            },
+            containerConfig: {
+              image: features.containerImage || 'node:20-alpine',
+              memory: features.containerMemory || '2g',
+              timeout: (features.containerTimeoutMinutes || 10) * 60 * 1000,
+            },
+          });
+
+          containerSuccess = lastContainerResult.success;
+
+          await logWorkflowProgress({
+            workflowId,
+            projectId,
+            taskId,
+            phase: PHASE,
+            stepName: 'Execute in Container (Clone, Lint, Typecheck, Test)',
+            stepNumber: 8,
+            totalSteps: TOTAL_STEPS,
+            status: containerSuccess ? 'completed' : 'failed',
+            startedAt: new Date(step8Start),
+            completedAt: new Date(),
+            metadata: {
+              success: containerSuccess,
+              duration: lastContainerResult.duration,
+              failedPhase: lastContainerResult.failedPhase,
+              exitCode: lastContainerResult.exitCode,
+              testResults: lastContainerResult.testResults,
+            },
+          });
+
+          // If container execution succeeded, break the retry loop
+          if (containerSuccess) {
+            break;
+          }
+
+          // V2: Analyze failures with AI (Step 9)
+          if (retryCount < maxRetries) {
+            await logWorkflowProgress({
+              workflowId,
+              projectId,
+              taskId,
+              phase: PHASE,
+              stepName: 'Analyze Failures with AI',
+              stepNumber: 9,
+              totalSteps: TOTAL_STEPS,
+              status: 'in_progress',
+              startedAt: new Date(),
+              metadata: { failedPhase: lastContainerResult.failedPhase, retryCount },
+            });
+
+            const step9Start = Date.now();
+            const analysis = await analyzeFailuresWithAI({
+              projectId: input.projectId,
+              taskId: input.taskId,
+              generatedFiles,
+              containerResult: lastContainerResult,
+              previousAttempts: retryCount,
+              originalPromptContext: {
+                technicalPlan: {
+                  architecture: technicalPlan.architecture || [],
+                  implementationSteps: technicalPlan.implementationSteps || [],
+                  testingStrategy: technicalPlan.testingStrategy || '',
+                  risks: technicalPlan.risks || [],
+                },
+              },
+              workflowId,
+            });
+
+            errorContext = analysis.retryPromptEnhancement;
+
+            await logWorkflowProgress({
+              workflowId,
+              projectId,
+              taskId,
+              phase: PHASE,
+              stepName: 'Analyze Failures with AI',
+              stepNumber: 9,
+              totalSteps: TOTAL_STEPS,
+              status: 'completed',
+              startedAt: new Date(step9Start),
+              completedAt: new Date(),
+              metadata: {
+                failedPhase: analysis.failedPhase,
+                confidence: analysis.confidence,
+                suggestedFixes: analysis.suggestedFixes.length,
+                analysis: analysis.analysis.substring(0, 500),
+              },
+            });
+
+            retryCount++;
+            continue; // Retry generation
+          }
+        } catch (containerError) {
+          // Container execution failed entirely - log and continue to PR creation
+          containerSuccess = false;
+          await logWorkflowProgress({
+            workflowId,
+            projectId,
+            taskId,
+            phase: PHASE,
+            stepName: 'Execute in Container (Clone, Lint, Typecheck, Test)',
+            stepNumber: 8,
+            totalSteps: TOTAL_STEPS,
+            status: 'failed',
+            startedAt: new Date(step8Start),
+            completedAt: new Date(),
+            metadata: {
+              error: containerError instanceof Error ? containerError.message : 'Unknown error',
+            },
+          });
+        }
+      }
+
+      break; // Exit retry loop if container execution is disabled or max retries reached
+    }
+
+    // ========================================
+    // Phase D: Commit & PR (Steps 10-12)
+    // ========================================
+
+    if (!codeResult) {
+      throw new Error('Code generation failed - no result');
+    }
+
+    // Step 10: Create branch
     await logWorkflowProgress({
       workflowId,
       projectId,
       taskId,
       phase: PHASE,
-      stepName: 'Generate Code (Ollama - Local LLM)',
-      stepNumber: 7,
+      stepName: 'Create Branch',
+      stepNumber: 10,
       totalSteps: TOTAL_STEPS,
       status: 'in_progress',
       startedAt: new Date(),
     });
 
-    const step7Start = Date.now();
-    const codeResult = await generateCodeFromPlan({
-      task: {
-        id: task.id,
-        linearId: task.linearId,
-        title: task.title,
-        description: task.description,
-        identifier: task.identifier,
-      },
-      technicalPlan,
-      projectId: input.projectId,
-      taskId: input.taskId,
-      workflowId,
-      ragContext: ragContext ?? undefined,
-      fullFileContents: fullFileContents.length > 0 ? fullFileContents : undefined,
-      aiModel: automation.aiModel,
-    });
-
-    await logWorkflowProgress({
-      workflowId,
-      projectId,
-      taskId,
-      phase: PHASE,
-      stepName: 'Generate Code (Ollama - Local LLM)',
-      stepNumber: 7,
-      totalSteps: TOTAL_STEPS,
-      status: 'completed',
-      startedAt: new Date(step7Start),
-      completedAt: new Date(),
-      metadata: {
-        filesGenerated: codeResult.code.files.length,
-        branchName: codeResult.code.branchName,
-        fullFilesProvided: fullFileContents.length,
-        ai: codeResult.aiMetrics,
-        result: codeResult.resultSummary,
-      },
-    });
-
-    // Step 8: Create branch + commit + draft PR
-    await logWorkflowProgress({
-      workflowId,
-      projectId,
-      taskId,
-      phase: PHASE,
-      stepName: 'Create Branch, Commit & Draft PR',
-      stepNumber: 8,
-      totalSteps: TOTAL_STEPS,
-      status: 'in_progress',
-      startedAt: new Date(),
-    });
-
-    const step8Start = Date.now();
-
-    // Create branch
+    const step10Start = Date.now();
     await createBranch({
       projectId: input.projectId,
       branchName: codeResult.code.branchName,
       baseBranch: 'main', // TODO: Get from project config
     });
 
-    // Commit files
+    await logWorkflowProgress({
+      workflowId,
+      projectId,
+      taskId,
+      phase: PHASE,
+      stepName: 'Create Branch',
+      stepNumber: 10,
+      totalSteps: TOTAL_STEPS,
+      status: 'completed',
+      startedAt: new Date(step10Start),
+      completedAt: new Date(),
+      metadata: { branchName: codeResult.code.branchName },
+    });
+
+    // Step 11: Commit files
+    await logWorkflowProgress({
+      workflowId,
+      projectId,
+      taskId,
+      phase: PHASE,
+      stepName: 'Commit Generated Files',
+      stepNumber: 11,
+      totalSteps: TOTAL_STEPS,
+      status: 'in_progress',
+      startedAt: new Date(),
+    });
+
+    const step11Start = Date.now();
     await commitFiles({
       projectId: input.projectId,
       branchName: codeResult.code.branchName,
-      files: codeResult.code.files.map((f) => ({
+      files: generatedFiles.map((f) => ({
         path: f.path,
         content: f.content,
       })),
       message: codeResult.code.commitMessage,
-    });
-
-    // Create draft PR (always draft for safety)
-    const pr = await createPullRequest({
-      projectId: input.projectId,
-      branchName: codeResult.code.branchName,
-      title: codeResult.code.prTitle,
-      description: codeResult.code.prDescription,
-      targetBranch: 'main', // TODO: Get from project config
-      draft: true, // Always draft for safety - requires human review
-      linearIdentifier: task.identifier,
-      labels: ['auto-generated', 'devflow-phase-4'],
     });
 
     await logWorkflowProgress({
@@ -609,22 +837,70 @@ export async function codeGenerationOrchestrator(
       projectId,
       taskId,
       phase: PHASE,
-      stepName: 'Create Branch, Commit & Draft PR',
-      stepNumber: 8,
+      stepName: 'Commit Generated Files',
+      stepNumber: 11,
       totalSteps: TOTAL_STEPS,
       status: 'completed',
-      startedAt: new Date(step8Start),
+      startedAt: new Date(step11Start),
       completedAt: new Date(),
-      metadata: {
-        branchName: codeResult.code.branchName,
-        prNumber: pr.number,
-        prUrl: pr.url,
-        draft: pr.draft,
-        filesCommitted: codeResult.code.files.length,
-      },
+      metadata: { filesCommitted: generatedFiles.length },
     });
 
-    // Step 9: Update status to Code Review
+    // Step 12: Create draft PR
+    await logWorkflowProgress({
+      workflowId,
+      projectId,
+      taskId,
+      phase: PHASE,
+      stepName: 'Create Draft PR',
+      stepNumber: 12,
+      totalSteps: TOTAL_STEPS,
+      status: 'in_progress',
+      startedAt: new Date(),
+    });
+
+    const step12Start = Date.now();
+
+    // Build PR description with container results if available
+    let prDescription = codeResult.code.prDescription;
+    if (features.enableContainerExecution && lastContainerResult) {
+      const containerStatus = containerSuccess ? '✅ All checks passed' : `❌ Failed at: ${lastContainerResult.failedPhase}`;
+      prDescription += `\n\n## Container Validation\n\n${containerStatus}\n\n- Retries: ${retryCount}/${maxRetries}`;
+      if (lastContainerResult.testResults) {
+        prDescription += `\n- Tests: ${lastContainerResult.testResults.passed} passed, ${lastContainerResult.testResults.failed} failed`;
+      }
+    }
+
+    const pr = await createPullRequest({
+      projectId: input.projectId,
+      branchName: codeResult.code.branchName,
+      title: codeResult.code.prTitle,
+      description: prDescription,
+      targetBranch: 'main', // TODO: Get from project config
+      draft: true, // Always draft for safety - requires human review
+      linearIdentifier: task.identifier,
+      labels: ['auto-generated', 'devflow-phase-4', containerSuccess ? 'checks-passed' : 'checks-failed'],
+    });
+
+    await logWorkflowProgress({
+      workflowId,
+      projectId,
+      taskId,
+      phase: PHASE,
+      stepName: 'Create Draft PR',
+      stepNumber: 12,
+      totalSteps: TOTAL_STEPS,
+      status: 'completed',
+      startedAt: new Date(step12Start),
+      completedAt: new Date(),
+      metadata: { prNumber: pr.number, prUrl: pr.url, draft: pr.draft },
+    });
+
+    // ========================================
+    // Phase E: Finalization (Steps 13-14)
+    // ========================================
+
+    // Step 13: Update status to Code Review
     if (features.enableAutoStatusUpdate) {
       await logWorkflowProgress({
         workflowId,
@@ -632,13 +908,13 @@ export async function codeGenerationOrchestrator(
         taskId,
         phase: PHASE,
         stepName: 'Update Status to Code Review',
-        stepNumber: 9,
+        stepNumber: 13,
         totalSteps: TOTAL_STEPS,
         status: 'in_progress',
         startedAt: new Date(),
       });
 
-      const step9Start = Date.now();
+      const step13Start = Date.now();
       await executeChild(updateLinearStatusWorkflow, {
         workflowId: `status-review-${input.taskId}-${Date.now()}`,
         args: [
@@ -656,10 +932,10 @@ export async function codeGenerationOrchestrator(
         taskId,
         phase: PHASE,
         stepName: 'Update Status to Code Review',
-        stepNumber: 9,
+        stepNumber: 13,
         totalSteps: TOTAL_STEPS,
         status: 'completed',
-        startedAt: new Date(step9Start),
+        startedAt: new Date(step13Start),
         completedAt: new Date(),
         metadata: { status: LINEAR_STATUSES.codeReview },
       });
@@ -670,7 +946,7 @@ export async function codeGenerationOrchestrator(
         taskId,
         phase: PHASE,
         stepName: 'Update Status to Code Review (disabled)',
-        stepNumber: 9,
+        stepNumber: 13,
         totalSteps: TOTAL_STEPS,
         status: 'skipped',
         startedAt: new Date(),
@@ -678,7 +954,7 @@ export async function codeGenerationOrchestrator(
       });
     }
 
-    // Mark workflow as completed with duration
+    // Step 14: Log completion metrics
     await logWorkflowCompletion({
       workflowId,
       projectId,
@@ -696,7 +972,18 @@ export async function codeGenerationOrchestrator(
         url: pr.url,
         draft: pr.draft,
       },
-      generatedFiles: codeResult.code.files.length,
+      generatedFiles: generatedFiles.length,
+      containerResult: lastContainerResult
+        ? {
+            success: containerSuccess,
+            failedPhase: lastContainerResult.failedPhase,
+            duration: lastContainerResult.duration,
+          }
+        : undefined,
+      retryMetrics: {
+        totalAttempts: retryCount + 1,
+        validationRetries: retryCount,
+      },
     };
   } catch (error) {
     // Log workflow failure

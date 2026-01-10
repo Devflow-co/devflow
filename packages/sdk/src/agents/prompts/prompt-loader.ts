@@ -15,11 +15,11 @@ const promptCache = new Map<string, { system: string; user: string }>();
 
 /**
  * Charge les prompts depuis les fichiers markdown et substitue les variables
- * @param phase - Phase du workflow ('refinement', 'user-story', 'technical-plan', 'code-generation')
+ * @param phase - Phase du workflow ('refinement', 'user-story', 'technical-plan', 'code-generation', 'code-generation-retry')
  * @param variables - Variables à substituer dans les templates
  */
 export async function loadPrompts(
-  phase: 'refinement' | 'user-story' | 'technical-plan' | 'code-generation',
+  phase: 'refinement' | 'user-story' | 'technical-plan' | 'code-generation' | 'code-generation-retry',
   variables: PromptVariables
 ): Promise<LoadedPrompts> {
   // Charger les templates depuis le cache ou les fichiers

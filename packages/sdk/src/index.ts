@@ -115,5 +115,8 @@ export * from './slack';
 // Storage (Supabase)
 export * from './storage';
 
+// Docker (Container Execution)
+export * from './docker';
+
 // Factory functions
 export * from './factories';
