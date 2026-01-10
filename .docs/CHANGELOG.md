@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 ### Added
+- **Phase 4: Code Generation** - Automated code generation with local LLM (privacy-first)
+  - OllamaProvider for local LLM inference (deepseek-coder:6.7b by default)
+  - 9-step orchestrator workflow:
+    1. Sync task from Linear
+    2. Update status → "Code In Progress"
+    3. Get technical plan document (Phase 3)
+    4. Parse technical plan
+    5. Get codebase context (RAG chunks)
+    6. Fetch full file contents from GitHub (filesAffected)
+    7. Generate code (Ollama with full context)
+    8. Create branch + commit + draft PR
+    9. Update status → "Code Review"
+  - Full file context fetching from GitHub for accurate modifications
+  - Draft PR creation with automatic Linear linking
+  - Usage tracking for local LLM calls (analytics)
+  - New Linear statuses: To Code, Code In Progress, Code Review, Code Ready, Code Failed
+  - Docker Compose services for Ollama with model auto-pull
+
+- **Analytics Module** - Usage metrics and cost tracking dashboard
+  - Analytics API endpoints for organization usage data
+  - Dashboard components: KPIs, cost trends, token usage, model distribution
+  - Phase performance and workflow throughput charts
+  - Quota indicators for plan limits
+
 - **User Authentication Module** - Complete authentication system with email verification
   - UserAuthModule for handling authentication processes
   - Email verification and password reset functionalities

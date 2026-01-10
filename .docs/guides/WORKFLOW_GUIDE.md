@@ -1,18 +1,21 @@
 # DevFlow Workflow Guide
 
-Complete guide to the three-phase Agile workflow and advanced features.
+Complete guide to the four-phase Agile workflow and advanced features.
 
-## Three-Phase Agile Workflow
+## Four-Phase Agile Workflow
 
-DevFlow implements a three-phase workflow for transforming Linear tasks into deployable code.
+DevFlow implements a four-phase workflow for transforming Linear tasks into deployable code.
 
 ```
-Phase 1: Refinement    → Clarify requirements, estimate complexity
-Phase 2: User Story    → Formal user story with acceptance criteria
+Phase 1: Refinement     → Clarify requirements, estimate complexity
+Phase 2: User Story     → Formal user story with acceptance criteria
 Phase 3: Technical Plan → Architecture decisions, implementation steps
+Phase 4: Code Generation → Automated code + draft PR (privacy-first, local LLM)
 ```
 
 **Important:** Phases do NOT auto-chain. Each phase must be manually triggered by moving the issue to the corresponding "To X" status.
+
+**Privacy-First:** Phase 4 uses Ollama (local LLM) by default. All code and data remain on-premise with no cloud fallback.
 
 ---
 
@@ -88,7 +91,12 @@ If Phase 1 suggested splitting the task (L/XL complexity):
 
 ### Output
 
-Technical plan markdown in Linear document.
+Technical plan markdown in Linear document with:
+- Architecture decisions
+- Implementation steps
+- Files to affect (used by Phase 4)
+- Testing strategy
+- Risks and mitigations
 
 ### LLM Council (Optional)
 
@@ -104,6 +112,84 @@ ENABLE_COUNCIL=true
 COUNCIL_MODELS=anthropic/claude-sonnet-4,openai/gpt-4o,google/gemini-2.0-flash-exp
 COUNCIL_CHAIRMAN_MODEL=anthropic/claude-sonnet-4
 ```
+
+---
+
+## Phase 4: Code Generation (Privacy-First)
+
+**Trigger Status:** `To Code`
+**Output Status:** `Code Review` or `Code Failed`
+
+### What It Does
+
+1. Retrieves technical plan from Phase 3
+2. Fetches full file contents from GitHub (for files listed in `filesAffected`)
+3. Generates production-ready code using local LLM (Ollama)
+4. Creates a feature branch
+5. Commits generated files
+6. Creates a draft PR for human review
+
+### Privacy-First Architecture
+
+Phase 4 uses **Ollama** (local LLM) by default:
+- All inference runs locally on your infrastructure
+- No code or data sent to cloud services
+- No cloud fallback - fails locally if Ollama unavailable
+
+### 9-Step Orchestrator Workflow
+
+```
+Step 1: Sync task from Linear
+Step 2: Update status → "Code In Progress"
+Step 3: Get technical plan document
+Step 4: Parse technical plan (extract filesAffected, steps, etc.)
+Step 5: Get codebase context (RAG chunks for patterns)
+Step 6: Fetch full files from GitHub (filesAffected)
+Step 7: Generate code (Ollama with full context)
+Step 8: Create branch + commit + draft PR
+Step 9: Update status → "Code Review"
+```
+
+### Context Provided to AI
+
+| Context Type | Source | Purpose |
+|--------------|--------|---------|
+| RAG Chunks | Qdrant | Code patterns and conventions |
+| Full Files | GitHub API | Complete content of files to modify |
+| Technical Plan | Linear Document | Architecture, steps, testing strategy |
+| User Story | Linear Document | Acceptance criteria, business value |
+
+### Output
+
+- **Feature Branch:** `feat/<task-identifier>-<title-slug>`
+- **Draft PR:** Requires human review before merge
+- **PR includes:**
+  - Summary of changes
+  - Files modified/created
+  - Link to Linear issue
+  - Test plan checklist
+
+### Configuration
+
+```bash
+# Ollama Configuration
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_CODE_MODEL=deepseek-coder:6.7b
+OLLAMA_TIMEOUT=300000
+
+# Code Generation Features
+ENABLE_AUTO_STATUS_UPDATE=true
+REUSE_CODEBASE_CONTEXT=true
+CREATE_DRAFT_PR=true
+```
+
+### Human Review Required
+
+Phase 4 always creates **draft PRs** to ensure:
+- Human review before merging
+- Code quality validation
+- Security review
+- Test verification
 
 ---
 
@@ -157,7 +243,12 @@ const statusOrder = [
   'Plan In Progress',        // rank 9
   'Plan Failed',             // rank 10
   'Plan Ready',              // rank 11
-  'Done',                    // rank 12
+  'To Code',                 // rank 12  (Phase 4)
+  'Code In Progress',        // rank 13  (Phase 4)
+  'Code Failed',             // rank 14  (Phase 4)
+  'Code Review',             // rank 15  (Phase 4)
+  'Code Ready',              // rank 16  (Phase 4)
+  'Done',                    // rank 17
 ];
 ```
 
@@ -259,9 +350,10 @@ The main workflow (`devflowWorkflow`) routes to the appropriate sub-workflow:
 
 | Trigger Status | Sub-workflow | Output Status |
 |----------------|--------------|---------------|
-| `To Refinement` | `refinementWorkflow` | `Refinement Ready` |
-| `To User Story` | `userStoryWorkflow` | `UserStory Ready` |
-| `To Plan` | `technicalPlanWorkflow` | `Plan Ready` |
+| `To Refinement` | `refinementOrchestrator` | `Refinement Ready` |
+| `To User Story` | `userStoryOrchestrator` | `UserStory Ready` |
+| `To Plan` | `technicalPlanOrchestrator` | `Plan Ready` |
+| `To Code` | `codeGenerationOrchestrator` | `Code Review` |
 
 ---
 
@@ -269,19 +361,28 @@ The main workflow (`devflowWorkflow`) routes to the appropriate sub-workflow:
 
 ### Workflows
 - `packages/worker/src/workflows/devflow.workflow.ts` - Main router
-- `packages/worker/src/workflows/phases/refinement.workflow.ts`
-- `packages/worker/src/workflows/phases/user-story.workflow.ts`
-- `packages/worker/src/workflows/phases/technical-plan.workflow.ts`
+- `packages/worker/src/workflows/orchestrators/refinement.orchestrator.ts`
+- `packages/worker/src/workflows/orchestrators/user-story.orchestrator.ts`
+- `packages/worker/src/workflows/orchestrators/technical-plan.orchestrator.ts`
+- `packages/worker/src/workflows/orchestrators/code-generation.orchestrator.ts` - Phase 4
 
 ### Activities
 - `packages/worker/src/activities/refinement.activities.ts`
 - `packages/worker/src/activities/linear.activities.ts`
+- `packages/worker/src/activities/code-generation.activities.ts` - Phase 4
+- `packages/worker/src/activities/vcs.activities.ts` - Git operations
+
+### AI Providers
+- `packages/sdk/src/agents/ollama.provider.ts` - Local LLM (Phase 4)
+- `packages/sdk/src/agents/openrouter.provider.ts` - Cloud LLM (Phases 1-3)
 
 ### Configuration
 - `packages/common/src/types/workflow-config.types.ts`
+- `packages/common/src/types/automation-config.types.ts`
 
 ---
 
 **See also:**
 - [ARCHITECTURE.md](../ARCHITECTURE.md) for system architecture
 - [TESTING.md](./TESTING.md) for testing the workflow
+- [ENV_VARIABLES.md](../ENV_VARIABLES.md) for Ollama configuration

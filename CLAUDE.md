@@ -1,6 +1,6 @@
 # CLAUDE.md - DevFlow
 
-**Version:** 2.5.1 | **Updated:** December 28, 2025 | **Status:** Production Ready
+**Version:** 2.6.0 | **Updated:** January 10, 2026 | **Status:** Production Ready
 
 ## Agent Reminders
 
@@ -11,7 +11,9 @@
 
 ## Overview
 
-DevFlow is a universal DevOps orchestrator that transforms Linear tasks into deployed code. It uses a Three-Phase Agile workflow: **Refinement → User Story → Technical Plan**.
+DevFlow is a universal DevOps orchestrator that transforms Linear tasks into deployed code. It uses a Four-Phase Agile workflow: **Refinement → User Story → Technical Plan → Code Generation**.
+
+Phase 4 (Code Generation) uses **Ollama** (local LLM) for privacy-first automated code generation with draft PR creation.
 
 **Details:** [.docs/guides/WORKFLOW_GUIDE.md](.docs/guides/WORKFLOW_GUIDE.md)
 
@@ -24,6 +26,7 @@ DevFlow is a universal DevOps orchestrator that transforms Linear tasks into dep
 - **Database:** PostgreSQL 16 + Prisma ORM
 - **Cache:** Redis 7
 - **Frontend:** Nuxt 3 (port 3001)
+- **Local LLM:** Ollama (Phase 4 code generation) - port 11434
 
 **Architecture Rule:** NestJS decorators (`@Injectable`, `@Module`, `@Controller`) are used **only in @devflow/api**. SDK, worker, CLI, and common packages are **plain TypeScript**.
 
@@ -59,13 +62,13 @@ devflow/
 
 ### @devflow/worker
 - Main workflow: `devflowWorkflow` (router)
-- Sub-workflows: `refinementWorkflow`, `userStoryWorkflow`, `technicalPlanWorkflow`
-- Activities: Linear sync, AI generation, context retrieval
+- Orchestrators: `refinementOrchestrator`, `userStoryOrchestrator`, `technicalPlanOrchestrator`, `codeGenerationOrchestrator`
+- Activities: Linear sync, AI generation, context retrieval, code generation, VCS operations
 
 ### @devflow/sdk
 - **VCS:** GitHubProvider, GitHubIntegrationService
 - **Linear:** LinearClient, LinearIntegrationService
-- **AI:** AnthropicProvider, OpenAIProvider, OpenRouterProvider
+- **AI:** AnthropicProvider, OpenAIProvider, OpenRouterProvider, OllamaProvider (local LLM)
 - **Integrations:** FigmaIntegrationService, SentryIntegrationService
 - **RAG:** Indexing, retrieval, embeddings
 - **Auth:** Token encryption, storage, refresh
@@ -94,12 +97,13 @@ devflow/
 
 ---
 
-## Three-Phase Workflow (Summary)
+## Four-Phase Workflow (Summary)
 
 ```
-Phase 1: To Refinement  → refinementWorkflow  → Refinement Ready
-Phase 2: To User Story  → userStoryWorkflow   → UserStory Ready
-Phase 3: To Plan        → technicalPlanWorkflow → Plan Ready
+Phase 1: To Refinement  → refinementOrchestrator     → Refinement Ready
+Phase 2: To User Story  → userStoryOrchestrator      → UserStory Ready
+Phase 3: To Plan        → technicalPlanOrchestrator  → Plan Ready
+Phase 4: To Code        → codeGenerationOrchestrator → Code Review (draft PR)
 ```
 
 Phases do NOT auto-chain. Each must be manually triggered.
@@ -109,6 +113,7 @@ Phases do NOT auto-chain. Each must be manually triggered.
 - Status rollup (parent reflects minimum child status)
 - PO questions posted as Linear comments
 - Context documents created in Phase 1
+- **Phase 4:** Local LLM code generation with Ollama (privacy-first, draft PRs)
 
 **Details:** [.docs/guides/WORKFLOW_GUIDE.md](.docs/guides/WORKFLOW_GUIDE.md)
 
@@ -176,25 +181,29 @@ OPENROUTER_API_KEY=sk-or-xxx
 ### Documentation
 - [.docs/README.md](.docs/README.md) - Documentation index
 - [.docs/ARCHITECTURE.md](.docs/ARCHITECTURE.md) - Architecture deep dive
-- [.docs/guides/WORKFLOW_GUIDE.md](.docs/guides/WORKFLOW_GUIDE.md) - Three-phase workflow
+- [.docs/guides/WORKFLOW_GUIDE.md](.docs/guides/WORKFLOW_GUIDE.md) - Four-phase workflow
 - [.docs/ENV_VARIABLES.md](.docs/ENV_VARIABLES.md) - All environment variables
 - [.docs/integrations/](.docs/integrations/) - OAuth setup guides
 - [.docs/rag/](.docs/rag/) - RAG system docs
 
 ### Workflows
 - `packages/worker/src/workflows/devflow.workflow.ts` - Main router
-- `packages/worker/src/workflows/phases/refinement.workflow.ts`
-- `packages/worker/src/workflows/phases/user-story.workflow.ts`
-- `packages/worker/src/workflows/phases/technical-plan.workflow.ts`
+- `packages/worker/src/workflows/orchestrators/refinement.orchestrator.ts`
+- `packages/worker/src/workflows/orchestrators/user-story.orchestrator.ts`
+- `packages/worker/src/workflows/orchestrators/technical-plan.orchestrator.ts`
+- `packages/worker/src/workflows/orchestrators/code-generation.orchestrator.ts` - Phase 4
 
 ### Activities
 - `packages/worker/src/activities/refinement.activities.ts`
 - `packages/worker/src/activities/linear.activities.ts`
 - `packages/worker/src/activities/context.activities.ts`
+- `packages/worker/src/activities/code-generation.activities.ts` - Phase 4
+- `packages/worker/src/activities/vcs.activities.ts` - Git operations
 
 ### SDK Core
 - `packages/sdk/src/linear/linear.client.ts` - Linear API client
-- `packages/sdk/src/agents/` - AI providers
+- `packages/sdk/src/agents/` - AI providers (OpenRouter, Ollama)
+- `packages/sdk/src/agents/ollama.provider.ts` - Local LLM (Phase 4)
 - `packages/sdk/src/auth/` - OAuth services
 - `packages/sdk/src/rag/` - RAG system
 

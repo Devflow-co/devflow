@@ -55,11 +55,32 @@ ANTHROPIC_API_KEY=sk-ant-xxx
 OPENAI_API_KEY=sk-proj-xxx
 ```
 
+### Ollama (Local LLM - Phase 4)
+
+```bash
+# Ollama server URL (local or remote)
+OLLAMA_BASE_URL=http://localhost:11434
+
+# Code generation model (default: deepseek-coder:6.7b)
+OLLAMA_CODE_MODEL=deepseek-coder:6.7b
+
+# Embeddings model (for future use)
+OLLAMA_EMBEDDINGS_MODEL=nomic-embed-text
+
+# Request timeout (ms, default: 300000 = 5 minutes)
+OLLAMA_TIMEOUT=300000
+
+# Enable Ollama for Phase 4 (default: true when OLLAMA_BASE_URL is set)
+ENABLE_OLLAMA=true
+```
+
+**Note:** Phase 4 uses Ollama by default for privacy-first code generation. No cloud fallback.
+
 ---
 
 ## Linear Integration
 
-### Three-Phase Workflow Statuses
+### Four-Phase Workflow Statuses
 
 ```bash
 # Phase 1: Refinement
@@ -79,6 +100,13 @@ LINEAR_STATUS_TO_PLAN=To Plan
 LINEAR_STATUS_PLAN_IN_PROGRESS=Plan In Progress
 LINEAR_STATUS_PLAN_READY=Plan Ready
 LINEAR_STATUS_PLAN_FAILED=Plan Failed
+
+# Phase 4: Code Generation (v2.6.0)
+LINEAR_STATUS_TO_CODE=To Code
+LINEAR_STATUS_CODE_IN_PROGRESS=Code In Progress
+LINEAR_STATUS_CODE_REVIEW=Code Review
+LINEAR_STATUS_CODE_READY=Code Ready
+LINEAR_STATUS_CODE_FAILED=Code Failed
 ```
 
 ### Webhook
@@ -252,9 +280,14 @@ REDIS_PORT=6379
 QDRANT_HOST=localhost
 QDRANT_PORT=6333
 
-# AI (at least one required)
+# AI - Phases 1-3 (at least one required)
 OPENROUTER_API_KEY=sk-or-xxx
 OPENROUTER_MODEL=anthropic/claude-sonnet-4
+
+# AI - Phase 4: Ollama (local LLM, privacy-first)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_CODE_MODEL=deepseek-coder:6.7b
+OLLAMA_TIMEOUT=300000
 
 # Linear
 LINEAR_WEBHOOK_SECRET=xxx
