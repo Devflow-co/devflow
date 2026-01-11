@@ -1,6 +1,6 @@
 # CLAUDE.md - DevFlow
 
-**Version:** 2.7.0 | **Updated:** January 11, 2026 | **Status:** Production Ready
+**Version:** 2.8.0 | **Updated:** January 11, 2026 | **Status:** Production Ready
 
 ## Agent Reminders
 
@@ -59,6 +59,7 @@ devflow/
 - User auth: `/user-auth/*` (signup, login, OAuth, email verification)
 - User settings: `/user/settings/*` (profile, avatar, password)
 - Organizations: `/organizations/*` (settings, logo, members)
+- **WebSocket:** `/agent` namespace for conversational AI agent
 
 ### @devflow/worker
 - Main workflow: `devflowWorkflow` (router)
@@ -70,6 +71,7 @@ devflow/
 - **VCS:** GitHubProvider, GitHubIntegrationService
 - **Linear:** LinearClient, LinearIntegrationService
 - **AI:** AnthropicProvider, OpenAIProvider, OpenRouterProvider, OllamaProvider (local LLM)
+- **Conversational Agent:** Tool-calling agent with OpenAI-compatible format
 - **Integrations:** FigmaIntegrationService, SentryIntegrationService
 - **RAG:** Indexing, retrieval, embeddings
 - **Auth:** Token encryption, storage, refresh
@@ -219,7 +221,19 @@ OPENROUTER_API_KEY=sk-or-xxx
 - `packages/api/src/webhooks/webhooks.service.ts` - Webhook handling
 - `packages/api/src/auth/` - OAuth endpoints
 - `packages/api/src/user-auth/` - User authentication
+- `packages/api/src/agent/` - Conversational AI agent (WebSocket)
 - `packages/api/prisma/schema.prisma` - Database schema
+
+### Conversational Agent
+- `packages/sdk/src/agents/conversational/` - Core agent implementation
+- `packages/sdk/src/agents/conversational/conversational-agent.ts` - Main agent with tool loop
+- `packages/sdk/src/agents/conversational/tool-registry.ts` - Tool registration
+- `packages/sdk/src/agents/conversational/tool-executor.ts` - Tool execution
+- `packages/sdk/src/agents/conversational/tools/` - Tool definitions (Linear, GitHub, RAG, Workflow)
+- `packages/sdk/src/agents/conversational/providers/openrouter.provider.ts` - OpenRouter LLM provider
+- `packages/api/src/agent/agent.gateway.ts` - WebSocket gateway
+- `packages/api/src/agent/agent.service.ts` - Agent orchestration service
+- `packages/api/src/agent/conversation.service.ts` - Redis conversation state
 
 ### Configuration
 - `packages/common/src/types/workflow-config.types.ts` - Status configuration

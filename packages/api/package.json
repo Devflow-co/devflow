@@ -39,8 +39,10 @@
     "@nestjs/config": "^3.1.1",
     "@nestjs/core": "^10.3.0",
     "@nestjs/platform-express": "^10.3.0",
+    "@nestjs/platform-socket.io": "^10.0.0",
     "@nestjs/swagger": "^7.1.17",
     "@nestjs/throttler": "^5.1.1",
+    "@nestjs/websockets": "^10.0.0",
     "@octokit/app": "^16.1.2",
     "@prisma/client": "^5.8.1",
     "@temporalio/client": "^1.9.0",
@@ -54,7 +56,8 @@
     "nodemailer": "^7.0.12",
     "redis": "^4.6.12",
     "reflect-metadata": "^0.2.1",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "socket.io": "^4.8.3"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.2.1",

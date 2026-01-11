@@ -19,6 +19,7 @@ import { OrganizationsModule } from '@/organizations/organizations.module';
 import { ConfigAppModule } from '@/config/config.module';
 import { RagModule } from '@/rag/rag.module';
 import { AnalyticsModule } from '@/analytics/analytics.module';
+import { AgentModule } from '@/agent/agent.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { AnalyticsModule } from '@/analytics/analytics.module';
     WebhooksModule,
     RagModule,
     AnalyticsModule,
+    AgentModule,
   ],
 })
 export class AppModule {}

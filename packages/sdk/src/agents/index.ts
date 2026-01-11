@@ -9,6 +9,9 @@ export * from '@/agents/ollama.provider';
 export * from '@/agents/prompts/prompt-loader';
 export * from '@/agents/council';
 
+// Conversational Agent (Tool-calling agent for interactive use)
+export * from '@/agents/conversational';
+
 // Agent Factory
 import { CodeAgentDriver, AgentConfig } from '@/agents/agent.interface';
 import { AnthropicProvider } from '@/agents/anthropic.provider';
