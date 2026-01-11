@@ -24,5 +24,8 @@ export * from './steps/user-story';
 // Step workflows (technical-plan)
 export * from './steps/technical-plan';
 
+// Step workflows (code-generation)
+export * from './steps/code-generation';
+
 // Type definitions
 export * from './types';

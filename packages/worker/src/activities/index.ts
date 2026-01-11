@@ -79,6 +79,7 @@ export {
 export {
   logWorkflowProgress,
   logWorkflowFailure,
+  logWorkflowCompletion,
   type WorkflowPhase,
   type StepStatus,
   type LogWorkflowProgressParams,
