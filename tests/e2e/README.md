@@ -184,7 +184,98 @@ cd packages/worker && pnpm dev # Worker Temporal
 
 ---
 
-### 3. `test-full-project-setup.sh` - Setup complet interactif
+### 3. `test-code-generation-workflow.ts` - Test du workflow Code Generation (Phase 4)
+
+**Test E2E complet du workflow Four-Phase Agile - Phase 4 (Code Generation).**
+
+Ce test valide le workflow complet de génération de code en utilisant une issue existante en "Plan Ready" et en déclenchant la phase de génération via webhook.
+
+**Usage:**
+```bash
+npx tsx tests/e2e/test-code-generation-workflow.ts [options]
+```
+
+**Options:**
+- `--issue-id ID` : Utilise une issue Linear spécifique (doit être en Plan Ready)
+- `--cleanup` : Ferme le PR et archive l'issue après le test
+- `--skip-interactive` : Ignore les scénarios V3 interactifs (plus rapide)
+- `--timeout N` : Timeout en secondes (défaut: 600)
+
+**Ce qui est testé:**
+1. ✅ Récupération d'une issue existante en "Plan Ready"
+2. ✅ Passage au status "To Code"
+3. ✅ Déclenchement du workflow via webhook `/webhooks/linear`
+4. ✅ Exécution du workflow Temporal (`codeGenerationOrchestrator`)
+5. ✅ Génération du code par Ollama/OpenRouter
+6. ✅ Validation container (lint, typecheck, tests)
+7. ✅ Gestion des questions V3 (ambiguïté, choix solution, approbation)
+8. ✅ Création du draft PR sur GitHub
+9. ✅ Passage au status "Code Review"
+
+**Prérequis spécifiques:**
+```bash
+# Variables d'environnement requises
+export LINEAR_API_KEY="lin_api_xxx"
+export DATABASE_URL="postgresql://..."
+export OPENROUTER_API_KEY="sk-or-xxx"  # Ou Ollama configuré
+
+# Infrastructure nécessaire
+docker-compose up -d postgres redis temporal
+cd packages/api && pnpm dev    # API sur port 3001
+cd packages/worker && pnpm dev # Worker Temporal
+```
+
+**Exemple de sortie:**
+```
+══════════════════════════════════════════════════════════════════════
+  DevFlow E2E Test: Code Generation Workflow (Phase 4)
+══════════════════════════════════════════════════════════════════════
+
+[1/8] Checking API health...
+✅ API is healthy
+
+[2/8] Getting Linear team and test issue...
+ℹ️  Auto-detected team: Engineering (ENG)
+✅ Found "To Code" state: To Code
+ℹ️  Found existing issue in Plan Ready: ENG-456
+
+[3/8] Moving issue to "To Code" status...
+✅ Issue moved to "To Code"
+
+[4/8] Triggering workflow via webhook...
+✅ Workflow started: devflow-xyz789
+
+[5/8] Monitoring workflow progress...
+ℹ️  Status changed: To Code → Code In Progress
+🤖 Found pending question: clarification
+🤖 Replied to comment, answered question
+ℹ️  Status changed: Code In Progress → Code Review
+
+[6/8] Verifying final status...
+✅ Final status: Code Review
+
+[7/8] Verifying PR creation...
+✅ PR found: #42
+ℹ️  PR URL: https://github.com/org/repo/pull/42
+
+[8/8] Cleanup...
+ℹ️  Cleanup skipped (use --cleanup to enable)
+
+══════════════════════════════════════════════════════════════════════
+  Test Summary: PASSED
+══════════════════════════════════════════════════════════════════════
+
+  Issue: ENG-456
+  Final Status: Code Review
+  Duration: 180s
+  PR: #42 (https://github.com/org/repo/pull/42)
+  Questions Answered: 1
+  Interactive: enabled
+```
+
+---
+
+### 4. `test-full-project-setup.sh` - Setup complet interactif
 
 Guide complet de création et configuration d'un projet DevFlow.
 

@@ -47,11 +47,6 @@ export async function devflowWorkflow(input: WorkflowInput): Promise<WorkflowRes
       projectId: input.projectId,
     });
 
-    // DEBUG: Log task status and expected status
-    console.log('[devflowWorkflow] Task status:', task.status);
-    console.log('[devflowWorkflow] Expected toRefinement:', LINEAR_STATUSES.toRefinement);
-    console.log('[devflowWorkflow] Status match:', task.status === LINEAR_STATUSES.toRefinement);
-
     // Route to appropriate orchestrator based on status
     // Phase 1: Refinement (also accepts "In Progress" for PO answer re-triggers)
     if (

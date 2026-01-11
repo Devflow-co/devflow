@@ -21,7 +21,17 @@ async function bootstrap() {
     process.exit(1);
   }
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    // Disable default body parser so we can configure limits
+    bodyParser: false,
+    rawBody: true,
+  });
+
+  // Configure body parser with increased limits (Linear webhook payloads can be large)
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const bodyParser = require('body-parser');
+  app.use(bodyParser.json({ limit: '5mb' }));
+  app.use(bodyParser.urlencoded({ limit: '5mb', extended: true }));
 
   // Security
   app.use(helmet());
