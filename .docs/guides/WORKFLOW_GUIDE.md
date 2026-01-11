@@ -449,6 +449,18 @@ The main workflow (`devflowWorkflow`) routes to the appropriate sub-workflow:
 - `packages/worker/src/workflows/orchestrators/user-story.orchestrator.ts`
 - `packages/worker/src/workflows/orchestrators/technical-plan.orchestrator.ts`
 - `packages/worker/src/workflows/orchestrators/code-generation.orchestrator.ts` - Phase 4 V3
+- `packages/worker/src/workflows/orchestrators/code-generation-v2.orchestrator.ts` - Modular version
+
+### Code Generation Sub-Workflows (V2 Modular)
+- `packages/worker/src/workflows/steps/code-generation/setup.workflow.ts` - Task sync & status
+- `packages/worker/src/workflows/steps/code-generation/context-retrieval.workflow.ts` - Plan & context
+- `packages/worker/src/workflows/steps/code-generation/ambiguity-detection.workflow.ts` - V3 analysis
+- `packages/worker/src/workflows/steps/code-generation/generate-code.workflow.ts` - Ollama generation
+- `packages/worker/src/workflows/steps/code-generation/container-validation.workflow.ts` - Lint/test
+- `packages/worker/src/workflows/steps/code-generation/solution-detection.workflow.ts` - V3 multi-fix
+- `packages/worker/src/workflows/steps/code-generation/pre-approval.workflow.ts` - V3 approval
+- `packages/worker/src/workflows/steps/code-generation/commit-pr.workflow.ts` - Branch/PR
+- `packages/worker/src/workflows/steps/code-generation/finalization.workflow.ts` - Status/metrics
 
 ### Workflow Signals (V3)
 - `packages/worker/src/workflows/signals/code-question-response.signal.ts` - Human response signal

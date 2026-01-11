@@ -194,6 +194,8 @@ OPENROUTER_API_KEY=sk-or-xxx
 - `packages/worker/src/workflows/orchestrators/user-story.orchestrator.ts`
 - `packages/worker/src/workflows/orchestrators/technical-plan.orchestrator.ts`
 - `packages/worker/src/workflows/orchestrators/code-generation.orchestrator.ts` - Phase 4 V3
+- `packages/worker/src/workflows/orchestrators/code-generation-v2.orchestrator.ts` - Modular version
+- `packages/worker/src/workflows/steps/code-generation/` - Sub-workflows (setup, generate, validate, etc.)
 - `packages/worker/src/workflows/signals/code-question-response.signal.ts` - V3 signals
 
 ### Activities
