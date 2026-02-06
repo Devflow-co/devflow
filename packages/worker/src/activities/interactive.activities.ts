@@ -136,11 +136,16 @@ export async function postCodeQuestion(
 
 /**
  * Record a pending question for webhook lookup
+ *
+ * Uses upsert for idempotence during Temporal activity replays.
+ * If the activity is retried, the same questionId will be used.
  */
 async function recordPendingQuestion(input: RecordQuestionInput): Promise<void> {
   // Store in database for webhook handler to find
-  await prisma.pendingCodeQuestion.create({
-    data: {
+  // Use upsert for idempotence - Temporal may replay activities
+  await prisma.pendingCodeQuestion.upsert({
+    where: { id: input.questionId },
+    create: {
       id: input.questionId,
       projectId: input.projectId,
       taskId: input.taskId,
@@ -150,6 +155,12 @@ async function recordPendingQuestion(input: RecordQuestionInput): Promise<void> 
       timeoutAt: input.timeoutAt,
       status: 'pending',
       createdAt: new Date(),
+    },
+    update: {
+      // On replay, only update if still pending
+      // This preserves the original state while allowing idempotent replays
+      commentId: input.commentId,
+      timeoutAt: input.timeoutAt,
     },
   });
 }

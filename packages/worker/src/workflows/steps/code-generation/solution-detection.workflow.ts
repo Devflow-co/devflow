@@ -10,7 +10,7 @@
 
 import { proxyActivities } from '@temporalio/workflow';
 import type * as activities from '@/activities';
-import type * as codeGenActivities from '@/activities/code-generation.activities';
+import type * as codeGenActivities from '@/activities/code-generation';
 import type * as interactiveActivities from '@/activities/interactive.activities';
 import type { WorkflowConfig, TechnicalPlanGenerationOutput, GeneratedFile, ExecuteInContainerOutput } from '@devflow/common';
 import type { CodeQuestionOption } from '../../signals/code-question-response.signal';

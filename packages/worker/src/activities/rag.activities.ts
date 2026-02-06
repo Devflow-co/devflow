@@ -1,8 +1,8 @@
-// TODO Phase 5: OAuth integration - Replace process.env tokens with OAuth
-
 /**
  * RAG Temporal Activities
  * Activities for repository indexing and context retrieval
+ *
+ * OAuth Integration: Uses oauthResolver for GitHub token resolution
  */
 
 import { createLogger } from '@devflow/common';
@@ -15,6 +15,7 @@ import {
 } from '@devflow/sdk';
 import { PrismaClient } from '@prisma/client';
 import { getProjectRepositoryConfig } from '@/activities/codebase.activities';
+import { oauthResolver } from '@/services/oauth-context';
 
 const logger = createLogger('RagActivities');
 const prisma = new PrismaClient();
@@ -80,8 +81,11 @@ export async function indexRepository(
 ): Promise<IndexRepositoryOutput> {
   logger.info('Starting repository indexing', input);
 
+  // Resolve GitHub token via OAuth
+  const githubToken = await oauthResolver.resolveGitHubToken(input.projectId);
+
   const indexer = new RepositoryIndexer({
-    githubToken: (() => { throw new Error("GitHub OAuth required - update in Phase 5"); })(),
+    githubToken,
     embeddingsApiKey: process.env.OPENROUTER_API_KEY!,
     qdrantHost: process.env.QDRANT_HOST || 'localhost',
     qdrantPort: parseInt(process.env.QDRANT_PORT || '6333'),
@@ -291,8 +295,11 @@ export async function updateRepositoryIndex(
     removed: input.changedFiles.removed.length,
   });
 
+  // Resolve GitHub token via OAuth
+  const githubToken = await oauthResolver.resolveGitHubToken(input.projectId);
+
   const indexer = new IncrementalIndexer({
-    githubToken: (() => { throw new Error("GitHub OAuth required - update in Phase 5"); })(),
+    githubToken,
     embeddingsApiKey: process.env.OPENROUTER_API_KEY!,
     qdrantHost: process.env.QDRANT_HOST || 'localhost',
     qdrantPort: parseInt(process.env.QDRANT_PORT || '6333'),

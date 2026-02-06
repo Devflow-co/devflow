@@ -6,7 +6,7 @@
 
 import { proxyActivities, executeChild } from '@temporalio/workflow';
 import type * as activities from '@/activities';
-import type * as codeGenActivities from '@/activities/code-generation.activities';
+import type * as codeGenActivities from '@/activities/code-generation';
 import { getPhaseDocumentWorkflow } from '../common/get-phase-document.workflow';
 import type { WorkflowConfig } from '@devflow/common';
 

@@ -1,67 +1,55 @@
 /**
- * Code Generation Orchestrator - Phase 4 V3 of Four-Phase Agile Workflow
+ * Code Generation Orchestrator - Phase 4 of Four-Phase Agile Workflow
  *
- * Coordinates code generation from technical plan using local LLM (Ollama).
- * Privacy-first: All inference runs locally, no cloud fallback.
+ * Modular orchestrator using sub-workflows for each step.
+ * Includes production-readiness fixes: pre-flight validation, circuit breaker, token budgeting.
  *
- * V3 adds interactive features for human-in-the-loop code generation:
- * - Ambiguity detection before generation
- * - Solution choice when validation fails with multiple fixes
- * - Optional pre-PR approval
- *
- * V3 Steps (up to 23 steps with all features enabled):
- * Phase A: Setup (Steps 1-6)
- * 1. Sync task from Linear
- * 2. Update status to Code In Progress
- * 3. Get technical plan document (Phase 3)
- * 4. Parse technical plan (local function)
- * 5. Get codebase context document (optional - RAG chunks)
- * 6. Fetch full file contents from GitHub (for files to be modified)
- *
- * Phase B: Pre-Generation Analysis (V3 - Steps 7-9)
- * 7. Detect ambiguities in technical plan
- * 8. Post clarification question (if ambiguities found)
- * 9. Wait for response signal (with timeout)
- *
- * Phase C: Generation Loop (Steps 10-15)
- * 10. Generate code (Ollama - local LLM)
- * 11. Execute in container (clone, apply files, lint, typecheck, test)
- * 12. Analyze failures (if failed)
- * 13. Detect multiple solutions (V3)
- * 14. Post solution choice question (if multiple solutions)
- * 15. Wait for response signal (with timeout)
- *
- * Phase D: Pre-PR Approval (V3 - Steps 16-18)
- * 16. Generate code preview
- * 17. Post approval question
- * 18. Wait for approval signal (with timeout)
- *
- * Phase E: Commit & PR (Steps 19-21)
- * 19. Create branch
- * 20. Commit files
- * 21. Create draft PR
- *
- * Phase F: Finalization (Steps 22-23)
- * 22. Update status to Code Review
- * 23. Log completion metrics
+ * Sub-workflows:
+ * - setupCodeGenerationWorkflow: Sync task + status update
+ * - contextRetrievalWorkflow: Get technical plan + codebase context + files
+ * - ambiguityDetectionWorkflow: V3 pre-generation analysis
+ * - generateCodeWorkflow: AI code generation
+ * - containerValidationWorkflow: Lint/typecheck/test in Docker
+ * - solutionDetectionWorkflow: V3 post-failure solution choice
+ * - preApprovalWorkflow: V3 pre-PR approval
+ * - commitPRWorkflow: Create branch + commit + PR
+ * - finalizationWorkflow: Status update + metrics
  */
 
-import { executeChild, ApplicationFailure, proxyActivities, workflowInfo, setHandler, condition } from '@temporalio/workflow';
-import type { WorkflowConfig, CodeGenerationPhaseConfig, TechnicalPlanGenerationOutput, GeneratedFile, ExecuteInContainerOutput } from '@devflow/common';
+import {
+  executeChild,
+  ApplicationFailure,
+  proxyActivities,
+  workflowInfo,
+  setHandler,
+  condition,
+} from '@temporalio/workflow';
+import type { WorkflowConfig, CodeGenerationPhaseConfig, GeneratedFile } from '@devflow/common';
 import { DEFAULT_WORKFLOW_CONFIG, DEFAULT_AUTOMATION_CONFIG } from '@devflow/common';
 import type * as progressActivities from '../../activities/workflow-progress.activities';
-import type * as codeGenActivities from '../../activities/code-generation.activities';
-import type * as containerActivities from '../../activities/container-execution.activities';
-import type * as vcsActivities from '../../activities/vcs.activities';
-import type * as interactiveActivities from '../../activities/interactive.activities';
+import type * as preflightActivities from '../../activities/preflight-validation.activities';
 
 // V3: Import signal definition
-import { codeQuestionResponseSignal, CodeQuestionResponsePayload } from '../signals/code-question-response.signal';
+import {
+  codeQuestionResponseSignal,
+  CodeQuestionResponsePayload,
+} from '../signals/code-question-response.signal';
 
-// Import common step workflows
-import { syncLinearTaskWorkflow } from '../steps/common/sync-linear-task.workflow';
+// Import sub-workflows
+import { setupCodeGenerationWorkflow } from '../steps/code-generation/setup.workflow';
+import { contextRetrievalWorkflow } from '../steps/code-generation/context-retrieval.workflow';
+import { ambiguityDetectionWorkflow } from '../steps/code-generation/ambiguity-detection.workflow';
+import { generateCodeWorkflow } from '../steps/code-generation/generate-code.workflow';
+import { containerValidationWorkflow } from '../steps/code-generation/container-validation.workflow';
+import { solutionDetectionWorkflow } from '../steps/code-generation/solution-detection.workflow';
+import { preApprovalWorkflow } from '../steps/code-generation/pre-approval.workflow';
+import { commitPRWorkflow } from '../steps/code-generation/commit-pr.workflow';
+import { finalizationWorkflow } from '../steps/code-generation/finalization.workflow';
 import { updateLinearStatusWorkflow } from '../steps/common/update-linear-status.workflow';
-import { getPhaseDocumentWorkflow } from '../steps/common/get-phase-document.workflow';
+
+// ============================================
+// Types
+// ============================================
 
 export interface CodeGenerationOrchestratorInput {
   taskId: string;
@@ -79,18 +67,15 @@ export interface CodeGenerationOrchestratorResult {
     draft: boolean;
   };
   generatedFiles?: number;
-  /** V2: Container execution result */
   containerResult?: {
     success: boolean;
     failedPhase?: string;
     duration: number;
   };
-  /** V2: Retry metrics */
   retryMetrics?: {
     totalAttempts: number;
     validationRetries: number;
   };
-  /** V3: Interactive metrics */
   interactiveMetrics?: {
     ambiguitiesDetected: number;
     clarificationQuestions: number;
@@ -100,143 +85,16 @@ export interface CodeGenerationOrchestratorResult {
   };
 }
 
-/**
- * Parse technical plan from Linear Document content
- */
-function parseTechnicalPlanFromDocument(documentContent: string): TechnicalPlanGenerationOutput {
-  // Default empty plan
-  const defaultPlan: TechnicalPlanGenerationOutput = {
-    architecture: [],
-    implementationSteps: [],
-    testingStrategy: '',
-    risks: [],
-    filesAffected: [],
-    dependencies: [],
-    technicalDecisions: [],
-    estimatedTime: 0,
-  };
-
-  if (!documentContent) return defaultPlan;
-
-  try {
-    // Extract architecture decisions
-    const archMatch = documentContent.match(/## Architecture Decisions?\n\n([\s\S]*?)(?=\n## |$)/);
-    const architecture = archMatch
-      ? archMatch[1]
-          .split('\n')
-          .filter((line) => line.match(/^\d+\./))
-          .map((line) => line.replace(/^\d+\.\s*/, '').trim())
-      : [];
-
-    // Extract implementation steps
-    const stepsMatch = documentContent.match(/## Implementation Steps?\n\n([\s\S]*?)(?=\n## |$)/);
-    const implementationSteps = stepsMatch
-      ? stepsMatch[1]
-          .split('\n')
-          .filter((line) => line.match(/^\d+\./))
-          .map((line) => line.replace(/^\d+\.\s*/, '').trim())
-      : [];
-
-    // Extract testing strategy
-    const testingMatch = documentContent.match(/## Testing Strategy\n\n([\s\S]*?)(?=\n## |$)/);
-    const testingStrategy = testingMatch ? testingMatch[1].trim() : '';
-
-    // Extract risks
-    const risksMatch = documentContent.match(/## Risks?\s*(?:& Mitigations?)?\n\n([\s\S]*?)(?=\n## |$)/);
-    const risks = risksMatch
-      ? risksMatch[1]
-          .split('\n')
-          .filter((line) => line.match(/^[-•*]|\d+\./))
-          .map((line) => line.replace(/^[-•*]\s*|\d+\.\s*/, '').trim())
-      : [];
-
-    // Extract files affected
-    const filesMatch = documentContent.match(/## Files? (?:Affected|to (?:Modify|Create))\n\n([\s\S]*?)(?=\n## |$)/);
-    const filesAffected = filesMatch
-      ? filesMatch[1]
-          .split('\n')
-          .filter((line) => line.match(/^[-•*]/))
-          .map((line) => line.replace(/^[-•*]\s*/, '').replace(/`/g, '').trim())
-      : [];
-
-    // Extract dependencies
-    const depsMatch = documentContent.match(/## Dependencies?\n\n([\s\S]*?)(?=\n## |$)/);
-    const dependencies = depsMatch
-      ? depsMatch[1]
-          .split('\n')
-          .filter((line) => line.match(/^[-•*]/))
-          .map((line) => line.replace(/^[-•*]\s*/, '').trim())
-      : [];
-
-    // Extract technical decisions
-    const decisionsMatch = documentContent.match(/## Technical Decisions?\n\n([\s\S]*?)(?=\n## |$)/);
-    const technicalDecisions = decisionsMatch
-      ? decisionsMatch[1]
-          .split('\n')
-          .filter((line) => line.match(/^\d+\./))
-          .map((line) => line.replace(/^\d+\.\s*/, '').trim())
-      : [];
-
-    // Extract estimated time (in hours)
-    const timeMatch = documentContent.match(/\*\*Estimated Time:\*\*\s*(\d+)/);
-    const estimatedTime = timeMatch ? parseInt(timeMatch[1], 10) : 0;
-
-    return {
-      architecture,
-      implementationSteps,
-      testingStrategy,
-      risks,
-      filesAffected,
-      dependencies,
-      technicalDecisions,
-      estimatedTime,
-    };
-  } catch (error) {
-    console.error('[parseTechnicalPlanFromDocument] Failed to parse:', error);
-    return defaultPlan;
-  }
-}
+// ============================================
+// Main Orchestrator
+// ============================================
 
 /**
- * Parse Codebase Context document back to RAG-like format
+ * Code Generation Orchestrator
+ *
+ * Coordinates sub-workflows for Phase 4 code generation.
+ * Includes pre-flight validation and signal handling for V3 interactive features.
  */
-function parseCodebaseContextDocument(documentContent: string): {
-  chunks: Array<{
-    filePath: string;
-    content: string;
-    score: number;
-    language: string;
-  }>;
-} | null {
-  if (!documentContent) return null;
-
-  const chunks: Array<{
-    filePath: string;
-    content: string;
-    score: number;
-    language: string;
-  }> = [];
-
-  const sectionRegex =
-    /###\s*\d+\.\s*`([^`]+)`\n\n\*\*Score:\*\*\s*([\d.]+)%\s*\|\s*\*\*Language:\*\*\s*(\w+)[\s\S]*?```\w*\n([\s\S]*?)```/g;
-
-  let match;
-  while ((match = sectionRegex.exec(documentContent)) !== null) {
-    const [, filePath, scoreStr, language, content] = match;
-
-    chunks.push({
-      filePath,
-      content: content.trim(),
-      score: parseFloat(scoreStr) / 100,
-      language,
-    });
-  }
-
-  if (chunks.length === 0) return null;
-
-  return { chunks };
-}
-
 export async function codeGenerationOrchestrator(
   input: CodeGenerationOrchestratorInput
 ): Promise<CodeGenerationOrchestratorResult> {
@@ -249,49 +107,18 @@ export async function codeGenerationOrchestrator(
   const features = automation.features;
 
   // Configure progress logging activities
-  const { logWorkflowProgress, logWorkflowFailure, logWorkflowCompletion } = proxyActivities<typeof progressActivities>({
+  const { logWorkflowFailure, logWorkflowProgress } = proxyActivities<typeof progressActivities>({
     startToCloseTimeout: '10 seconds',
     retry: { maximumAttempts: 3 },
   });
 
-  // Configure code generation activities (long timeout for Ollama)
-  const { generateCodeFromPlan, fetchFilesFromGitHub, analyzeFailuresWithAI } = proxyActivities<typeof codeGenActivities>({
-    startToCloseTimeout: '15 minutes', // Long timeout for local LLM inference
-    retry: { maximumAttempts: 2 },
-  });
-
-  // Configure container execution activities (V2)
-  const { executeInContainer, getDefaultCommands, getDefaultImage } = proxyActivities<typeof containerActivities>({
-    startToCloseTimeout: '15 minutes', // Long timeout for container execution
-    retry: { maximumAttempts: 1 }, // Don't retry container execution - we handle retries in the workflow
-  });
-
-  // Configure VCS activities
-  const { createBranch, commitFiles, createPullRequest } = proxyActivities<typeof vcsActivities>({
-    startToCloseTimeout: '2 minutes',
-    retry: { maximumAttempts: 3 },
-  });
-
-  // V3: Configure interactive activities
-  const { postCodeQuestion, generateCodePreview } = proxyActivities<typeof interactiveActivities>({
-    startToCloseTimeout: '30 seconds',
-    retry: { maximumAttempts: 2 },
-  });
-
-  // V3: Configure ambiguity/solution detection activities
-  const { detectAmbiguityBeforeGeneration, detectMultipleSolutions } = proxyActivities<typeof codeGenActivities>({
-    startToCloseTimeout: '3 minutes',
-    retry: { maximumAttempts: 2 },
+  // Configure pre-flight validation activities
+  const { validatePrerequisites } = proxyActivities<typeof preflightActivities>({
+    startToCloseTimeout: '1 minute',
+    retry: { maximumAttempts: 1 }, // Don't retry - fail fast
   });
 
   const workflowId = workflowInfo().workflowId;
-
-  // V3: Calculate total steps based on enabled features
-  let TOTAL_STEPS = 14; // Base V2 steps
-  if (features.enableAmbiguityDetection) TOTAL_STEPS += 3; // Steps 7-9
-  if (features.enableSolutionChoice) TOTAL_STEPS += 3; // Steps in retry loop
-  if (features.enablePrePRApproval) TOTAL_STEPS += 3; // Steps 16-18
-  const PHASE = 'code_generation' as const;
   const projectId = input.projectId;
   const taskId = input.taskId;
   const workflowStartTime = new Date();
@@ -299,10 +126,9 @@ export async function codeGenerationOrchestrator(
   // V2: Track retry metrics
   let retryCount = 0;
   let errorContext = '';
-  let lastContainerResult: ExecuteInContainerOutput | null = null;
 
   // V3: Track interactive metrics
-  let interactiveMetrics = {
+  const interactiveMetrics = {
     ambiguitiesDetected: 0,
     clarificationQuestions: 0,
     solutionChoices: 0,
@@ -310,736 +136,339 @@ export async function codeGenerationOrchestrator(
     humanResponsesReceived: 0,
   };
 
-  // V3: Signal handler state
+  // V3: Signal handler state with question ID tracking to prevent race conditions
+  let pendingQuestionId: string | null = null;
   let questionResponse: CodeQuestionResponsePayload | null = null;
 
   // V3: Set up signal handler for code question responses
+  // Uses questionId matching to prevent race conditions between multiple questions
   setHandler(codeQuestionResponseSignal, (payload: CodeQuestionResponsePayload) => {
-    questionResponse = payload;
+    // Only accept responses for the current pending question
+    if (pendingQuestionId && payload.questionId === pendingQuestionId) {
+      questionResponse = payload;
+    } else if (!pendingQuestionId) {
+      questionResponse = payload;
+    }
+    // Ignore responses for other question IDs (stale responses)
   });
 
   // V3: Helper to wait for question response with timeout
-  async function waitForQuestionResponse(timeoutHours: number): Promise<CodeQuestionResponsePayload | null> {
+  // Now uses questionId to match responses to specific questions
+  async function waitForQuestionResponse(
+    questionId: string,
+    timeoutHours: number
+  ): Promise<CodeQuestionResponsePayload | null> {
     const timeoutMs = timeoutHours * 60 * 60 * 1000;
-    questionResponse = null; // Reset before waiting
 
-    const gotResponse = await condition(() => questionResponse !== null, timeoutMs);
+    // Set the pending question ID and reset response atomically
+    pendingQuestionId = questionId;
+    questionResponse = null;
 
-    if (gotResponse && questionResponse) {
+    // Wait for a response matching this question ID
+    const gotResponse = await condition(
+      () => questionResponse !== null && questionResponse.questionId === questionId,
+      timeoutMs
+    );
+
+    // Clear pending question ID
+    pendingQuestionId = null;
+
+    if (gotResponse && questionResponse && questionResponse.questionId === questionId) {
       interactiveMetrics.humanResponsesReceived++;
-      return questionResponse;
+      const response = questionResponse;
+      questionResponse = null;
+      return response;
     }
 
-    return null; // Timeout
+    return null;
   }
+
+  // Calculate total steps based on enabled features
+  let totalSteps = 10; // Base steps
+  if (features.enableAmbiguityDetection) totalSteps += 2;
+  if (features.enableSolutionChoice) totalSteps += 2;
+  if (features.enablePrePRApproval) totalSteps += 2;
+  if (features.enableContainerExecution) totalSteps += 2;
+
+  let currentStep = 0;
 
   try {
     // ========================================
-    // Phase A: Setup (Steps 1-6)
+    // Phase 0: Pre-flight Validation
     // ========================================
 
-    // Step 1: Sync task from Linear
     await logWorkflowProgress({
       workflowId,
       projectId,
       taskId,
-      phase: PHASE,
-      stepName: 'Sync Linear Task',
-      stepNumber: 1,
-      totalSteps: TOTAL_STEPS,
+      phase: 'code_generation',
+      stepName: 'Pre-flight Validation',
+      stepNumber: 0,
+      totalSteps,
       status: 'in_progress',
       startedAt: new Date(),
     });
 
-    const step1Start = Date.now();
-    const task = await executeChild(syncLinearTaskWorkflow, {
-      workflowId: `sync-task-${input.taskId}-${Date.now()}`,
-      args: [{ taskId: input.taskId, projectId: input.projectId }],
-    });
-
-    await logWorkflowProgress({
-      workflowId,
+    const preflightStart = Date.now();
+    const preflightResult = await validatePrerequisites({
       projectId,
       taskId,
-      phase: PHASE,
-      stepName: 'Sync Linear Task',
-      stepNumber: 1,
-      totalSteps: TOTAL_STEPS,
-      status: 'completed',
-      startedAt: new Date(step1Start),
-      completedAt: new Date(),
-      metadata: { taskId: task.id, linearId: task.linearId, title: task.title },
     });
 
-    // Step 2: Update status to Code In Progress
-    if (features.enableAutoStatusUpdate) {
+    if (!preflightResult.success) {
       await logWorkflowProgress({
         workflowId,
         projectId,
         taskId,
-        phase: PHASE,
-        stepName: 'Update Status to In Progress',
-        stepNumber: 2,
-        totalSteps: TOTAL_STEPS,
-        status: 'in_progress',
-        startedAt: new Date(),
+        phase: 'code_generation',
+        stepName: 'Pre-flight Validation',
+        stepNumber: 0,
+        totalSteps,
+        status: 'failed',
+        startedAt: new Date(preflightStart),
+        completedAt: new Date(),
+        metadata: {
+          checks: preflightResult.checks.map(c => ({
+            name: c.name,
+            passed: c.passed,
+            error: c.error,
+          })),
+          failureSummary: preflightResult.failureSummary,
+        },
       });
 
-      const step2Start = Date.now();
-      await executeChild(updateLinearStatusWorkflow, {
-        workflowId: `status-in-progress-${input.taskId}-${Date.now()}`,
-        args: [
-          {
-            projectId: input.projectId,
-            linearId: task.linearId,
-            status: LINEAR_STATUSES.codeInProgress,
-          },
-        ],
-      });
-
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Update Status to In Progress',
-        stepNumber: 2,
-        totalSteps: TOTAL_STEPS,
-        status: 'completed',
-        startedAt: new Date(step2Start),
-        completedAt: new Date(),
-        metadata: { status: LINEAR_STATUSES.codeInProgress },
-      });
-    } else {
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Update Status to In Progress (disabled)',
-        stepNumber: 2,
-        totalSteps: TOTAL_STEPS,
-        status: 'skipped',
-        startedAt: new Date(),
-        completedAt: new Date(),
+      throw ApplicationFailure.create({
+        message: `Pre-flight validation failed: ${preflightResult.failureSummary}`,
+        type: 'PreflightValidationFailure',
+        nonRetryable: true,
       });
     }
 
-    // Step 3: Get technical plan document (Phase 3)
     await logWorkflowProgress({
       workflowId,
       projectId,
       taskId,
-      phase: PHASE,
-      stepName: 'Get Technical Plan Document',
-      stepNumber: 3,
-      totalSteps: TOTAL_STEPS,
-      status: 'in_progress',
-      startedAt: new Date(),
+      phase: 'code_generation',
+      stepName: 'Pre-flight Validation',
+      stepNumber: 0,
+      totalSteps,
+      status: 'completed',
+      startedAt: new Date(preflightStart),
+      completedAt: new Date(),
+      metadata: {
+        totalDurationMs: preflightResult.totalDurationMs,
+        checksRun: preflightResult.checks.length,
+      },
     });
 
-    const step3Start = Date.now();
-    const technicalPlanDoc = await executeChild(getPhaseDocumentWorkflow, {
-      workflowId: `get-technical-plan-${input.taskId}-${Date.now()}`,
+    // ========================================
+    // Phase A: Setup
+    // ========================================
+
+    currentStep++;
+    const setupResult = await executeChild(setupCodeGenerationWorkflow, {
+      workflowId: `setup-${taskId}-${Date.now()}`,
       args: [
         {
-          projectId: input.projectId,
-          linearId: task.linearId,
-          phase: 'technical_plan' as const,
+          projectId,
+          taskId,
+          config,
+          parentWorkflowId: workflowId,
         },
       ],
     });
 
-    await logWorkflowProgress({
-      workflowId,
-      projectId,
-      taskId,
-      phase: PHASE,
-      stepName: 'Get Technical Plan Document',
-      stepNumber: 3,
-      totalSteps: TOTAL_STEPS,
-      status: 'completed',
-      startedAt: new Date(step3Start),
-      completedAt: new Date(),
-      metadata: { hasDocument: !!technicalPlanDoc.content, contentLength: technicalPlanDoc.content?.length || 0 },
+    const task = setupResult.task;
+
+    // ========================================
+    // Phase A: Context Retrieval
+    // ========================================
+
+    currentStep++;
+    const contextResult = await executeChild(contextRetrievalWorkflow, {
+      workflowId: `context-${taskId}-${Date.now()}`,
+      args: [
+        {
+          projectId,
+          taskId,
+          linearId: task.linearId,
+          config,
+          parentWorkflowId: workflowId,
+        },
+      ],
     });
 
-    // Step 4: Parse technical plan (local function)
-    await logWorkflowProgress({
-      workflowId,
-      projectId,
-      taskId,
-      phase: PHASE,
-      stepName: 'Parse Technical Plan',
-      stepNumber: 4,
-      totalSteps: TOTAL_STEPS,
-      status: 'in_progress',
-      startedAt: new Date(),
-    });
+    const parsedPlan = contextResult.technicalPlan;
+    const codebaseContextString = contextResult.codebaseContext
+      ?.map((c) => `${c.filePath}:\n${c.content}`)
+      .join('\n\n');
 
-    const step4Start = Date.now();
-    const technicalPlan = technicalPlanDoc.content
-      ? parseTechnicalPlanFromDocument(technicalPlanDoc.content)
-      : {
-          architecture: [],
-          implementationSteps: [],
-          testingStrategy: '',
-          risks: [],
-          filesAffected: [],
-          dependencies: [],
-          technicalDecisions: [],
-          estimatedTime: 0,
-        };
+    // Convert ParsedTechnicalPlan to TechnicalPlanGenerationOutput format
+    const technicalPlanForActivities = {
+      architecture: parsedPlan.architecture?.map(a => a.approach) || [],
+      implementationSteps: parsedPlan.implementationSteps?.map(s => `${s.title}: ${s.description}`) || [],
+      testingStrategy: parsedPlan.testingStrategy
+        ? `Unit: ${parsedPlan.testingStrategy.unitTests?.join(', ') || 'N/A'}, ` +
+          `Integration: ${parsedPlan.testingStrategy.integrationTests?.join(', ') || 'N/A'}`
+        : '',
+      risks: parsedPlan.risks || [],
+      filesAffected: parsedPlan.filesAffected || [],
+      dependencies: [],
+      technicalDecisions: [],
+      estimatedTime: 0,
+    };
 
-    await logWorkflowProgress({
-      workflowId,
-      projectId,
-      taskId,
-      phase: PHASE,
-      stepName: 'Parse Technical Plan',
-      stepNumber: 4,
-      totalSteps: TOTAL_STEPS,
-      status: 'completed',
-      startedAt: new Date(step4Start),
-      completedAt: new Date(),
-      metadata: {
-        architectureCount: technicalPlan.architecture?.length || 0,
-        stepsCount: technicalPlan.implementationSteps?.length || 0,
-        filesCount: technicalPlan.filesAffected?.length || 0,
-      },
-    });
+    // ========================================
+    // Phase B: Ambiguity Detection (V3)
+    // ========================================
 
-    // Step 5: Get codebase context document (conditional)
-    let ragContext: ReturnType<typeof parseCodebaseContextDocument> = null;
-    if (features.reuseCodebaseContext) {
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Get Codebase Context Document',
-        stepNumber: 5,
-        totalSteps: TOTAL_STEPS,
-        status: 'in_progress',
-        startedAt: new Date(),
-      });
-
-      const step5Start = Date.now();
-      const codebaseContextDoc = await executeChild(getPhaseDocumentWorkflow, {
-        workflowId: `get-codebase-${input.taskId}-${Date.now()}`,
+    if (features.enableAmbiguityDetection) {
+      currentStep++;
+      const ambiguityResult = await executeChild(ambiguityDetectionWorkflow, {
+        workflowId: `ambiguity-${taskId}-${Date.now()}`,
         args: [
           {
-            projectId: input.projectId,
+            projectId,
+            taskId,
             linearId: task.linearId,
-            phase: 'codebase_context' as const,
+            config,
+            parentWorkflowId: workflowId,
+            organizationId: undefined,
+            task: {
+              id: task.id,
+              linearId: task.linearId,
+              title: task.title,
+              description: task.description || '',
+              identifier: task.identifier,
+            },
+            technicalPlan: technicalPlanForActivities,
+            codebaseContext: codebaseContextString,
+            stepNumber: currentStep,
+            totalSteps,
           },
         ],
       });
 
-      ragContext = codebaseContextDoc.content
-        ? parseCodebaseContextDocument(codebaseContextDoc.content)
-        : null;
+      interactiveMetrics.ambiguitiesDetected = ambiguityResult.detectionResult?.ambiguityCount || 0;
 
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Get Codebase Context Document',
-        stepNumber: 5,
-        totalSteps: TOTAL_STEPS,
-        status: 'completed',
-        startedAt: new Date(step5Start),
-        completedAt: new Date(),
-        metadata: { hasContext: !!ragContext, chunksCount: ragContext?.chunks?.length || 0 },
-      });
-    } else {
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Get Codebase Context Document (disabled)',
-        stepNumber: 5,
-        totalSteps: TOTAL_STEPS,
-        status: 'skipped',
-        startedAt: new Date(),
-        completedAt: new Date(),
-      });
-    }
-
-    // Step 6: Fetch full file contents from GitHub (for better Ollama context)
-    let fullFileContents: Array<{ path: string; content: string }> = [];
-    const filesAffected = technicalPlan.filesAffected || [];
-
-    if (filesAffected.length > 0) {
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Fetch Full Files from GitHub',
-        stepNumber: 6,
-        totalSteps: TOTAL_STEPS,
-        status: 'in_progress',
-        startedAt: new Date(),
-      });
-
-      const step6Start = Date.now();
-      const fetchResult = await fetchFilesFromGitHub({
-        projectId: input.projectId,
-        filePaths: filesAffected,
-      });
-
-      fullFileContents = fetchResult.files;
-
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Fetch Full Files from GitHub',
-        stepNumber: 6,
-        totalSteps: TOTAL_STEPS,
-        status: 'completed',
-        startedAt: new Date(step6Start),
-        completedAt: new Date(),
-        metadata: {
-          filesRequested: filesAffected.length,
-          filesFetched: fullFileContents.length,
-          filesNotFound: fetchResult.notFound.length,
-          notFoundFiles: fetchResult.notFound,
-        },
-      });
-    } else {
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Fetch Full Files from GitHub (no files specified)',
-        stepNumber: 6,
-        totalSteps: TOTAL_STEPS,
-        status: 'skipped',
-        startedAt: new Date(),
-        completedAt: new Date(),
-      });
-    }
-
-    // ========================================
-    // Phase B: Pre-Generation Analysis (V3 - Steps 7-9)
-    // ========================================
-
-    // V3: Track step offset based on enabled features
-    let stepOffset = 6; // After Phase A setup steps
-
-    // V3: Ambiguity detection before code generation
-    let selectedAmbiguityOption: string | null = null;
-    if (features.enableAmbiguityDetection) {
-      stepOffset++;
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Detect Ambiguities in Technical Plan',
-        stepNumber: stepOffset,
-        totalSteps: TOTAL_STEPS,
-        status: 'in_progress',
-        startedAt: new Date(),
-      });
-
-      const ambiguityStart = Date.now();
-      const ambiguityResult = await detectAmbiguityBeforeGeneration({
-        task: {
-          id: task.id,
-          linearId: task.linearId,
-          title: task.title,
-          description: task.description,
-          identifier: task.identifier,
-        },
-        technicalPlan,
-        projectId: input.projectId,
-        codebaseContext: ragContext?.chunks?.map(c => `${c.filePath}:\n${c.content}`).join('\n\n'),
-        workflowId,
-      });
-
-      interactiveMetrics.ambiguitiesDetected = ambiguityResult.ambiguities.length;
-
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Detect Ambiguities in Technical Plan',
-        stepNumber: stepOffset,
-        totalSteps: TOTAL_STEPS,
-        status: 'completed',
-        startedAt: new Date(ambiguityStart),
-        completedAt: new Date(),
-        metadata: {
-          hasAmbiguities: ambiguityResult.hasAmbiguities,
-          ambiguityCount: ambiguityResult.ambiguities.length,
-          confidence: ambiguityResult.confidence,
-        },
-      });
-
-      // V3: If ambiguities found, post question and wait for response
-      if (ambiguityResult.hasAmbiguities && ambiguityResult.ambiguities.length > 0) {
-        stepOffset++;
-        await logWorkflowProgress({
-          workflowId,
-          projectId,
-          taskId,
-          phase: PHASE,
-          stepName: 'Post Clarification Question',
-          stepNumber: stepOffset,
-          totalSteps: TOTAL_STEPS,
-          status: 'in_progress',
-          startedAt: new Date(),
-        });
-
-        const questionStart = Date.now();
-        const firstAmbiguity = ambiguityResult.ambiguities[0];
-
-        // Build options from ambiguity
-        const options = firstAmbiguity.options.map(opt => ({
-          id: opt.id,
-          label: opt.label,
-          description: opt.description,
-          pros: opt.pros,
-          cons: opt.cons,
-          recommended: opt.recommended,
-        }));
-
-        const questionResult = await postCodeQuestion({
-          projectId: input.projectId,
-          taskId: task.id,
-          linearId: task.linearId,
-          questionType: 'clarification',
-          question: `**${firstAmbiguity.title}**\n\n${firstAmbiguity.description}`,
-          options,
-          metadata: {
-            workflowId,
-            stepNumber: stepOffset,
-            totalSteps: TOTAL_STEPS,
-            timeoutHours: features.humanResponseTimeoutHours || 24,
-            context: `Ambiguity detected in technical plan: ${firstAmbiguity.type}`,
-            postedAt: new Date(),
-            taskIdentifier: task.identifier,
-          },
-        });
-
+      // Wait for response if question was posted
+      if (ambiguityResult.waitingForResponse && ambiguityResult.questionId) {
         interactiveMetrics.clarificationQuestions++;
+        currentStep++;
 
-        await logWorkflowProgress({
-          workflowId,
-          projectId,
-          taskId,
-          phase: PHASE,
-          stepName: 'Post Clarification Question',
-          stepNumber: stepOffset,
-          totalSteps: TOTAL_STEPS,
-          status: 'completed',
-          startedAt: new Date(questionStart),
-          completedAt: new Date(),
-          metadata: {
-            questionId: questionResult.questionId,
-            commentId: questionResult.commentId,
-            ambiguityType: firstAmbiguity.type,
-          },
-        });
-
-        // V3: Wait for response
-        stepOffset++;
-        await logWorkflowProgress({
-          workflowId,
-          projectId,
-          taskId,
-          phase: PHASE,
-          stepName: 'Waiting for Clarification Response',
-          stepNumber: stepOffset,
-          totalSteps: TOTAL_STEPS,
-          status: 'in_progress',
-          startedAt: new Date(),
-          metadata: { timeoutHours: features.humanResponseTimeoutHours || 24 },
-        });
-
-        const waitStart = Date.now();
-        const response = await waitForQuestionResponse(features.humanResponseTimeoutHours || 24);
+        const timeoutHours = features.humanResponseTimeoutHours || 24;
+        const response = await waitForQuestionResponse(
+          ambiguityResult.questionId,
+          timeoutHours
+        );
 
         if (response) {
-          selectedAmbiguityOption = response.selectedOption || null;
-
-          await logWorkflowProgress({
-            workflowId,
-            projectId,
-            taskId,
-            phase: PHASE,
-            stepName: 'Waiting for Clarification Response',
-            stepNumber: stepOffset,
-            totalSteps: TOTAL_STEPS,
-            status: 'completed',
-            startedAt: new Date(waitStart),
-            completedAt: new Date(),
-            metadata: {
-              responseType: response.responseType,
-              selectedOption: response.selectedOption,
-              respondedBy: response.respondedBy,
-            },
-          });
-
-          // Add selected option context to error context for code generation
-          if (selectedAmbiguityOption) {
-            const selectedOpt = firstAmbiguity.options.find(o => o.id === selectedAmbiguityOption);
-            if (selectedOpt) {
-              errorContext += `\n\nUser selected option for "${firstAmbiguity.title}": ${selectedOpt.label}\n${selectedOpt.description}`;
-            }
+          const selectedOpt = ambiguityResult.options?.find(
+            (o) => o.id === response.selectedOption
+          );
+          if (selectedOpt) {
+            errorContext += `\n\nUser selected clarification: ${selectedOpt.label}\n${selectedOpt.description}`;
           } else if (response.customText) {
-            errorContext += `\n\nUser provided custom clarification for "${firstAmbiguity.title}": ${response.customText}`;
+            errorContext += `\n\nUser provided custom clarification: ${response.customText}`;
           }
-        } else {
-          // Timeout - use recommended option or auto-proceed
-          await logWorkflowProgress({
-            workflowId,
-            projectId,
-            taskId,
-            phase: PHASE,
-            stepName: 'Waiting for Clarification Response',
-            stepNumber: stepOffset,
-            totalSteps: TOTAL_STEPS,
-            status: 'completed',
-            startedAt: new Date(waitStart),
-            completedAt: new Date(),
-            metadata: { timedOut: true, autoProceed: features.autoProceedOnTimeout },
-          });
-
-          if (features.autoProceedOnTimeout) {
-            // Use recommended option
-            const recommendedOpt = firstAmbiguity.options.find(o => o.recommended);
-            if (recommendedOpt) {
-              selectedAmbiguityOption = recommendedOpt.id;
-              errorContext += `\n\nAuto-selected recommended option for "${firstAmbiguity.title}": ${recommendedOpt.label}\n${recommendedOpt.description}`;
-            }
+        } else if (features.autoProceedOnTimeout) {
+          const recommended = ambiguityResult.options?.find((o) => o.recommended);
+          if (recommended) {
+            errorContext += `\n\nAuto-selected recommended option: ${recommended.label}\n${recommended.description}`;
           }
         }
       }
     }
 
     // ========================================
-    // Phase C: Generation Loop with Container Execution (Steps 10-15)
+    // Phase C: Generation Loop
     // ========================================
 
     const maxRetries = features.maxRetries ?? 3;
     let generatedFiles: GeneratedFile[] = [];
-    let codeResult: Awaited<ReturnType<typeof generateCodeFromPlan>> | null = null;
     let containerSuccess = true;
+    let lastContainerDuration = 0;
+    let lastFailedPhase: string | undefined;
 
-    // Generation loop with retry
     while (retryCount <= maxRetries) {
-      stepOffset++;
-      // Step: Generate code (Ollama - local LLM)
-      const isRetry = retryCount > 0;
-      const stepName = isRetry
-        ? `Generate Code (Retry ${retryCount}/${maxRetries})`
-        : 'Generate Code (Ollama - Local LLM)';
+      currentStep++;
 
-      const genStepNumber = stepOffset;
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName,
-        stepNumber: genStepNumber,
-        totalSteps: TOTAL_STEPS,
-        status: 'in_progress',
-        startedAt: new Date(),
-        metadata: isRetry ? { retryCount, errorContext: errorContext.substring(0, 500) } : undefined,
-      });
-
-      const genStepStart = Date.now();
-      codeResult = await generateCodeFromPlan({
-        task: {
-          id: task.id,
-          linearId: task.linearId,
-          title: task.title,
-          description: task.description + (errorContext ? `\n\n${errorContext}` : ''),
-          identifier: task.identifier,
-        },
-        technicalPlan,
-        projectId: input.projectId,
-        taskId: input.taskId,
-        workflowId,
-        ragContext: ragContext ?? undefined,
-        fullFileContents: fullFileContents.length > 0 ? fullFileContents : undefined,
-        aiModel: automation.aiModel,
-      });
-
-      generatedFiles = codeResult.code.files;
-
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName,
-        stepNumber: genStepNumber,
-        totalSteps: TOTAL_STEPS,
-        status: 'completed',
-        startedAt: new Date(genStepStart),
-        completedAt: new Date(),
-        metadata: {
-          filesGenerated: generatedFiles.length,
-          branchName: codeResult.code.branchName,
-          fullFilesProvided: fullFileContents.length,
-          ai: codeResult.aiMetrics,
-          result: codeResult.resultSummary,
-          retryCount,
-        },
-      });
-
-      // ========================================
-      // V2: Container Execution
-      // ========================================
-
-      if (features.enableContainerExecution) {
-        stepOffset++;
-        const containerStepNumber = stepOffset;
-        await logWorkflowProgress({
-          workflowId,
-          projectId,
-          taskId,
-          phase: PHASE,
-          stepName: 'Execute in Container (Clone, Lint, Typecheck, Test)',
-          stepNumber: containerStepNumber,
-          totalSteps: TOTAL_STEPS,
-          status: 'in_progress',
-          startedAt: new Date(),
-          metadata: { retryCount, fileCount: generatedFiles.length },
-        });
-
-        const containerStepStart = Date.now();
-
-        try {
-          lastContainerResult = await executeInContainer({
-            projectId: input.projectId,
-            taskId: input.taskId,
-            generatedFiles,
-            commands: {
-              install: 'npm ci',
-              lint: features.enableLintCheck ? 'npm run lint --if-present' : undefined,
-              typecheck: features.enableTypecheckCheck ? 'npm run typecheck --if-present' : undefined,
-              test: features.enableTestExecution ? 'npm test --if-present' : undefined,
-            },
-            containerConfig: {
-              image: features.containerImage || 'node:20-alpine',
-              memory: features.containerMemory || '2g',
-              timeout: (features.containerTimeoutMinutes || 10) * 60 * 1000,
-            },
-          });
-
-          containerSuccess = lastContainerResult.success;
-
-          await logWorkflowProgress({
-            workflowId,
+      // Generate code
+      const codeResult = await executeChild(generateCodeWorkflow, {
+        workflowId: `generate-${taskId}-${retryCount}-${Date.now()}`,
+        args: [
+          {
             projectId,
             taskId,
-            phase: PHASE,
-            stepName: 'Execute in Container (Clone, Lint, Typecheck, Test)',
-            stepNumber: containerStepNumber,
-            totalSteps: TOTAL_STEPS,
-            status: containerSuccess ? 'completed' : 'failed',
-            startedAt: new Date(containerStepStart),
-            completedAt: new Date(),
-            metadata: {
-              success: containerSuccess,
-              duration: lastContainerResult.duration,
-              failedPhase: lastContainerResult.failedPhase,
-              exitCode: lastContainerResult.exitCode,
-              testResults: lastContainerResult.testResults,
+            config,
+            parentWorkflowId: workflowId,
+            organizationId: undefined,
+            task: {
+              id: task.id,
+              linearId: task.linearId,
+              title: task.title,
+              description: task.description || '',
+              identifier: task.identifier,
             },
-          });
+            technicalPlan: technicalPlanForActivities,
+            codebaseContext: codebaseContextString,
+            fullFileContents: contextResult.fullFileContents,
+            errorContext,
+            previousAttempts: retryCount,
+            maxRetries,
+          },
+        ],
+      });
 
-          // If container execution succeeded, break the retry loop
-          if (containerSuccess) {
-            break;
-          }
+      generatedFiles = codeResult.files;
 
-          // V2: Analyze failures with AI
-          if (retryCount < maxRetries) {
-            stepOffset++;
-            const analysisStepNumber = stepOffset;
-            await logWorkflowProgress({
-              workflowId,
+      // Container validation (if enabled)
+      if (features.enableContainerExecution) {
+        currentStep++;
+
+        const containerResult = await executeChild(containerValidationWorkflow, {
+          workflowId: `container-${taskId}-${retryCount}-${Date.now()}`,
+          args: [
+            {
               projectId,
               taskId,
-              phase: PHASE,
-              stepName: 'Analyze Failures with AI',
-              stepNumber: analysisStepNumber,
-              totalSteps: TOTAL_STEPS,
-              status: 'in_progress',
-              startedAt: new Date(),
-              metadata: { failedPhase: lastContainerResult.failedPhase, retryCount },
-            });
-
-            const analysisStepStart = Date.now();
-            const analysis = await analyzeFailuresWithAI({
-              projectId: input.projectId,
-              taskId: input.taskId,
+              config,
+              parentWorkflowId: workflowId,
+              organizationId: undefined,
               generatedFiles,
-              containerResult: lastContainerResult,
-              previousAttempts: retryCount,
-              originalPromptContext: {
-                technicalPlan: {
-                  architecture: technicalPlan.architecture || [],
-                  implementationSteps: technicalPlan.implementationSteps || [],
-                  testingStrategy: technicalPlan.testingStrategy || '',
-                  risks: technicalPlan.risks || [],
-                },
-              },
-              workflowId,
-            });
+              enableLint: features.enableLintCheck ?? true,
+              enableTypecheck: features.enableTypecheckCheck ?? true,
+              enableTests: features.enableTestExecution ?? true,
+              containerImage: features.containerImage,
+              containerMemory: features.containerMemory,
+              containerTimeoutMinutes: features.containerTimeoutMinutes,
+              attemptNumber: retryCount,
+            },
+          ],
+        });
 
-            errorContext = analysis.retryPromptEnhancement;
+        containerSuccess = containerResult.success;
+        lastContainerDuration = containerResult.duration;
+        lastFailedPhase = containerResult.failedPhase;
 
-            await logWorkflowProgress({
-              workflowId,
-              projectId,
-              taskId,
-              phase: PHASE,
-              stepName: 'Analyze Failures with AI',
-              stepNumber: analysisStepNumber,
-              totalSteps: TOTAL_STEPS,
-              status: 'completed',
-              startedAt: new Date(analysisStepStart),
-              completedAt: new Date(),
-              metadata: {
-                failedPhase: analysis.failedPhase,
-                confidence: analysis.confidence,
-                suggestedFixes: analysis.suggestedFixes.length,
-                analysis: analysis.analysis.substring(0, 500),
-              },
-            });
+        if (containerSuccess) {
+          break; // Exit retry loop
+        }
 
-            // V3: Detect multiple solutions (if enabled)
-            if (features.enableSolutionChoice) {
-              stepOffset++;
-              const solutionStepNumber = stepOffset;
-              await logWorkflowProgress({
-                workflowId,
+        // Handle failure - solution detection (V3)
+        if (features.enableSolutionChoice && retryCount < maxRetries) {
+          currentStep++;
+
+          const solutionResult = await executeChild(solutionDetectionWorkflow, {
+            workflowId: `solution-${taskId}-${retryCount}-${Date.now()}`,
+            args: [
+              {
                 projectId,
                 taskId,
-                phase: PHASE,
-                stepName: 'Detect Solution Options',
-                stepNumber: solutionStepNumber,
-                totalSteps: TOTAL_STEPS,
-                status: 'in_progress',
-                startedAt: new Date(),
-              });
-
-              const solutionStart = Date.now();
-              const solutionResult = await detectMultipleSolutions({
+                linearId: task.linearId,
+                config,
+                parentWorkflowId: workflowId,
+                organizationId: undefined,
                 task: {
                   id: task.id,
                   linearId: task.linearId,
@@ -1047,357 +476,111 @@ export async function codeGenerationOrchestrator(
                   identifier: task.identifier,
                 },
                 generatedFiles,
-                containerResult: lastContainerResult,
-                attemptNumber: retryCount + 1,
+                containerResult: containerResult.containerResult,
+                technicalPlan: technicalPlanForActivities,
+                codebaseContext: codebaseContextString,
+                attemptNumber: retryCount,
                 maxAttempts: maxRetries,
-                technicalPlan,
-                codebaseContext: ragContext?.chunks?.map(c => `${c.filePath}:\n${c.content}`).join('\n\n'),
-                projectId: input.projectId,
-                workflowId,
-              });
+                stepNumber: currentStep,
+                totalSteps,
+              },
+            ],
+          });
 
-              await logWorkflowProgress({
-                workflowId,
-                projectId,
-                taskId,
-                phase: PHASE,
-                stepName: 'Detect Solution Options',
-                stepNumber: solutionStepNumber,
-                totalSteps: TOTAL_STEPS,
-                status: 'completed',
-                startedAt: new Date(solutionStart),
-                completedAt: new Date(),
-                metadata: {
-                  hasMultipleSolutions: solutionResult.hasMultipleSolutions,
-                  solutionCount: solutionResult.solutions?.length || 1,
-                },
-              });
+          if (solutionResult.waitingForResponse && solutionResult.questionId) {
+            interactiveMetrics.solutionChoices++;
+            currentStep++;
 
-              // V3: If multiple solutions, post question and wait for response
-              if (solutionResult.hasMultipleSolutions && solutionResult.solutions) {
-                stepOffset++;
-                await logWorkflowProgress({
-                  workflowId,
-                  projectId,
-                  taskId,
-                  phase: PHASE,
-                  stepName: 'Post Solution Choice Question',
-                  stepNumber: stepOffset,
-                  totalSteps: TOTAL_STEPS,
-                  status: 'in_progress',
-                  startedAt: new Date(),
-                });
+            const timeoutHours = features.humanResponseTimeoutHours || 24;
+            const response = await waitForQuestionResponse(
+              solutionResult.questionId!,
+              timeoutHours
+            );
 
-                const questionStart = Date.now();
-
-                // Build options from solutions
-                const options = solutionResult.solutions.map(sol => ({
-                  id: sol.id,
-                  label: sol.label,
-                  description: `${sol.description}\n\nChanges: ${sol.changes}`,
-                  pros: sol.pros,
-                  cons: sol.cons,
-                  recommended: sol.recommended,
-                }));
-
-                const questionResult = await postCodeQuestion({
-                  projectId: input.projectId,
-                  taskId: task.id,
-                  linearId: task.linearId,
-                  questionType: 'solution_choice',
-                  question: `**Validation Failed: ${solutionResult.errorAnalysis.errorType}**\n\nMultiple solutions are available to fix this error. Which approach would you prefer?`,
-                  options,
-                  metadata: {
-                    workflowId,
-                    stepNumber: stepOffset,
-                    totalSteps: TOTAL_STEPS,
-                    timeoutHours: features.humanResponseTimeoutHours || 24,
-                    context: `Validation failed at ${solutionResult.errorAnalysis.phase}: ${solutionResult.errorAnalysis.errorType}`,
-                    postedAt: new Date(),
-                    taskIdentifier: task.identifier,
-                  },
-                });
-
-                interactiveMetrics.solutionChoices++;
-
-                await logWorkflowProgress({
-                  workflowId,
-                  projectId,
-                  taskId,
-                  phase: PHASE,
-                  stepName: 'Post Solution Choice Question',
-                  stepNumber: stepOffset,
-                  totalSteps: TOTAL_STEPS,
-                  status: 'completed',
-                  startedAt: new Date(questionStart),
-                  completedAt: new Date(),
-                  metadata: {
-                    questionId: questionResult.questionId,
-                    commentId: questionResult.commentId,
-                  },
-                });
-
-                // V3: Wait for response
-                stepOffset++;
-                await logWorkflowProgress({
-                  workflowId,
-                  projectId,
-                  taskId,
-                  phase: PHASE,
-                  stepName: 'Waiting for Solution Choice Response',
-                  stepNumber: stepOffset,
-                  totalSteps: TOTAL_STEPS,
-                  status: 'in_progress',
-                  startedAt: new Date(),
-                  metadata: { timeoutHours: features.humanResponseTimeoutHours || 24 },
-                });
-
-                const waitStart = Date.now();
-                const response = await waitForQuestionResponse(features.humanResponseTimeoutHours || 24);
-
-                if (response) {
-                  const selectedSolution = response.selectedOption
-                    ? solutionResult.solutions.find(s => s.id === response.selectedOption)
-                    : null;
-
-                  await logWorkflowProgress({
-                    workflowId,
-                    projectId,
-                    taskId,
-                    phase: PHASE,
-                    stepName: 'Waiting for Solution Choice Response',
-                    stepNumber: stepOffset,
-                    totalSteps: TOTAL_STEPS,
-                    status: 'completed',
-                    startedAt: new Date(waitStart),
-                    completedAt: new Date(),
-                    metadata: {
-                      responseType: response.responseType,
-                      selectedOption: response.selectedOption,
-                      respondedBy: response.respondedBy,
-                    },
-                  });
-
-                  if (selectedSolution) {
-                    errorContext = `User selected solution: ${selectedSolution.label}\n${selectedSolution.description}\n\nApply these changes: ${selectedSolution.changes}`;
-                  } else if (response.customText) {
-                    errorContext = `User provided custom fix instructions: ${response.customText}`;
-                  }
-                } else {
-                  // Timeout - use recommended solution
-                  await logWorkflowProgress({
-                    workflowId,
-                    projectId,
-                    taskId,
-                    phase: PHASE,
-                    stepName: 'Waiting for Solution Choice Response',
-                    stepNumber: stepOffset,
-                    totalSteps: TOTAL_STEPS,
-                    status: 'completed',
-                    startedAt: new Date(waitStart),
-                    completedAt: new Date(),
-                    metadata: { timedOut: true, autoProceed: features.autoProceedOnTimeout },
-                  });
-
-                  if (features.autoProceedOnTimeout && solutionResult.recommendation) {
-                    const recommendedSolution = solutionResult.solutions.find(s => s.id === solutionResult.recommendation);
-                    if (recommendedSolution) {
-                      errorContext = `Auto-selected recommended solution: ${recommendedSolution.label}\n${recommendedSolution.description}\n\nApply these changes: ${recommendedSolution.changes}`;
-                    }
-                  }
-                }
+            if (response) {
+              const selectedSol = solutionResult.options?.find(
+                (o) => o.id === response.selectedOption
+              );
+              if (selectedSol) {
+                errorContext = `User selected solution: ${selectedSol.label}\n${selectedSol.description}`;
+              } else if (response.customText) {
+                errorContext = `User provided custom fix: ${response.customText}`;
+              }
+            } else if (features.autoProceedOnTimeout) {
+              const recommended = solutionResult.options?.find((o) => o.recommended);
+              if (recommended) {
+                errorContext = `Auto-selected recommended solution: ${recommended.label}\n${recommended.description}`;
               }
             }
-
-            retryCount++;
-            continue; // Retry generation
+          } else if (solutionResult.singleSolutionContext) {
+            errorContext = solutionResult.singleSolutionContext;
           }
-        } catch (containerError) {
-          // Container execution failed entirely - log and continue to PR creation
-          containerSuccess = false;
-          await logWorkflowProgress({
-            workflowId,
-            projectId,
-            taskId,
-            phase: PHASE,
-            stepName: 'Execute in Container (Clone, Lint, Typecheck, Test)',
-            stepNumber: containerStepNumber,
-            totalSteps: TOTAL_STEPS,
-            status: 'failed',
-            startedAt: new Date(containerStepStart),
-            completedAt: new Date(),
-            metadata: {
-              error: containerError instanceof Error ? containerError.message : 'Unknown error',
-            },
-          });
+        } else if (containerResult.failureAnalysis) {
+          errorContext = containerResult.failureAnalysis.retryPromptEnhancement;
         }
+
+        retryCount++;
+      } else {
+        // No container execution - exit loop
+        break;
       }
-
-      break; // Exit retry loop if container execution is disabled or max retries reached
     }
 
     // ========================================
-    // Phase D: Pre-PR Approval (V3 - Optional)
+    // Phase D: Pre-PR Approval (V3)
     // ========================================
 
-    if (!codeResult) {
-      throw new Error('Code generation failed - no result');
-    }
-
-    // V3: Pre-PR approval (if enabled)
     if (features.enablePrePRApproval) {
-      stepOffset++;
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Generate Code Preview',
-        stepNumber: stepOffset,
-        totalSteps: TOTAL_STEPS,
-        status: 'in_progress',
-        startedAt: new Date(),
-      });
-
-      const previewStart = Date.now();
-      const previewResult = await generateCodePreview({
-        files: generatedFiles.map(f => ({
-          path: f.path,
-          action: f.action,
-          content: f.content,
-          originalContent: fullFileContents.find(ff => ff.path === f.path)?.content,
-        })),
-        summary: `Generated ${generatedFiles.length} files for ${task.identifier}`,
-      });
-
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Generate Code Preview',
-        stepNumber: stepOffset,
-        totalSteps: TOTAL_STEPS,
-        status: 'completed',
-        startedAt: new Date(previewStart),
-        completedAt: new Date(),
-        metadata: {
-          totalFiles: previewResult.preview.totalFiles,
-          totalLinesChanged: previewResult.preview.totalLinesChanged,
-        },
-      });
-
-      // Post approval question
-      stepOffset++;
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Post Approval Question',
-        stepNumber: stepOffset,
-        totalSteps: TOTAL_STEPS,
-        status: 'in_progress',
-        startedAt: new Date(),
-      });
-
-      const approvalStart = Date.now();
-      const approvalQuestion = await postCodeQuestion({
-        projectId: input.projectId,
-        taskId: task.id,
-        linearId: task.linearId,
-        questionType: 'approval',
-        question: 'Please review the generated code and approve or reject the PR creation.',
-        preview: previewResult.preview,
-        metadata: {
-          workflowId,
-          stepNumber: stepOffset,
-          totalSteps: TOTAL_STEPS,
-          timeoutHours: features.humanResponseTimeoutHours || 24,
-          context: `Pre-PR approval request for ${generatedFiles.length} files`,
-          postedAt: new Date(),
-          taskIdentifier: task.identifier,
-        },
-      });
-
+      currentStep++;
       interactiveMetrics.approvalRequested = true;
 
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Post Approval Question',
-        stepNumber: stepOffset,
-        totalSteps: TOTAL_STEPS,
-        status: 'completed',
-        startedAt: new Date(approvalStart),
-        completedAt: new Date(),
-        metadata: {
-          questionId: approvalQuestion.questionId,
-          commentId: approvalQuestion.commentId,
-        },
-      });
-
-      // Wait for approval
-      stepOffset++;
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Waiting for Approval Response',
-        stepNumber: stepOffset,
-        totalSteps: TOTAL_STEPS,
-        status: 'in_progress',
-        startedAt: new Date(),
-        metadata: { timeoutHours: features.humanResponseTimeoutHours || 24 },
-      });
-
-      const approvalWaitStart = Date.now();
-      const approvalResponse = await waitForQuestionResponse(features.humanResponseTimeoutHours || 24);
-
-      if (approvalResponse) {
-        await logWorkflowProgress({
-          workflowId,
-          projectId,
-          taskId,
-          phase: PHASE,
-          stepName: 'Waiting for Approval Response',
-          stepNumber: stepOffset,
-          totalSteps: TOTAL_STEPS,
-          status: 'completed',
-          startedAt: new Date(approvalWaitStart),
-          completedAt: new Date(),
-          metadata: {
-            responseType: approvalResponse.responseType,
-            respondedBy: approvalResponse.respondedBy,
+      const approvalResult = await executeChild(preApprovalWorkflow, {
+        workflowId: `approval-${taskId}-${Date.now()}`,
+        args: [
+          {
+            projectId,
+            taskId,
+            linearId: task.linearId,
+            config,
+            parentWorkflowId: workflowId,
+            task: {
+              id: task.id,
+              linearId: task.linearId,
+              title: task.title,
+              identifier: task.identifier,
+            },
+            generatedFiles,
+            branchName: `feat/${task.identifier.toLowerCase()}`,
+            prTitle: `feat: ${task.identifier} - ${task.title}`,
+            commitMessage: `feat(${task.identifier}): implement ${task.title}`,
+            validationSummary: features.enableContainerExecution
+              ? {
+                  success: containerSuccess,
+                  testsRun: 0,
+                  testsPassed: 0,
+                  lintPassed: containerSuccess || lastFailedPhase !== 'lint',
+                  typecheckPassed: containerSuccess || lastFailedPhase !== 'typecheck',
+                }
+              : undefined,
+            stepNumber: currentStep,
+            totalSteps,
           },
-        });
+        ],
+      });
 
-        // If rejected, throw error to fail workflow
-        if (approvalResponse.responseType === 'rejected') {
-          throw new Error(`PR rejected by ${approvalResponse.respondedBy}: ${approvalResponse.customText || 'No reason provided'}`);
-        }
-      } else {
-        // Timeout
-        await logWorkflowProgress({
-          workflowId,
-          projectId,
-          taskId,
-          phase: PHASE,
-          stepName: 'Waiting for Approval Response',
-          stepNumber: stepOffset,
-          totalSteps: TOTAL_STEPS,
-          status: 'completed',
-          startedAt: new Date(approvalWaitStart),
-          completedAt: new Date(),
-          metadata: { timedOut: true, autoProceed: features.autoProceedOnTimeout },
-        });
+      currentStep++;
+      const timeoutHours = features.humanResponseTimeoutHours || 24;
+      const response = await waitForQuestionResponse(
+        approvalResult.questionId || `approval-${taskId}`,
+        timeoutHours
+      );
 
-        if (!features.autoProceedOnTimeout || features.timeoutDefaultOption === 'cancel') {
-          throw new Error('PR approval timed out and auto-proceed is disabled');
-        }
+      if (response?.responseType === 'rejected') {
+        // User rejected - fail the workflow
+        throw ApplicationFailure.create({
+          message: `Pre-PR approval rejected: ${response.customText || 'No reason provided'}`,
+          type: 'PreApprovalRejected',
+        });
       }
     }
 
@@ -1405,198 +588,84 @@ export async function codeGenerationOrchestrator(
     // Phase E: Commit & PR
     // ========================================
 
-    // Create branch
-    stepOffset++;
-    await logWorkflowProgress({
-      workflowId,
-      projectId,
-      taskId,
-      phase: PHASE,
-      stepName: 'Create Branch',
-      stepNumber: stepOffset,
-      totalSteps: TOTAL_STEPS,
-      status: 'in_progress',
-      startedAt: new Date(),
-    });
-
-    const branchStepStart = Date.now();
-    await createBranch({
-      projectId: input.projectId,
-      branchName: codeResult.code.branchName,
-      baseBranch: 'main', // TODO: Get from project config
-    });
-
-    await logWorkflowProgress({
-      workflowId,
-      projectId,
-      taskId,
-      phase: PHASE,
-      stepName: 'Create Branch',
-      stepNumber: stepOffset,
-      totalSteps: TOTAL_STEPS,
-      status: 'completed',
-      startedAt: new Date(branchStepStart),
-      completedAt: new Date(),
-      metadata: { branchName: codeResult.code.branchName },
-    });
-
-    // Commit files
-    stepOffset++;
-    await logWorkflowProgress({
-      workflowId,
-      projectId,
-      taskId,
-      phase: PHASE,
-      stepName: 'Commit Generated Files',
-      stepNumber: stepOffset,
-      totalSteps: TOTAL_STEPS,
-      status: 'in_progress',
-      startedAt: new Date(),
-    });
-
-    const commitStepStart = Date.now();
-    await commitFiles({
-      projectId: input.projectId,
-      branchName: codeResult.code.branchName,
-      files: generatedFiles.map((f) => ({
-        path: f.path,
-        content: f.content,
-      })),
-      message: codeResult.code.commitMessage,
-    });
-
-    await logWorkflowProgress({
-      workflowId,
-      projectId,
-      taskId,
-      phase: PHASE,
-      stepName: 'Commit Generated Files',
-      stepNumber: stepOffset,
-      totalSteps: TOTAL_STEPS,
-      status: 'completed',
-      startedAt: new Date(commitStepStart),
-      completedAt: new Date(),
-      metadata: { filesCommitted: generatedFiles.length },
-    });
-
-    // Create draft PR
-    stepOffset++;
-    await logWorkflowProgress({
-      workflowId,
-      projectId,
-      taskId,
-      phase: PHASE,
-      stepName: 'Create Draft PR',
-      stepNumber: stepOffset,
-      totalSteps: TOTAL_STEPS,
-      status: 'in_progress',
-      startedAt: new Date(),
-    });
-
-    const prStepStart = Date.now();
-
-    // Build PR description with container results if available
-    let prDescription = codeResult.code.prDescription;
-    if (features.enableContainerExecution && lastContainerResult) {
-      const containerStatus = containerSuccess ? '✅ All checks passed' : `❌ Failed at: ${lastContainerResult.failedPhase}`;
-      prDescription += `\n\n## Container Validation\n\n${containerStatus}\n\n- Retries: ${retryCount}/${maxRetries}`;
-      if (lastContainerResult.testResults) {
-        prDescription += `\n- Tests: ${lastContainerResult.testResults.passed} passed, ${lastContainerResult.testResults.failed} failed`;
-      }
-    }
-
-    const pr = await createPullRequest({
-      projectId: input.projectId,
-      branchName: codeResult.code.branchName,
-      title: codeResult.code.prTitle,
-      description: prDescription,
-      targetBranch: 'main', // TODO: Get from project config
-      draft: true, // Always draft for safety - requires human review
-      linearIdentifier: task.identifier,
-      labels: ['auto-generated', 'devflow-phase-4', containerSuccess ? 'checks-passed' : 'checks-failed'],
-    });
-
-    await logWorkflowProgress({
-      workflowId,
-      projectId,
-      taskId,
-      phase: PHASE,
-      stepName: 'Create Draft PR',
-      stepNumber: stepOffset,
-      totalSteps: TOTAL_STEPS,
-      status: 'completed',
-      startedAt: new Date(prStepStart),
-      completedAt: new Date(),
-      metadata: { prNumber: pr.number, prUrl: pr.url, draft: pr.draft },
+    currentStep++;
+    const prResult = await executeChild(commitPRWorkflow, {
+      workflowId: `commit-pr-${taskId}-${Date.now()}`,
+      args: [
+        {
+          projectId,
+          taskId,
+          config,
+          parentWorkflowId: workflowId,
+          task: {
+            id: task.id,
+            linearId: task.linearId,
+            title: task.title,
+            identifier: task.identifier,
+          },
+          generatedFiles,
+          branchName: `feat/${task.identifier.toLowerCase()}`,
+          commitMessage: `feat(${task.identifier}): implement ${task.title}`,
+          prTitle: `feat: ${task.identifier} - ${task.title}`,
+          prDescription: `Implementation for ${task.identifier}\n\n${task.description || ''}`,
+          targetBranch: 'main',
+          containerResult: features.enableContainerExecution
+            ? {
+                success: containerSuccess,
+                duration: lastContainerDuration,
+                exitCode: 0,
+                phases: {},
+                logs: '',
+              }
+            : undefined,
+          retryMetrics: {
+            totalAttempts: retryCount + 1,
+            validationRetries: retryCount,
+          },
+          interactiveMetrics: {
+            ambiguitiesDetected: interactiveMetrics.ambiguitiesDetected,
+            clarificationQuestions: interactiveMetrics.clarificationQuestions,
+            solutionChoices: interactiveMetrics.solutionChoices,
+            approvalRequested: interactiveMetrics.approvalRequested,
+          },
+        },
+      ],
     });
 
     // ========================================
     // Phase F: Finalization
     // ========================================
 
-    // Update status to Code Review
-    if (features.enableAutoStatusUpdate) {
-      stepOffset++;
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Update Status to Code Review',
-        stepNumber: stepOffset,
-        totalSteps: TOTAL_STEPS,
-        status: 'in_progress',
-        startedAt: new Date(),
-      });
-
-      const statusStepStart = Date.now();
-      await executeChild(updateLinearStatusWorkflow, {
-        workflowId: `status-review-${input.taskId}-${Date.now()}`,
-        args: [
-          {
-            projectId: input.projectId,
-            linearId: task.linearId,
-            status: LINEAR_STATUSES.codeReview,
+    currentStep++;
+    await executeChild(finalizationWorkflow, {
+      workflowId: `finalize-${taskId}-${Date.now()}`,
+      args: [
+        {
+          projectId,
+          taskId,
+          linearId: task.linearId,
+          config,
+          parentWorkflowId: workflowId,
+          workflowStartTime,
+          pr: {
+            number: prResult.number,
+            url: prResult.url,
+            draft: prResult.draft,
           },
-        ],
-      });
-
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Update Status to Code Review',
-        stepNumber: stepOffset,
-        totalSteps: TOTAL_STEPS,
-        status: 'completed',
-        startedAt: new Date(statusStepStart),
-        completedAt: new Date(),
-        metadata: { status: LINEAR_STATUSES.codeReview },
-      });
-    } else {
-      stepOffset++;
-      await logWorkflowProgress({
-        workflowId,
-        projectId,
-        taskId,
-        phase: PHASE,
-        stepName: 'Update Status to Code Review (disabled)',
-        stepNumber: stepOffset,
-        totalSteps: TOTAL_STEPS,
-        status: 'skipped',
-        startedAt: new Date(),
-        completedAt: new Date(),
-      });
-    }
-
-    // Log completion metrics
-    await logWorkflowCompletion({
-      workflowId,
-      projectId,
-      taskId,
-      phase: PHASE,
-      startedAt: workflowStartTime,
+          containerResult: features.enableContainerExecution
+            ? {
+                success: containerSuccess,
+                failedPhase: lastFailedPhase,
+                duration: lastContainerDuration,
+              }
+            : undefined,
+          retryMetrics: {
+            totalAttempts: retryCount + 1,
+            validationRetries: retryCount,
+          },
+          interactiveMetrics,
+        },
+      ],
     });
 
     return {
@@ -1604,56 +673,50 @@ export async function codeGenerationOrchestrator(
       phase: 'code_generation',
       message: `Code generated and draft PR created for task ${task.identifier}`,
       pr: {
-        number: pr.number,
-        url: pr.url,
-        draft: pr.draft,
+        number: prResult.number,
+        url: prResult.url,
+        draft: prResult.draft,
       },
       generatedFiles: generatedFiles.length,
-      containerResult: lastContainerResult
+      containerResult: features.enableContainerExecution
         ? {
             success: containerSuccess,
-            failedPhase: lastContainerResult.failedPhase,
-            duration: lastContainerResult.duration,
+            failedPhase: lastFailedPhase,
+            duration: lastContainerDuration,
           }
         : undefined,
       retryMetrics: {
         totalAttempts: retryCount + 1,
         validationRetries: retryCount,
       },
-      // V3: Interactive metrics
       interactiveMetrics,
     };
   } catch (error) {
     // Log workflow failure
     await logWorkflowFailure({
       workflowId,
-      projectId: input.projectId,
-      taskId: input.taskId,
-      phase: PHASE,
+      projectId,
+      taskId,
+      phase: 'code_generation',
       error: error instanceof Error ? error.message : 'Unknown error',
       stepName: 'Workflow Failed',
     });
 
-    // Update status to Failed (conditional)
+    // Update status to Failed (if enabled)
     if (features.enableAutoStatusUpdate) {
       try {
-        const task = await executeChild(syncLinearTaskWorkflow, {
-          workflowId: `sync-task-error-${input.taskId}-${Date.now()}`,
-          args: [{ taskId: input.taskId, projectId: input.projectId }],
-        });
-
         await executeChild(updateLinearStatusWorkflow, {
-          workflowId: `status-failed-${input.taskId}-${Date.now()}`,
+          workflowId: `status-failed-${taskId}-${Date.now()}`,
           args: [
             {
-              projectId: input.projectId,
-              linearId: task.linearId,
+              projectId,
+              linearId: input.taskId, // Use taskId as linearId fallback
               status: LINEAR_STATUSES.codeFailed,
             },
           ],
         });
-      } catch (updateError) {
-        console.error('[codeGenerationOrchestrator] Failed to update status to Failed:', updateError);
+      } catch {
+        // Ignore status update errors
       }
     }
 

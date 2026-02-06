@@ -1,6 +1,6 @@
 # CLAUDE.md - DevFlow
 
-**Version:** 2.8.0 | **Updated:** January 11, 2026 | **Status:** Production Ready
+**Version:** 2.9.0 | **Updated:** February 4, 2026 | **Status:** Production Ready
 
 ## Agent Reminders
 
@@ -13,7 +13,7 @@
 
 DevFlow is a universal DevOps orchestrator that transforms Linear tasks into deployed code. It uses a Four-Phase Agile workflow: **Refinement → User Story → Technical Plan → Code Generation**.
 
-Phase 4 (Code Generation) uses **Ollama** (local LLM) for privacy-first automated code generation with draft PR creation. **V3** adds interactive human-in-the-loop features: ambiguity detection, solution choice, and pre-PR approval.
+Phase 4 (Code Generation) uses **Ollama** (local LLM) for privacy-first automated code generation with draft PR creation. Features include: pre-flight validation, circuit breaker for Ollama, token budgeting, path traversal protection, and interactive human-in-the-loop (ambiguity detection, solution choice).
 
 **Details:** [.docs/guides/WORKFLOW_GUIDE.md](.docs/guides/WORKFLOW_GUIDE.md)
 
@@ -117,7 +117,8 @@ Phases do NOT auto-chain. Each must be manually triggered.
 - PO questions posted as Linear comments
 - Context documents created in Phase 1
 - **Phase 4:** Local LLM code generation with Ollama (privacy-first, draft PRs)
-- **Phase 4 V3:** Interactive human-in-the-loop (ambiguity detection, solution choice, pre-PR approval)
+- **Phase 4 Production Features:** Pre-flight validation, circuit breaker (3-failure threshold), token budgeting (8K context), path traversal protection, idempotent activities
+- **Phase 4 Interactive:** Human-in-the-loop (ambiguity detection, solution choice with questionId tracking)
 
 **Details:** [.docs/guides/WORKFLOW_GUIDE.md](.docs/guides/WORKFLOW_GUIDE.md)
 
@@ -175,6 +176,8 @@ OPENROUTER_API_KEY=sk-or-xxx
 | Temporal not reachable | `docker-compose restart temporal` |
 | Token expired | `POST /api/v1/auth/<provider>/refresh` |
 | Workflow not triggering | Check worker logs, OAuth status, Linear webhook |
+| Ollama circuit breaker tripped | `docker-compose restart ollama`, check health at http://localhost:11434 |
+| Pre-flight validation failed | Check worker logs for missing OAuth tokens or connectivity issues |
 
 **Details:** [.docs/guides/TROUBLESHOOTING.md](.docs/guides/TROUBLESHOOTING.md)
 
@@ -195,18 +198,27 @@ OPENROUTER_API_KEY=sk-or-xxx
 - `packages/worker/src/workflows/orchestrators/refinement.orchestrator.ts`
 - `packages/worker/src/workflows/orchestrators/user-story.orchestrator.ts`
 - `packages/worker/src/workflows/orchestrators/technical-plan.orchestrator.ts`
-- `packages/worker/src/workflows/orchestrators/code-generation.orchestrator.ts` - Phase 4 V3
-- `packages/worker/src/workflows/orchestrators/code-generation-v2.orchestrator.ts` - Modular version
-- `packages/worker/src/workflows/steps/code-generation/` - Sub-workflows (setup, generate, validate, etc.)
+- `packages/worker/src/workflows/orchestrators/code-generation.orchestrator.ts` - Phase 4 (modular, with pre-flight validation)
+- `packages/worker/src/workflows/steps/code-generation/` - Sub-workflows (setup, generate, validate, ambiguity, solution detection)
 - `packages/worker/src/workflows/signals/code-question-response.signal.ts` - V3 signals
 
 ### Activities
 - `packages/worker/src/activities/refinement.activities.ts`
 - `packages/worker/src/activities/linear.activities.ts`
 - `packages/worker/src/activities/context.activities.ts`
-- `packages/worker/src/activities/code-generation.activities.ts` - Phase 4 (ambiguity/solution detection)
-- `packages/worker/src/activities/interactive.activities.ts` - V3 question posting
-- `packages/worker/src/activities/vcs.activities.ts` - Git operations
+- `packages/worker/src/activities/preflight-validation.activities.ts` - Pre-flight checks (Ollama, OAuth, GitHub)
+- `packages/worker/src/activities/code-generation/` - **Modular Phase 4 activities:**
+  - `types.ts` - Shared types
+  - `generate-code.activities.ts` - Code generation with circuit breaker & token budgeting
+  - `fetch-files.activities.ts` - GitHub file fetching
+  - `analyze-failures.activities.ts` - AI failure analysis
+  - `ambiguity-detection.activities.ts` - V3 ambiguity detection
+  - `solution-detection.activities.ts` - V3 solution detection
+- `packages/worker/src/activities/interactive.activities.ts` - V3 question posting (idempotent upsert)
+- `packages/worker/src/activities/vcs.activities.ts` - Git operations (with path validation)
+
+### Utilities
+- `packages/worker/src/utils/validation.ts` - Security validation (path traversal, branch sanitization, token budgeting)
 
 ### SDK Core
 - `packages/sdk/src/linear/linear.client.ts` - Linear API client

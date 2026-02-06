@@ -1,11 +1,18 @@
 /**
  * VCS Activities - OAuth Integrated (Phase 5)
+ *
+ * Includes security validation for branch names, commit messages, and file paths.
  */
 
 import { createLogger } from '@devflow/common';
 import { createVCSDriver } from '@devflow/sdk';
 import { getProjectRepositoryConfig } from '@/activities/codebase.activities';
 import { oauthResolver } from '@/services/oauth-context';
+import {
+  validateBranchName,
+  sanitizeCommitMessage,
+  validateFilePath,
+} from '@/utils/validation';
 
 const logger = createLogger('VCSActivities');
 
@@ -32,7 +39,20 @@ export interface CreateBranchInput {
 }
 
 export async function createBranch(input: CreateBranchInput): Promise<void> {
-  logger.info('Creating branch', input);
+  // Validate and sanitize branch name
+  const branchValidation = validateBranchName(input.branchName);
+  if (!branchValidation.valid) {
+    logger.warn('Branch name validation failed, using sanitized version', {
+      original: input.branchName,
+      sanitized: branchValidation.sanitizedName,
+      error: branchValidation.error,
+    });
+  }
+  const safeBranchName = branchValidation.valid
+    ? branchValidation.sanitizedName
+    : input.branchName.replace(/[^a-zA-Z0-9\-_\/]/g, '-').replace(/-+/g, '-');
+
+  logger.info('Creating branch', { ...input, branchName: safeBranchName });
 
   // Get repository config from project
   const repoConfig = await getProjectRepositoryConfig(input.projectId);
@@ -46,7 +66,7 @@ export async function createBranch(input: CreateBranchInput): Promise<void> {
   });
 
   await vcs.createBranch(repoConfig.owner, repoConfig.repo, {
-    name: input.branchName,
+    name: safeBranchName,
     from: input.baseBranch,
   });
 }
@@ -59,7 +79,52 @@ export interface CommitFilesInput {
 }
 
 export async function commitFiles(input: CommitFilesInput): Promise<void> {
-  logger.info('Committing files', { ...input, filesCount: input.files.length });
+  // Validate file paths (defense in depth - should already be validated)
+  const validatedFiles: Array<{ path: string; content: string }> = [];
+  const rejectedPaths: string[] = [];
+
+  for (const file of input.files) {
+    const pathValidation = validateFilePath(file.path);
+    if (pathValidation.valid) {
+      validatedFiles.push({
+        path: pathValidation.normalizedPath,
+        content: file.content,
+      });
+    } else {
+      rejectedPaths.push(file.path);
+      logger.warn('Rejected file during commit due to invalid path', {
+        path: file.path,
+        error: pathValidation.error,
+      });
+    }
+  }
+
+  if (rejectedPaths.length > 0) {
+    logger.warn('Some files rejected during commit', {
+      rejected: rejectedPaths.length,
+      accepted: validatedFiles.length,
+    });
+  }
+
+  if (validatedFiles.length === 0) {
+    throw new Error('No valid files to commit after path validation');
+  }
+
+  // Sanitize commit message
+  const safeMessage = sanitizeCommitMessage(input.message);
+
+  // Validate branch name
+  const branchValidation = validateBranchName(input.branchName);
+  const safeBranchName = branchValidation.valid
+    ? branchValidation.sanitizedName
+    : input.branchName;
+
+  logger.info('Committing files', {
+    projectId: input.projectId,
+    branchName: safeBranchName,
+    filesCount: validatedFiles.length,
+    rejectedCount: rejectedPaths.length,
+  });
 
   // Get repository config from project
   const repoConfig = await getProjectRepositoryConfig(input.projectId);
@@ -73,9 +138,9 @@ export async function commitFiles(input: CommitFilesInput): Promise<void> {
   });
 
   await vcs.commitFiles(repoConfig.owner, repoConfig.repo, {
-    branch: input.branchName,
-    message: input.message,
-    files: input.files,
+    branch: safeBranchName,
+    message: safeMessage,
+    files: validatedFiles,
   });
 }
 

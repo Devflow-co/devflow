@@ -33,7 +33,7 @@ export * from '@/activities/qa.activities';
 export * from '@/activities/security.activities';
 
 // Phase 4: Code Generation activities (Ollama - local LLM)
-export * from '@/activities/code-generation.activities';
+export * from '@/activities/code-generation';
 
 // Phase 4 V2: Container Execution activities (Docker isolation)
 export {
@@ -97,3 +97,13 @@ export {
   type GenerateCodePreviewInput,
   type GenerateCodePreviewOutput,
 } from '@/activities/interactive.activities';
+
+// Phase 4: Pre-flight validation activities
+export {
+  validatePrerequisites,
+  resetOllamaCircuitBreaker,
+  getSystemHealthStatus,
+  type ValidatePrerequisitesInput,
+  type ValidatePrerequisitesOutput,
+  type ValidationCheck,
+} from '@/activities/preflight-validation.activities';

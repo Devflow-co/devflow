@@ -8,7 +8,7 @@
 import { proxyActivities } from '@temporalio/workflow';
 import type * as activities from '@/activities';
 import type * as containerActivities from '@/activities/container-execution.activities';
-import type * as codeGenActivities from '@/activities/code-generation.activities';
+import type * as codeGenActivities from '@/activities/code-generation';
 import type { WorkflowConfig, GeneratedFile, ExecuteInContainerOutput } from '@devflow/common';
 
 const { logWorkflowProgress } = proxyActivities<typeof activities>({
